@@ -31,12 +31,16 @@ const ai = apiKey
     })
   : null;
 
-// Database setup
-const DATA_DIR = path.join(__dirname, 'data');
+// Database setup (supports persistent local disk and ephemeral serverless /tmp)
+const DATA_DIR = process.env.VERCEL ? path.join('/tmp', 'data') : path.join(__dirname, 'data');
 const DB_FILE = path.join(DATA_DIR, 'database.json');
 
-if (!fs.existsSync(DATA_DIR)) {
-  fs.mkdirSync(DATA_DIR, { recursive: true });
+try {
+  if (!fs.existsSync(DATA_DIR)) {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+  }
+} catch (e) {
+  console.warn('Notice: DATA_DIR creation deferred or in read-only environment:', e);
 }
 
 interface DatabaseStructure {
@@ -44,30 +48,44 @@ interface DatabaseStructure {
   submissions: any[];
 }
 
-function loadDatabase(): DatabaseStructure {
-  if (!fs.existsSync(DB_FILE)) {
-    const initialDb: DatabaseStructure = {
-      students: INITIAL_STUDENTS,
-      submissions: []
-    };
-    fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
-    return initialDb;
-  }
+let memoryDb: DatabaseStructure = {
+  students: INITIAL_STUDENTS,
+  submissions: []
+};
 
+function loadDatabase(): DatabaseStructure {
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (!fs.existsSync(DB_FILE)) {
+      const initialDb: DatabaseStructure = {
+        students: INITIAL_STUDENTS,
+        submissions: []
+      };
+      fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
+      memoryDb = initialDb;
+      return initialDb;
+    }
+
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    return JSON.parse(raw);
+    memoryDb = JSON.parse(raw);
+    return memoryDb;
   } catch (err) {
-    console.error('Error reading database file:', err);
-    return { students: INITIAL_STUDENTS, submissions: [] };
+    console.warn('Database disk reading warning (using in-memory state):', err);
+    return memoryDb;
   }
 }
 
 function saveDatabase(data: DatabaseStructure) {
+  memoryDb = data;
   try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
     fs.writeFileSync(DB_FILE, JSON.stringify(data, null, 2), 'utf-8');
   } catch (err) {
-    console.error('Error saving database:', err);
+    console.warn('Could not persist database to disk (safely preserved in memory):', err);
   }
 }
 
@@ -1302,4 +1320,11 @@ async function startServer() {
   });
 }
 
-startServer();
+// Export express app for serverless platforms like Vercel
+export default app;
+export { app };
+
+// In standalone / container environments (AI Studio, local, Cloud Run), start listening
+if (!process.env.VERCEL) {
+  startServer();
+}
