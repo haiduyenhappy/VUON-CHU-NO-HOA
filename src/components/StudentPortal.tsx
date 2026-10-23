@@ -12,8 +12,10 @@ import {
 } from '../types';
 import { CURRICULUM_TASKS, GARDEN_INFOS } from '../data/curriculumData';
 import { OTHER_CREATIVE_TOPICS, OTHER_TOPICS_CATEGORIES } from '../data/otherTopicsData';
+import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { HoaNhoMascot } from './HoaNhoMascot';
 import { playPop, playChime, playSparkle } from '../utils/audio';
+import { getStudentGreeting } from '../utils/timeGreeting';
 import { 
   BookOpen, 
   Pencil, 
@@ -60,12 +62,26 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 }) => {
   // Navigation & Workflow state
   const [currentStep, setCurrentStep] = useState<StudentStep>('choose_task');
-  const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics'>('volume1');
+  const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics' | 'my_submissions'>('volume1');
   const [selectedVolume, setSelectedVolume] = useState<1 | 2>(1);
   const [selectedGardenFilter, setSelectedGardenFilter] = useState<GardenType | 'all'>('all');
   const [selectedOtherCategory, setSelectedOtherCategory] = useState<string>('all');
   const [activeTask, setActiveTask] = useState<WritingTask | null>(null);
   const [isIndependentMode, setIsIndependentMode] = useState<boolean>(false);
+  const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+
+  // Fetch student submissions for the authenticated student
+  const fetchMySubmissions = async () => {
+    try {
+      const res = await fetch(`/api/submissions?studentId=${student.id}`);
+      const data = await res.json();
+      setMySubmissions(data.submissions || []);
+    } catch (e) {}
+  };
+
+  useEffect(() => {
+    fetchMySubmissions();
+  }, [student.id]);
 
   // Ideation (Cùng em tìm ý) state
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([]);
@@ -88,6 +104,32 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // AI Feedback state
   const [aiFeedback, setAiFeedback] = useState<AIFeedback | null>(null);
   const [submissionId, setSubmissionId] = useState<string>('');
+  const [revisionSub, setRevisionSub] = useState<Submission | null>(null);
+
+  const handleStartRevision = (sub: Submission) => {
+    playSparkle(settings.soundEnabled);
+    setRevisionSub(sub);
+    const matched = CURRICULUM_TASKS.find(t => t.id === sub.taskId);
+    if (matched) {
+      setActiveTask(matched);
+    } else {
+      setActiveTask({
+        id: sub.taskId,
+        volume: sub.volume || 1,
+        week: 1,
+        title: sub.taskTitle,
+        gardenType: sub.gardenType,
+        prompt: sub.taskTitle,
+        suggestedQuestions: ['Bản sửa mới theo góp ý của cô giáo.'],
+        evaluationCriteria: ['Bám sát lời dặn dò của cô', 'Dùng từ ngữ sinh động', 'Cảm xúc tự nhiên']
+      });
+    }
+    setEssayContent(sub.finalContent);
+    setFirstDraftContent(sub.firstDraft || sub.finalContent);
+    setCurrentOutline(sub.developedOutline && sub.developedOutline.length > 0 ? sub.developedOutline : sub.initialOutline || []);
+    setIsIndependentMode(sub.isIndependentTest || false);
+    setCurrentStep('write');
+  };
 
   // Filter tasks
   const filteredTasks = CURRICULUM_TASKS.filter(t => {
@@ -478,12 +520,22 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         </div>
       </div>
 
+      {/* Hoa Nhỏ Student Personalized Greeting */}
+      <div className="mb-6 flex justify-start">
+        <HoaNhoMascot
+          mood="happy"
+          size="sm"
+          reducedMotion={settings.reducedMotion}
+          message={getStudentGreeting(settings.demoPrivacyMode ? student.demoName : student.name, student.flowersEarned)}
+        />
+      </div>
+
       {/* ================= STEP 1: CHOOSE TASK ================= */}
       {currentStep === 'choose_task' && (
         <div className="space-y-6 animate-fade-in">
-          {/* Main 3 Tabs Switcher */}
+          {/* Main 4 Tabs Switcher */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-3xl border-2 border-stone-200">
-            {/* 3 Main Tab Buttons */}
+            {/* 4 Main Tab Buttons */}
             <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={() => { setActiveMainTab('volume1'); setSelectedVolume(1); playPop(settings.soundEnabled); }}
@@ -514,12 +566,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 }`}
               >
                 <span>🌈</span>
-                <span>CÁC CHỦ ĐỀ KHÁC (24 chủ đề sáng tạo)</span>
+                <span>CÁC CHỦ ĐỀ KHÁC</span>
+              </button>
+              <button
+                onClick={() => { setActiveMainTab('my_submissions'); playPop(settings.soundEnabled); }}
+                className={`px-3.5 sm:px-4 py-2 rounded-2xl font-extrabold text-xs sm:text-sm transition-all flex items-center gap-1.5 ${
+                  activeMainTab === 'my_submissions'
+                    ? 'bg-rose-500 text-white shadow-md border border-rose-600'
+                    : 'bg-rose-50 text-rose-900 hover:bg-rose-100 border border-rose-200'
+                }`}
+              >
+                <span>🌸</span>
+                <span>Bài của em & Lời cô giáo ({mySubmissions.length})</span>
               </button>
             </div>
 
-            {/* Filter Pills */}
-            {activeMainTab !== 'other_topics' ? (
+            {/* Filter Pills (only when in volume 1 & 2) */}
+            {activeMainTab === 'volume1' || activeMainTab === 'volume2' ? (
               <div className="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
                 <button
                   onClick={() => setSelectedGardenFilter('all')}
@@ -591,8 +654,110 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
           </div>
 
-          {/* TASKS GRID: Either Curriculum Tasks or Other Creative Topics */}
-          {activeMainTab === 'other_topics' ? (
+          {/* TASKS GRID: Either Curriculum Tasks, Other Creative Topics, or My Submissions */}
+          {activeMainTab === 'my_submissions' ? (
+            <div className="space-y-4">
+              {mySubmissions.map((sub) => (
+                <div key={sub.id} className="bg-white rounded-3xl border-2 border-rose-200 p-5 shadow-xs space-y-3">
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-b border-rose-100 pb-2.5">
+                    <div>
+                      <span className="text-xs font-bold text-rose-700 uppercase tracking-wide">
+                        {sub.taskTitle}
+                      </span>
+                      <div className="text-xs text-stone-500 font-medium">
+                        Ngày làm: {new Date(sub.startedAt).toLocaleDateString('vi-VN')}
+                      </div>
+                    </div>
+                    <span className={`text-xs font-black px-3 py-1 rounded-full ${
+                      sub.teacherFeedback?.status === 'published'
+                        ? 'bg-emerald-600 text-white'
+                        : sub.status === 'submitted'
+                        ? 'bg-amber-500 text-white'
+                        : 'bg-stone-200 text-stone-700'
+                    }`}>
+                      {sub.teacherFeedback?.status === 'published' 
+                        ? '✓ ĐÃ CÓ LỜI NHẬN XÉT CỦA CÔ' 
+                        : sub.status === 'submitted' 
+                        ? '⏳ ĐÃ NỘP - CHỜ CÔ XEM' 
+                        : '📝 BÀI ĐANG LÀM'}
+                    </span>
+                  </div>
+
+                  <div className="p-3.5 bg-amber-50/60 rounded-2xl border border-amber-200 text-stone-800 text-sm sm:text-base font-medium leading-relaxed italic">
+                    "{sub.finalContent}"
+                  </div>
+
+                  {sub.teacherFeedback && sub.teacherFeedback.status === 'published' ? (
+                    <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-300 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="font-bold text-emerald-950 text-xs sm:text-sm flex items-center gap-1.5">
+                          <span>👩‍🏫</span>
+                          <span>Lời cô giáo ({sub.teacherFeedback.teacherName || TEACHER_CONFIG.name}):</span>
+                        </span>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
+                          {sub.teacherFeedback.flowerSticker || '🌸 Bông hoa chăm ngoan'}
+                        </span>
+                      </div>
+                      <p className="text-xs sm:text-sm font-semibold text-stone-800 italic bg-white p-2.5 rounded-xl border border-emerald-100">
+                        "{sub.teacherFeedback.comment}"
+                      </p>
+                      {/* Qualitative criteria details */}
+                      {(sub.teacherFeedback.praiseIdea || sub.teacherFeedback.wordSentenceSuggestions || sub.teacherFeedback.emotionCreativityEncouragement || sub.teacherFeedback.teacherAdvice) && (
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs pt-1">
+                          {sub.teacherFeedback.praiseIdea && (
+                            <div className="bg-rose-50/80 p-2 rounded-xl border border-rose-200">
+                              <span className="font-bold text-rose-800 block">🌸 Ý tưởng hay:</span>
+                              <p className="text-stone-700">{sub.teacherFeedback.praiseIdea}</p>
+                            </div>
+                          )}
+                          {sub.teacherFeedback.wordSentenceSuggestions && (
+                            <div className="bg-emerald-50/80 p-2 rounded-xl border border-emerald-200">
+                              <span className="font-bold text-emerald-800 block">✏️ Góp ý câu từ:</span>
+                              <p className="text-stone-700">{sub.teacherFeedback.wordSentenceSuggestions}</p>
+                            </div>
+                          )}
+                          {sub.teacherFeedback.emotionCreativityEncouragement && (
+                            <div className="bg-amber-50/80 p-2 rounded-xl border border-amber-200">
+                              <span className="font-bold text-amber-800 block">💖 Khích lệ cảm xúc:</span>
+                              <p className="text-stone-700">{sub.teacherFeedback.emotionCreativityEncouragement}</p>
+                            </div>
+                          )}
+                          {sub.teacherFeedback.teacherAdvice && (
+                            <div className="bg-purple-50/80 p-2 rounded-xl border border-purple-200">
+                              <span className="font-bold text-purple-800 block">💌 Lời dặn dò của cô:</span>
+                              <p className="text-stone-700">{sub.teacherFeedback.teacherAdvice}</p>
+                            </div>
+                          )}
+                        </div>
+                      )}
+
+                      {/* Action Step 5: Viết bản sửa mới theo lời dặn của cô */}
+                      <div className="pt-2 flex justify-end">
+                        <button
+                          onClick={() => handleStartRevision(sub)}
+                          className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-extrabold text-xs shadow-sm hover:shadow-md transition-all hover:scale-102"
+                          title="Tạo bản sửa mới theo hướng dẫn của cô"
+                        >
+                          <Pencil className="w-3.5 h-3.5" />
+                          <span>Viết bản sửa mới (Bản số {(sub.drafts?.length || 1) + 1})</span>
+                        </button>
+                      </div>
+                    </div>
+                  ) : sub.status === 'submitted' ? (
+                    <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-xs text-amber-900 font-medium">
+                      Bài của em đã được gửi an toàn đến cô giáo. Cô đang đọc và sẽ sớm gửi lời nhận xét cùng hoa thưởng cho em nhé!
+                    </div>
+                  ) : null}
+                </div>
+              ))}
+
+              {mySubmissions.length === 0 && (
+                <div className="bg-white rounded-3xl border-2 border-dashed border-stone-300 p-8 text-center text-stone-500 text-sm">
+                  Em chưa có bài viết nào đã nộp. Em hãy bấm sang thẻ <strong>📘 Tập 1</strong> hoặc <strong>📗 Tập 2</strong> để chọn bài và cùng Hoa Nhỏ gieo hạt ý tưởng nhé!
+                </div>
+              )}
+            </div>
+          ) : activeMainTab === 'other_topics' ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {filteredOtherTopics.map((item) => {
                 const categoryObj = OTHER_TOPICS_CATEGORIES.find(c => c.id === item.category);
@@ -1000,6 +1165,29 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
               </button>
             )}
           </div>
+
+          {/* Revision Banner if student is writing revision based on teacher guidance */}
+          {revisionSub && revisionSub.teacherFeedback && (
+            <div className="p-4 bg-gradient-to-r from-emerald-50 via-teal-50 to-emerald-100 border-2 border-emerald-300 rounded-2xl space-y-1.5 animate-fade-in shadow-xs">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-bold text-emerald-900 flex items-center gap-1.5">
+                  <span>👩‍🏫</span>
+                  <span>Bản sửa mới theo lời dặn của {TEACHER_CONFIG.name}:</span>
+                </span>
+                <span className="text-[11px] font-extrabold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
+                  Bản thảo {(revisionSub.drafts?.length || 1) + 1}
+                </span>
+              </div>
+              <p className="text-xs sm:text-sm font-semibold text-emerald-950 italic">
+                "{revisionSub.teacherFeedback.teacherAdvice || revisionSub.teacherFeedback.comment}"
+              </p>
+              {revisionSub.teacherFeedback.wordSentenceSuggestions && (
+                <div className="text-xs text-stone-700 bg-white/80 p-2 rounded-xl border border-emerald-200">
+                  <strong>💡 Gợi ý câu từ:</strong> {revisionSub.teacherFeedback.wordSentenceSuggestions}
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Writing hint bubble if requested */}
           {writingHint && !isIndependentMode && (

@@ -1,3 +1,13 @@
+export interface LinkedCaregiver {
+  relation: string; // 'Bố' | 'Mẹ' | 'Ông' | 'Bà' | 'Người giám hộ'
+  name?: string;
+  phone?: string;
+  code: string; // PH001 - PH035
+  pin?: string;
+  status: 'active' | 'locked';
+  linkedAt?: string;
+}
+
 export interface Student {
   id: string; // HS001 - HS035
   name: string; // Tên thật đầy đủ
@@ -10,6 +20,12 @@ export interface Student {
   starsEarned: number;
   learningTimeMinutes?: number; // Thời gian học tập thực tế
   consecutiveDays?: number; // Số ngày liên tiếp luyện viết
+  className?: string; // Mặc định: Lớp 3 – Trường TH Lê Đức Thọ
+  username?: string; // Tên đăng nhập tiện lợi (vd: hs001 hoặc phamtuean)
+  accountStatus?: 'active' | 'locked'; // Tình trạng tài khoản
+  lastLogin?: string; // Lần đăng nhập gần nhất
+  temporaryPassword?: string; // Mật khẩu mới cấp một lần
+  linkedCaregivers?: LinkedCaregiver[]; // Danh sách tài khoản gia đình liên kết
 }
 
 export type GardenType = 
@@ -76,6 +92,19 @@ export interface TeacherFeedback {
   flowerSticker?: string;
   timestamp: string;
   editedAiNotes?: string; // Ghi chú chỉnh sửa từ gợi ý của AI
+  status?: 'draft' | 'published'; // Trạng thái: bản nháp của cô hoặc đã công bố cho học sinh & gia đình
+  praiseIdea?: string; // Khen ngợi ý tưởng hay
+  wordSentenceSuggestions?: string; // Góp ý dùng từ, đặt câu
+  emotionCreativityEncouragement?: string; // Khích lệ cảm xúc & sáng tạo
+  teacherAdvice?: string; // Lời dặn dò của cô
+}
+
+export interface AuthUser {
+  role: 'student' | 'teacher' | 'family';
+  student?: Student;
+  teacherName?: string;
+  parentCode?: string;
+  token?: string;
 }
 
 export interface SubmissionDraft {

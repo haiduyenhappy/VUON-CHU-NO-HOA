@@ -1,11 +1,24 @@
 import React from 'react';
 import { Volume2, VolumeX, Eye, EyeOff, Sparkles, Home, BookOpen, Trees, Map, Edit3, Heart } from 'lucide-react';
-import { AppSettings, Student } from '../types';
+import { AppSettings, Student, AuthUser } from '../types';
+import { TEACHER_CONFIG } from '../constants/teacherConfig';
 
-export type AppView = 'home' | 'student' | 'teacher' | 'family' | 'reading_garden' | 'idea_map' | 'essay_feedback';
+export type AppView = 
+  | 'home' 
+  | 'student' 
+  | 'teacher' 
+  | 'family' 
+  | 'reading_garden' 
+  | 'idea_map' 
+  | 'essay_feedback'
+  | 'progress_journey'
+  | 'login-student'
+  | 'login-teacher'
+  | 'login-family';
 
 interface NavbarProps {
   currentRole: AppView;
+  currentUser: AuthUser | null;
   activeStudent: Student | null;
   settings: AppSettings;
   onUpdateSettings: (newSettings: Partial<AppSettings>) => void;
@@ -16,6 +29,7 @@ interface NavbarProps {
 
 export const Navbar: React.FC<NavbarProps> = ({
   currentRole,
+  currentUser,
   activeStudent,
   settings,
   onUpdateSettings,
@@ -158,16 +172,41 @@ export const Navbar: React.FC<NavbarProps> = ({
             </span>
           </button>
 
-          {/* Home / Exit */}
-          {currentRole !== 'home' && (
-            <button
-              onClick={onLogout}
-              className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors ml-0.5"
-              title="Về Cổng chính"
-            >
-              <Home className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Trang chủ</span>
-            </button>
+          {/* User session status badge and Logout */}
+          {currentUser ? (
+            <div className="flex items-center gap-1.5 ml-1">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-900 border border-purple-200">
+                {currentUser.role === 'student' && (
+                  <span>
+                    {activeStudent?.avatar || '🌸'} Em: {settings.demoPrivacyMode ? activeStudent?.demoName : activeStudent?.name || 'Học sinh'}
+                  </span>
+                )}
+                {currentUser.role === 'teacher' && (
+                  <span>👩‍🏫 {currentUser.teacherName || TEACHER_CONFIG.name}</span>
+                )}
+                {currentUser.role === 'family' && (
+                  <span>🏡 PH: {settings.demoPrivacyMode ? activeStudent?.demoName : activeStudent?.name || 'Con'}</span>
+                )}
+              </div>
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 transition-colors"
+                title="Đăng xuất khỏi phiên làm việc"
+              >
+                <span>Đăng xuất</span>
+              </button>
+            </div>
+          ) : (
+            currentRole !== 'home' && (
+              <button
+                onClick={onLogout}
+                className="flex items-center gap-1 px-2.5 py-1.5 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition-colors ml-0.5"
+                title="Về Cổng chính Vườn Chữ Nở Hoa"
+              >
+                <Home className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Trang chủ</span>
+              </button>
+            )
           )}
         </div>
       </div>

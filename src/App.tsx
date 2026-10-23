@@ -4,23 +4,56 @@
  */
 
 import React, { useState, useEffect } from 'react';
-import { Student, AppSettings, EssayGenre, OutlineItem, Submission } from './types';
+import { Student, AppSettings, EssayGenre, OutlineItem, Submission, AuthUser } from './types';
 import { INITIAL_STUDENTS } from './data/studentsData';
+import { TEACHER_CONFIG } from './constants/teacherConfig';
 import { Navbar, AppView } from './components/Navbar';
 import { GardenScene } from './components/GardenScene';
+import { LoginView } from './components/LoginView';
 import { StudentPortal } from './components/StudentPortal';
 import { TeacherPortal } from './components/TeacherPortal';
 import { FamilyPortal } from './components/FamilyPortal';
 import { ReadingGarden } from './components/ReadingGarden';
 import { ProgressGardenModal } from './components/ProgressGardenModal';
+import { ProgressJourneyPage } from './components/ProgressJourneyPage';
 import { IdeaMapPage } from './components/IdeaMapPage';
 import { EssayFeedbackPage } from './components/EssayFeedbackPage';
 import { playPop, playChime } from './utils/audio';
 
 export default function App() {
-  const [currentView, setCurrentView] = useState<AppView>('home');
+  const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('vuonchu_auth_session');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return null;
+  });
+
+  const [currentView, setCurrentView] = useState<AppView>(() => {
+    try {
+      const saved = localStorage.getItem('vuonchu_auth_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.role) return parsed.role;
+      }
+    } catch (e) {}
+    return 'home';
+  });
+
+  // Track the previous view so back buttons navigate to the exact caller without losing state or session
+  const [returnToView, setReturnToView] = useState<AppView>('home');
+
   const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
-  const [activeStudent, setActiveStudent] = useState<Student | null>(INITIAL_STUDENTS[0]); // Default to first student so features can be used immediately
+  const [activeStudent, setActiveStudent] = useState<Student | null>(() => {
+    try {
+      const saved = localStorage.getItem('vuonchu_auth_session');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.student) return parsed.student;
+      }
+    } catch (e) {}
+    return INITIAL_STUDENTS[0];
+  });
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
 
   // Shared state connecting Trang 1 (Bản đồ ý tưởng) & Trang 2 (Cô góp ý bài văn)
@@ -65,12 +98,13 @@ export default function App() {
       const data = await res.json();
       if (data.students && Array.isArray(data.students) && data.students.length > 0) {
         setStudents(data.students);
-        if (!activeStudent) {
-          setActiveStudent(data.students[0]);
+        if (activeStudent) {
+          const synced = data.students.find((s: Student) => s.id === activeStudent.id);
+          if (synced) setActiveStudent(synced);
         }
       }
     } catch (e) {
-      console.warn('Could not load students from server, using local list:', e);
+      console.warn('Could not load remote students, using default list:', e);
     }
   };
 
@@ -78,27 +112,90 @@ export default function App() {
     loadStudents();
   }, []);
 
-  // Update active student in list
   const handleUpdateStudent = (updatedStudent: Student) => {
-    setActiveStudent(updatedStudent);
     setStudents(prev => prev.map(s => s.id === updatedStudent.id ? updatedStudent : s));
-  };
-
-  // Select Role from Garden Scene
-  const handleSelectRole = (role: 'student' | 'teacher' | 'family', selectedStudent?: Student) => {
-    playPop(settings.soundEnabled);
-    if (selectedStudent) {
-      setActiveStudent(selectedStudent);
+    if (activeStudent?.id === updatedStudent.id) {
+      setActiveStudent(updatedStudent);
     }
-    setCurrentView(role);
+    if (currentUser?.role === 'student') {
+      const updatedUser = { ...currentUser, student: updatedStudent };
+      setCurrentUser(updatedUser);
+      try {
+        localStorage.setItem('vuonchu_auth_session', JSON.stringify(updatedUser));
+      } catch (e) {}
+    }
   };
 
+  // Login handler
+  const handleLoginSuccess = (user: AuthUser) => {
+    setCurrentUser(user);
+    try {
+      localStorage.setItem('vuonchu_auth_session', JSON.stringify(user));
+    } catch (e) {}
+
+    if (user.role === 'student' && user.student) {
+      setActiveStudent(user.student);
+      setCurrentView('student');
+    } else if (user.role === 'teacher') {
+      setCurrentView('teacher');
+    } else if (user.role === 'family') {
+      if (user.student) {
+        setActiveStudent(user.student);
+      }
+      setCurrentView('family');
+    }
+  };
+
+  // Logout handler
   const handleLogout = () => {
     playPop(settings.soundEnabled);
+    setCurrentUser(null);
+    try {
+      localStorage.removeItem('vuonchu_auth_session');
+    } catch (e) {}
     setCurrentView('home');
   };
 
-  // Transfer from Trang 1 to Trang 2
+  // Navigation from Top Navbar or Home Gate
+  const handleNavigate = (view: AppView) => {
+    playPop(settings.soundEnabled);
+
+    // Save previous view if moving forward to subpages
+    if (['idea_map', 'essay_feedback', 'reading_garden', 'progress_journey'].includes(view)) {
+      setReturnToView(currentView);
+    }
+
+    if (view === 'student') {
+      if (currentUser?.role === 'student') {
+        setCurrentView('student');
+      } else {
+        setCurrentView('login-student');
+      }
+      return;
+    }
+
+    if (view === 'teacher') {
+      if (currentUser?.role === 'teacher') {
+        setCurrentView('teacher');
+      } else {
+        setCurrentView('login-teacher');
+      }
+      return;
+    }
+
+    if (view === 'family') {
+      if (currentUser?.role === 'family') {
+        setCurrentView('family');
+      } else {
+        setCurrentView('login-family');
+      }
+      return;
+    }
+
+    setCurrentView(view);
+  };
+
+  // Proceed from IdeaMapPage to EssayFeedbackPage
   const handleProceedToWrite = (data: {
     prompt: string;
     grade: number;
@@ -109,60 +206,95 @@ export default function App() {
     setSharedPrompt(data.prompt);
     setSharedGrade(data.grade);
     setSharedGenre(data.genre);
-    setSharedSpecialWishes(data.specialWishes);
     setSharedOutline(data.selectedOutline);
+    setSharedSpecialWishes(data.specialWishes);
+    setReturnToView('idea_map');
     setCurrentView('essay_feedback');
   };
 
-  // When task selected from library to Idea Map
-  const handleTransferTaskToIdeaMap = (prompt: string, genre: EssayGenre = 'ke_su_viec') => {
-    setSharedPrompt(prompt);
-    setSharedGenre(genre);
-    setCurrentView('idea_map');
-  };
-
-  // Handle saving submission from Trang 2
-  const handleSaveSubmission = (submissionData: Partial<Submission>) => {
-    if (activeStudent) {
-      const updated: Student = {
-        ...activeStudent,
-        flowersEarned: activeStudent.flowersEarned + 1,
-        starsEarned: activeStudent.starsEarned + 4,
-        treeLevel: Math.min(5, Math.floor((activeStudent.flowersEarned + 1) / 3) + 1)
-      };
-      handleUpdateStudent(updated);
+  // Save submission callback from EssayFeedbackPage
+  const handleSaveSubmission = async (newSub: Partial<Submission>) => {
+    try {
+      const res = await fetch('/api/submissions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(newSub)
+      });
+      const data = await res.json();
+      if (data.success && activeStudent) {
+        handleUpdateStudent({
+          ...activeStudent,
+          flowersEarned: activeStudent.flowersEarned + 1,
+          starsEarned: activeStudent.starsEarned + 5
+        });
+      }
+    } catch (e) {
+      console.error('Error saving submission:', e);
     }
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors ${
-      settings.reducedMotion ? 'motion-reduce' : ''
-    }`}>
-      {/* Top Navbar */}
+    <div className="min-h-screen flex flex-col bg-[#eefaf3] text-stone-800 antialiased selection:bg-pink-200 selection:text-pink-900">
+      {/* Universal Sticky Top Navbar */}
       <Navbar
         currentRole={currentView}
+        currentUser={currentUser}
         activeStudent={activeStudent}
         settings={settings}
         onUpdateSettings={handleUpdateSettings}
-        onNavigate={(view) => {
-          playPop(settings.soundEnabled);
-          setCurrentView(view);
-        }}
+        onNavigate={handleNavigate}
         onLogout={handleLogout}
-        onOpenProgressModal={() => setIsProgressModalOpen(true)}
+        onOpenProgressModal={() => {
+          setReturnToView(currentView);
+          setCurrentView('progress_journey');
+        }}
       />
 
-      {/* Main Views */}
-      <main className="flex-1 bg-gradient-to-b from-pink-50/30 via-purple-50/20 to-sky-50/30">
+      {/* Main Content Area */}
+      <main className="flex-1 pb-16">
+        {/* TRANG CHỦ HOÀN CHỈNH: 3 CÁNH CỔNG NẰM NGANG */}
         {currentView === 'home' && (
           <GardenScene
             students={students}
             settings={settings}
-            onSelectRole={handleSelectRole}
+            onNavigateToLogin={(role) => handleNavigate(role)}
             onOpenReadingGarden={() => {
-              playPop(settings.soundEnabled);
+              setReturnToView('home');
               setCurrentView('reading_garden');
             }}
+          />
+        )}
+
+        {/* TRANG ĐĂNG NHẬP RIÊNG BIỆT 1: GÓC CỦA EM */}
+        {currentView === 'login-student' && (
+          <LoginView
+            role="student"
+            students={students}
+            settings={settings}
+            onLoginSuccess={handleLoginSuccess}
+            onBackToHome={() => setCurrentView('home')}
+          />
+        )}
+
+        {/* TRANG ĐĂNG NHẬP RIÊNG BIỆT 2: GÓC CÔ GIÁO */}
+        {currentView === 'login-teacher' && (
+          <LoginView
+            role="teacher"
+            students={students}
+            settings={settings}
+            onLoginSuccess={handleLoginSuccess}
+            onBackToHome={() => setCurrentView('home')}
+          />
+        )}
+
+        {/* TRANG ĐĂNG NHẬP RIÊNG BIỆT 3: GÓC GIA ĐÌNH */}
+        {currentView === 'login-family' && (
+          <LoginView
+            role="family"
+            students={students}
+            settings={settings}
+            onLoginSuccess={handleLoginSuccess}
+            onBackToHome={() => setCurrentView('home')}
           />
         )}
 
@@ -174,7 +306,10 @@ export default function App() {
             initialPrompt={sharedPrompt}
             initialGenre={sharedGenre}
             onProceedToWrite={handleProceedToWrite}
-            onBackToGarden={() => setCurrentView('home')}
+            onBackToGarden={() => {
+              playPop(settings.soundEnabled);
+              setCurrentView(returnToView || (currentUser?.role || 'home'));
+            }}
           />
         )}
 
@@ -189,72 +324,130 @@ export default function App() {
             initialSpecialWishes={sharedSpecialWishes}
             initialOutline={sharedOutline}
             initialEssayText={sharedEssayText}
-            onBackToIdeaMap={() => setCurrentView('idea_map')}
-            onSaveSubmission={handleSaveSubmission}
-            onOpenProgressGarden={() => setIsProgressModalOpen(true)}
-          />
-        )}
-
-        {/* THƯ VIỆN BÀI TẬP / GÓC HỌC TẬP CỦA EM */}
-        {currentView === 'student' && activeStudent && (
-          <StudentPortal
-            student={activeStudent}
-            settings={settings}
-            onUpdateStudent={handleUpdateStudent}
-            onBackToGarden={() => setCurrentView('home')}
-            onOpenProgressGarden={() => setIsProgressModalOpen(true)}
-            onOpenReadingGarden={() => {
+            onBackToIdeaMap={() => {
               playPop(settings.soundEnabled);
-              setCurrentView('reading_garden');
-            }}
-            onGoToIdeaMap={(prompt, grade, genre) => {
-              setSharedPrompt(prompt);
-              setSharedGrade(grade);
-              setSharedGenre(genre);
               setCurrentView('idea_map');
             }}
+            onSaveSubmission={handleSaveSubmission}
+            onOpenProgressGarden={() => {
+              setReturnToView('essay_feedback');
+              setCurrentView('progress_journey');
+            }}
           />
         )}
 
-        {/* GÓC CÔ GIÁO */}
-        {currentView === 'teacher' && (
-          <TeacherPortal
-            students={students}
-            settings={settings}
-            onBackToGarden={() => setCurrentView('home')}
-          />
-        )}
-
-        {/* GÓC GIA ĐÌNH */}
-        {currentView === 'family' && activeStudent && (
-          <FamilyPortal
+        {/* TRANG ĐỘC LẬP: HÀNH TRÌNH CỦA CON (VƯỜN HOA TIẾN BỘ GDPT 2018) */}
+        {currentView === 'progress_journey' && activeStudent && (
+          <ProgressJourneyPage
             student={activeStudent}
             settings={settings}
-            onBackToGarden={() => setCurrentView('home')}
-            onOpenProgressGarden={() => setIsProgressModalOpen(true)}
+            returnViewName={returnToView === 'family' ? 'Góc gia đình' : returnToView === 'teacher' ? 'Góc cô giáo' : 'Góc của em'}
+            onBack={() => {
+              playPop(settings.soundEnabled);
+              setCurrentView(returnToView || (currentUser?.role || 'home'));
+            }}
           />
         )}
 
-        {/* VƯỜN ĐỌC THÚ VỊ / THƯ VIỆN */}
+        {/* GÓC HỌC TẬP CỦA EM (Tự động nhận diện sau đăng nhập, không chọn lại tên) */}
+        {currentView === 'student' && (
+          currentUser?.role === 'student' && activeStudent ? (
+            <StudentPortal
+              student={activeStudent}
+              settings={settings}
+              onUpdateStudent={handleUpdateStudent}
+              onBackToGarden={() => setCurrentView('home')}
+              onOpenProgressGarden={() => {
+                setReturnToView('student');
+                setCurrentView('progress_journey');
+              }}
+              onOpenReadingGarden={() => {
+                playPop(settings.soundEnabled);
+                setReturnToView('student');
+                setCurrentView('reading_garden');
+              }}
+              onGoToIdeaMap={(prompt, grade, genre) => {
+                setSharedPrompt(prompt);
+                setSharedGrade(grade);
+                setSharedGenre(genre);
+                setReturnToView('student');
+                setCurrentView('idea_map');
+              }}
+            />
+          ) : (
+            <LoginView
+              role="student"
+              students={students}
+              settings={settings}
+              onLoginSuccess={handleLoginSuccess}
+              onBackToHome={() => setCurrentView('home')}
+            />
+          )
+        )}
+
+        {/* GÓC CÔ GIÁO (Bảo mật giáo viên, Sổ chấm bài & Quản lý Tài khoản Lớp em) */}
+        {currentView === 'teacher' && (
+          currentUser?.role === 'teacher' ? (
+            <TeacherPortal
+              students={students}
+              settings={settings}
+              onBackToGarden={() => setCurrentView('home')}
+              onRefreshStudents={loadStudents}
+            />
+          ) : (
+            <LoginView
+              role="teacher"
+              students={students}
+              settings={settings}
+              onLoginSuccess={handleLoginSuccess}
+              onBackToHome={() => setCurrentView('home')}
+            />
+          )
+        )}
+
+        {/* GÓC GIA ĐÌNH (Khóa trực tiếp vào con của phụ huynh) */}
+        {currentView === 'family' && (
+          currentUser?.role === 'family' && activeStudent ? (
+            <FamilyPortal
+              student={activeStudent}
+              settings={settings}
+              onBackToGarden={() => setCurrentView('home')}
+              onOpenProgressGarden={() => {
+                setReturnToView('family');
+                setCurrentView('progress_journey');
+              }}
+            />
+          ) : (
+            <LoginView
+              role="family"
+              students={students}
+              settings={settings}
+              onLoginSuccess={handleLoginSuccess}
+              onBackToHome={() => setCurrentView('home')}
+            />
+          )
+        )}
+
+        {/* VƯỜN ĐỌC THÚ VỊ / THƯ VIỆN BÀI VĂN MẪU */}
         {currentView === 'reading_garden' && (
           <ReadingGarden
             settings={settings}
             onBack={() => {
               playPop(settings.soundEnabled);
-              setCurrentView('home');
+              setCurrentView(returnToView || 'home');
             }}
           />
         )}
       </main>
 
-      {/* Universal Footer with Teacher Attribution */}
+      {/* Universal Footer with Centralized Teacher Attribution */}
       <footer className="w-full py-3.5 sm:py-4 px-4 bg-gradient-to-r from-pink-50 via-purple-50 to-sky-50 border-t border-pink-200/80 text-center shadow-xs">
         <p className="text-xs sm:text-sm text-stone-700 font-medium">
-          Được phát triển bởi <strong className="font-extrabold text-purple-950">NGUYỄN THỊ HẢI DUYÊN</strong> – Giáo viên trường Tiểu học Lê Đức Thọ
+          {TEACHER_CONFIG.attribution}
         </p>
       </footer>
 
-      {/* Progress Garden Modal */}
+      {/* Backward-compatible Modal fallback if needed */}
       {isProgressModalOpen && activeStudent && (
         <ProgressGardenModal
           student={activeStudent}

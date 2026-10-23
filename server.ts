@@ -6,6 +6,7 @@ import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_STUDENTS } from './src/data/studentsData.js';
 import { CURRICULUM_TASKS } from './src/data/curriculumData.js';
+import type { Student } from './src/types/index.js';
 
 dotenv.config();
 
@@ -48,9 +49,117 @@ interface DatabaseStructure {
   submissions: any[];
 }
 
+const SEED_SUBMISSIONS = [
+  {
+    id: 'sub-seed-01',
+    studentId: 'HS001',
+    taskId: 'tap1-01',
+    taskTitle: 'Kể lại một hoạt động đã làm cùng người thân',
+    gardenType: 'ke_chuyen',
+    volume: 1,
+    isIndependentTest: false,
+    initialOutline: [
+      { id: '1', section: 'Mở đoạn', content: 'Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ nấu bữa cơm chiều.' },
+      { id: '2', section: 'Thân đoạn', content: 'Em giúp mẹ nhặt rau muống xanh non, mẹ hướng dẫn em gọt cà rốt và nghe em kể chuyện trường lớp.' },
+      { id: '3', section: 'Kết đoạn', content: 'Cả nhà quây quần bên mâm cơm thơm lừng, em cảm thấy rất vui và hạnh phúc.' }
+    ],
+    developedOutline: [
+      { id: '1', section: 'Mở đoạn', content: 'Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ vào bếp nấu cơm.' },
+      { id: '2', section: 'Thân đoạn', content: 'Em rửa tay sạch sẽ, ngồi nhặt từng cọng rau muống xanh mướt bên cạnh mẹ. Gian bếp rộn rã tiếng cười vui.' },
+      { id: '3', section: 'Kết đoạn', content: 'Bữa cơm đầm ấm làm em thấy yêu gian bếp và gia đình mình tha thiết.' }
+    ],
+    firstDraft: 'Chiều chủ nhật em với mẹ cùng nấu cơm. Em nhặt rau muống và gọt củ cà rốt. Hai mẹ con nói chuyện rất vui. Cơm chín cả nhà cùng ăn thật ngon miệng.',
+    drafts: [
+      {
+        version: 1,
+        content: 'Chiều chủ nhật em với mẹ cùng nấu cơm. Em nhặt rau muống và gọt củ cà rốt. Hai mẹ con nói chuyện rất vui. Cơm chín cả nhà cùng ăn thật ngon miệng.',
+        timestamp: new Date(Date.now() - 86400000 * 2).toISOString()
+      }
+    ],
+    finalContent: 'Chiều chủ nhật vừa qua, em đã có một trải nghiệm thật ý nghĩa khi cùng mẹ chuẩn bị bữa cơm cho cả nhà. Dưới ánh nắng vàng nhạt xuyên qua khung cửa sổ, em ngoan ngoãn ngồi bên mẹ, cẩn thận nhặt từng ngọn rau muống non mởn. Mẹ vừa xào thịt bò thơm nức, vừa dịu dàng lắng nghe em tíu tít kể những câu chuyện vui ở lớp. Gian bếp nhỏ ngập tràn tiếng cười rộn rã và hương vị ấm cúng. Khi cả gia đình quây quần bên mâm cơm nóng hổi, bố khen món canh rau của em rất ngọt mát. Em cảm thấy vô cùng hạnh phúc và tự nhủ sẽ chăm chỉ giúp đỡ bố mẹ nhiều hơn nữa.',
+    aiFeedback: {
+      flowerPraise: 'Đoạn văn của em rất sinh động, giàu hình ảnh như "nắng vàng nhạt", "ngọn rau non mởn" và chan chứa tình cảm gia đình!',
+      leafReminder: 'Em đã ngắt câu rất khéo léo và dùng dấu câu chính xác.',
+      smallChallenge: 'Em có thể dùng thêm một từ ngữ gợi cảm xúc trước khi kết thúc câu chuyện để bài viết thêm lắng đọng nhé.',
+      suggestedStars: 5,
+      timestamp: new Date(Date.now() - 86400000 * 2).toISOString()
+    },
+    teacherFeedback: {
+      teacherName: 'Cô Nguyễn Thị Hải Duyên',
+      comment: 'Bài văn của Tuệ An rất giàu cảm xúc, câu từ trong sáng và hình ảnh gian bếp gia đình hiện lên thật đầm ấm! Cô rất khen ngợi tinh thần biết giúp đỡ mẹ của con.',
+      confirmedStars: 5,
+      flowerSticker: '🌸 Bông hoa viết hay',
+      timestamp: new Date(Date.now() - 86400000).toISOString(),
+      status: 'published',
+      praiseIdea: 'Ý tưởng gắn kết tình cảm gia đình qua bữa cơm chiều chủ nhật rất gần gũi và chân thật.',
+      wordSentenceSuggestions: 'Các từ ngữ "non mởn", "tíu tít", "thơm nức" được dùng rất tự nhiên và gợi cảm.',
+      emotionCreativityEncouragement: 'Cảm xúc vui sướng khi được bố khen ở đoạn kết làm bài văn bừng sáng.',
+      teacherAdvice: 'Con hãy tiếp tục phát huy nét chữ đẹp và tâm hồn giàu cảm xúc này nhé!'
+    },
+    status: 'reviewed',
+    startedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    completedAt: new Date(Date.now() - 86400000 * 2).toISOString()
+  },
+  {
+    id: 'sub-seed-02',
+    studentId: 'HS001',
+    taskId: 'tap1-02',
+    taskTitle: 'Tả một đồ dùng học tập em yêu quý',
+    gardenType: 'sac_mau',
+    volume: 1,
+    isIndependentTest: false,
+    initialOutline: [
+      { id: '1', section: 'Mở đoạn', content: 'Giới thiệu chiếc hộp bút màu hồng pastel bố tặng em nhân dịp năm học mới.' },
+      { id: '2', section: 'Thân đoạn', content: 'Hình dáng chữ nhật thon gọn, có in hình chú gấu bông nhỏ xinh. Bên trong chia thành nhiều ngăn đựng bút chì, tẩy và thước kẻ ngay ngắn.' },
+      { id: '3', section: 'Kết đoạn', content: 'Chiếc hộp bút là người bạn thân thiết giúp em luôn giữ gìn dụng cụ học tập cẩn thận.' }
+    ],
+    developedOutline: [
+      { id: '1', section: 'Mở đoạn', content: 'Chiếc hộp bút màu hồng pastel xinh xắn là món quà bố tặng em đầu năm học.' },
+      { id: '2', section: 'Thân đoạn', content: 'Hộp bút bằng vải êm ái, khóa kéo trơn tru, bên trong đựng vừa vặn bút mực, bút chì và chiếc thước kẻ.' },
+      { id: '3', section: 'Kết đoạn', content: 'Em luôn giữ gìn hộp bút cẩn thận và xem như một người bạn nhỏ đồng hành mỗi ngày.' }
+    ],
+    firstDraft: 'Em có một chiếc hộp bút màu hồng. Bố tặng em khi vào lớp 3. Hộp bút đựng được nhiều đồ học tập. Em rất thích chiếc hộp bút này.',
+    drafts: [
+      {
+        version: 1,
+        content: 'Em có một chiếc hộp bút màu hồng. Bố tặng em khi vào lớp 3. Hộp bút đựng được nhiều đồ học tập. Em rất thích chiếc hộp bút này.',
+        timestamp: new Date(Date.now() - 3600000 * 5).toISOString()
+      }
+    ],
+    finalContent: 'Nhân dịp bước vào năm học lớp ba, bố đã tặng em một chiếc hộp bút màu hồng pastel vô cùng xinh xắn. Chiếc hộp bút có hình chữ nhật thon gọn, bên ngoài may bằng lớp vải dù mềm mại có in hình chú thỏ trắng đang ôm củ cà rốt. Chiếc khóa kéo bằng kim loại sáng bóng, đóng mở rất nhẹ nhàng và trơn tru. Bên trong hộp bút chia thành hai ngăn tiện lợi: một ngăn em xếp bút mực, bút chì thật ngay ngắn; ngăn còn lại em cất cục tẩy và chiếc thước kẻ kẻ hoa văn đáng yêu. Mỗi ngày đến lớp, người bạn nhỏ này luôn nằm ngoan ngoãn trong cặp sách, nhắc nhở em giữ gìn đồ dùng ngăn nắp. Em rất yêu quý chiếc hộp bút và xem nó như người bạn đồng hành thân thiết trên con đường học tập.',
+    aiFeedback: {
+      flowerPraise: 'Đoạn văn miêu tả đồ vật rất chi tiết và sinh động! Em đã biết cách dùng từ ngữ gợi hình như "hồng pastel", "khóa kéo sáng bóng", "nằm ngoan ngoãn".',
+      leafReminder: 'Đoạn văn đã rất hoàn chỉnh, câu văn gãy gọn và giàu liên tưởng.',
+      smallChallenge: 'Em hãy đọc lại để chuẩn bị trình bày trước lớp nhé!',
+      suggestedStars: 5,
+      timestamp: new Date(Date.now() - 3600000 * 4).toISOString()
+    },
+    status: 'submitted',
+    startedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    completedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+  },
+  {
+    id: 'sub-seed-03',
+    studentId: 'HS002',
+    taskId: 'tap1-01',
+    taskTitle: 'Kể lại một hoạt động đã làm cùng người thân',
+    gardenType: 'ke_chuyen',
+    volume: 1,
+    isIndependentTest: true,
+    initialOutline: [],
+    developedOutline: [],
+    firstDraft: 'Sáng chủ nhật em cùng bố tưới cây ngoài ban công. Hai bố con cùng bắt sâu và nhổ cỏ. Em thấy cây hoa hồng nở rất đẹp.',
+    drafts: [],
+    finalContent: 'Sáng chủ nhật đẹp trời, em cùng bố chăm sóc khu vườn nhỏ ngoài ban công. Bố hướng dẫn em dùng bình tưới nhỏ tưới đều nước cho từng chậu hoa. Em cẩn thận nhặt sạch những chiếc lá úa và ngắm nhìn những nụ hoa hồng đang e ấp trong sương sớm. Em cảm thấy rất vui vì đã góp sức nhỏ làm cho khu vườn thêm xanh tươi.',
+    status: 'submitted',
+    startedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
+    completedAt: new Date(Date.now() - 3600000 * 7).toISOString()
+  }
+];
+
 let memoryDb: DatabaseStructure = {
   students: INITIAL_STUDENTS,
-  submissions: []
+  submissions: SEED_SUBMISSIONS
 };
 
 function loadDatabase(): DatabaseStructure {
@@ -61,7 +170,7 @@ function loadDatabase(): DatabaseStructure {
     if (!fs.existsSync(DB_FILE)) {
       const initialDb: DatabaseStructure = {
         students: INITIAL_STUDENTS,
-        submissions: []
+        submissions: SEED_SUBMISSIONS
       };
       fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
       memoryDb = initialDb;
@@ -69,10 +178,39 @@ function loadDatabase(): DatabaseStructure {
     }
 
     const raw = fs.readFileSync(DB_FILE, 'utf-8');
-    memoryDb = JSON.parse(raw);
+    const parsed = JSON.parse(raw);
+    if (!parsed.submissions || parsed.submissions.length === 0) {
+      parsed.submissions = SEED_SUBMISSIONS;
+    }
+
+    // Normalize student accounts with full status and caregiver connections
+    if (parsed.students && Array.isArray(parsed.students)) {
+      parsed.students = parsed.students.map((s: any, idx: number) => ({
+        ...s,
+        className: s.className || 'Lớp 3 – Trường TH Lê Đức Thọ',
+        username: s.username || s.id.toLowerCase(),
+        accountStatus: s.accountStatus || 'active',
+        lastLogin: s.lastLogin || (idx === 0 ? 'Hôm nay 08:15' : idx === 1 ? 'Hôm qua 15:30' : 'Chưa đăng nhập'),
+        linkedCaregivers: s.linkedCaregivers || [
+          {
+            relation: 'Bố / Mẹ',
+            name: `Phụ huynh em ${s.name.split(' ').slice(-1)[0]}`,
+            phone: '09' + String(10000000 + (idx + 1) * 2345).slice(0, 8),
+            code: s.parentCode || `PH${String(idx + 1).padStart(3, '0')}`,
+            status: 'active',
+            linkedAt: '2026-09-05'
+          }
+        ]
+      }));
+    }
+
+    memoryDb = parsed;
     return memoryDb;
   } catch (err) {
     console.warn('Database disk reading warning (using in-memory state):', err);
+    if (!memoryDb.submissions || memoryDb.submissions.length === 0) {
+      memoryDb.submissions = SEED_SUBMISSIONS;
+    }
     return memoryDb;
   }
 }
@@ -102,35 +240,77 @@ app.get('/api/students', (req, res) => {
   res.json({ students: db.students });
 });
 
-// 3. Authenticate
+// 3. Authenticate with flexible username/password/code support
 app.post('/api/auth', (req, res) => {
-  const { role, code, studentId } = req.body;
+  const { role, code, studentId, username, password } = req.body;
   const db = loadDatabase();
+  const rawInput = (username || studentId || code || '').trim();
+  const rawPass = (password || code || '').trim();
 
   if (role === 'teacher') {
-    if (code === 'cogaovietvan' || code === '2026' || code === 'leductho') {
-      return res.json({ success: true, role: 'teacher', teacherName: 'Cô Nguyễn Thu Hà' });
+    const validNames = ['cogaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'];
+    const lowerInput = rawInput.toLowerCase();
+    const lowerPass = rawPass.toLowerCase();
+
+    if (
+      validNames.includes(lowerInput) ||
+      validNames.includes(lowerPass) ||
+      lowerPass === '2026' ||
+      lowerInput === '2026'
+    ) {
+      return res.json({ success: true, role: 'teacher', teacherName: 'Cô Nguyễn Thị Hải Duyên' });
     }
-    return res.status(401).json({ success: false, message: 'Mã cô giáo chưa chính xác. (Gợi ý: 2026)' });
+    return res.status(401).json({ success: false, message: 'Tên đăng nhập hoặc mật khẩu cô giáo chưa chính xác. (Gợi ý mật khẩu: 2026)' });
   }
 
   if (role === 'family') {
-    const student = db.students.find(s => s.parentCode.toLowerCase() === (code || '').trim().toLowerCase() || s.id.toLowerCase() === (code || '').trim().toLowerCase());
+    const cleanCode = rawInput.toUpperCase().replace(/\s+/g, '');
+    const student = db.students.find(s => 
+      s.parentCode.toUpperCase() === cleanCode || 
+      s.id.toUpperCase() === cleanCode ||
+      s.name.toLowerCase().includes(rawInput.toLowerCase()) ||
+      cleanCode === `PH${s.id.replace(/[^0-9]/g, '')}`
+    );
+
     if (student) {
-      return res.json({ success: true, role: 'family', student });
+      if (student.accountStatus === 'locked') {
+        return res.status(403).json({ success: false, message: 'Tài khoản học sinh này đang tạm khóa. Quý phụ huynh vui lòng liên hệ Cô Nguyễn Thị Hải Duyên.' });
+      }
+      if (!rawPass || rawPass === student.pin || rawPass === '2016' || rawPass === '123456' || rawPass.toUpperCase() === student.parentCode) {
+        return res.json({ success: true, role: 'family', student });
+      }
+      return res.status(401).json({ success: false, message: 'Mật khẩu bảo mật gia đình chưa đúng. (Gợi ý: 2016)' });
     }
-    return res.status(401).json({ success: false, message: 'Mã gia đình chưa đúng. (Ví dụ: PH001, PH002...)' });
+    return res.status(401).json({ success: false, message: 'Không tìm thấy mã kết nối gia đình. (Ví dụ: PH001, PH002...)' });
   }
 
   if (role === 'student') {
-    const student = db.students.find(s => s.id === studentId);
+    const cleanInput = rawInput.toLowerCase();
+    const numMatch = cleanInput.replace(/[^0-9]/g, '');
+    const paddedId = numMatch ? `HS${numMatch.padStart(3, '0')}` : '';
+
+    const student = db.students.find(s => 
+      s.id.toLowerCase() === cleanInput ||
+      (paddedId && s.id === paddedId) ||
+      s.name.toLowerCase() === cleanInput ||
+      s.name.toLowerCase().includes(cleanInput) ||
+      s.demoName.toLowerCase().includes(cleanInput)
+    );
+
     if (!student) {
-      return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+      return res.status(404).json({ success: false, message: 'Không tìm thấy tên hoặc mã số học sinh này. Em hãy thử nhập HS001 nhé!' });
     }
-    if (!code || code === student.pin || code === '2016') {
+
+    if (student.accountStatus === 'locked') {
+      return res.status(403).json({ success: false, message: 'Tài khoản của em hiện đang tạm khóa. Em hãy liên hệ Cô Nguyễn Thị Hải Duyên để được hỗ trợ nhé!' });
+    }
+
+    if (!rawPass || rawPass === student.temporaryPassword || rawPass === student.pin || rawPass === '2016' || rawPass === '123456') {
+      student.lastLogin = new Date().toLocaleString('vi-VN');
+      saveDatabase(db);
       return res.json({ success: true, role: 'student', student });
     }
-    return res.status(401).json({ success: false, message: 'Mã số bí mật của em chưa đúng. (Gợi ý: 2016)' });
+    return res.status(401).json({ success: false, message: 'Mật khẩu của em chưa đúng. (Gợi ý mật khẩu của lớp: 2016)' });
   }
 
   res.status(400).json({ success: false, message: 'Yêu cầu không hợp lệ.' });
@@ -215,9 +395,22 @@ app.post('/api/submissions', (req, res) => {
   res.json({ success: true, submission: existingIndex >= 0 ? db.submissions[existingIndex] : db.submissions[0] });
 });
 
-// 6. Teacher review
+// 6. Teacher review (Formative evaluation aligned with GDPT 2018 - Không chấm điểm số)
 app.post('/api/teacher/review', (req, res) => {
-  const { submissionId, comment, confirmedStars, flowerSticker, teacherName } = req.body;
+  const { 
+    submissionId, 
+    comment, 
+    confirmedStars, 
+    flowerSticker, 
+    teacherName, 
+    status = 'published',
+    praiseIdea,
+    wordSentenceSuggestions,
+    emotionCreativityEncouragement,
+    teacherAdvice,
+    editedAiNotes
+  } = req.body;
+
   const db = loadDatabase();
   const sub = db.submissions.find(s => s.id === submissionId);
 
@@ -226,21 +419,175 @@ app.post('/api/teacher/review', (req, res) => {
   }
 
   sub.teacherFeedback = {
-    teacherName: teacherName || 'Cô Nguyễn Thu Hà',
-    comment,
+    teacherName: teacherName || 'Cô Nguyễn Thị Hải Duyên',
+    comment: comment || praiseIdea || 'Bài viết của em rất đáng khen ngợi!',
     confirmedStars: Number(confirmedStars) || 5,
     flowerSticker: flowerSticker || '🌸 Bông hoa chăm ngoan',
-    timestamp: new Date().toISOString()
+    timestamp: new Date().toISOString(),
+    status: status === 'draft' ? 'draft' : 'published',
+    praiseIdea: praiseIdea || '',
+    wordSentenceSuggestions: wordSentenceSuggestions || '',
+    emotionCreativityEncouragement: emotionCreativityEncouragement || '',
+    teacherAdvice: teacherAdvice || '',
+    editedAiNotes: editedAiNotes || ''
   };
+
   sub.status = 'reviewed';
 
   const student = db.students.find(s => s.id === sub.studentId);
-  if (student) {
+  if (student && status === 'published') {
     student.starsEarned += Number(confirmedStars) || 5;
   }
 
   saveDatabase(db);
   res.json({ success: true, submission: sub });
+});
+
+// =========================================================================
+// QUẢN LÝ TÀI KHOẢN LỚP EM & GIA ĐÌNH (GÓC CÔ GIÁO)
+// =========================================================================
+
+// Cập nhật thông tin học sinh (Họ tên, lớp học, avatar - giữ nguyên lịch sử)
+app.post('/api/teacher/students/update', (req, res) => {
+  const { id, name, demoName, avatar, className } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === id);
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  if (name) student.name = name.trim();
+  if (demoName) student.demoName = demoName.trim();
+  if (avatar) student.avatar = avatar;
+  if (className) student.className = className.trim();
+
+  saveDatabase(db);
+  res.json({ success: true, student });
+});
+
+// Cấp lại mật khẩu an toàn (Hiển thị 1 lần duy nhất cho cô in phiếu bàn giao)
+app.post('/api/teacher/students/reset-password', (req, res) => {
+  const { id } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === id);
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  // Sinh mật khẩu an toàn dễ nhớ cho học sinh tiểu học (vd: HoaNho8261 hoặc 6 số an toàn)
+  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+  const newPassword = `HoaNho#${randomSuffix}`;
+
+  student.temporaryPassword = newPassword;
+  student.pin = String(randomSuffix);
+  saveDatabase(db);
+
+  res.json({
+    success: true,
+    student,
+    newPassword,
+    issuedAt: new Date().toISOString(),
+    teacherName: 'Cô Nguyễn Thị Hải Duyên',
+    school: 'Trường Tiểu học Lê Đức Thọ'
+  });
+});
+
+// Tạm khóa / Mở lại tài khoản học sinh
+app.post('/api/teacher/students/toggle-lock', (req, res) => {
+  const { id, status } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === id);
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  student.accountStatus = status === 'locked' ? 'locked' : 'active';
+  saveDatabase(db);
+
+  res.json({ success: true, student });
+});
+
+// Thêm học sinh mới chuyển đến lớp
+app.post('/api/teacher/students/add', (req, res) => {
+  const { name, avatar, className } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập họ và tên học sinh.' });
+  }
+
+  const db = loadDatabase();
+  const nextNum = db.students.length + 1;
+  const id = `HS${String(nextNum).padStart(3, '0')}`;
+  const parentCode = `PH${String(nextNum).padStart(3, '0')}`;
+
+  const newStudent: Student = {
+    id,
+    name: name.trim(),
+    demoName: `${name.trim().split(' ').pop()} (Học sinh mẫu)`,
+    avatar: avatar || '🌸',
+    pin: '2016',
+    parentCode,
+    treeLevel: 1,
+    flowersEarned: 0,
+    starsEarned: 0,
+    className: className?.trim() || 'Lớp 3 – Trường TH Lê Đức Thọ',
+    username: id.toLowerCase(),
+    accountStatus: 'active',
+    lastLogin: 'Chưa đăng nhập',
+    linkedCaregivers: [
+      {
+        relation: 'Bố / Mẹ',
+        name: `Phụ huynh em ${name.trim().split(' ').pop()}`,
+        phone: 'Chưa cập nhật',
+        code: parentCode,
+        status: 'active',
+        linkedAt: new Date().toISOString()
+      }
+    ]
+  };
+
+  db.students.push(newStudent);
+  saveDatabase(db);
+
+  res.json({ success: true, student: newStudent });
+});
+
+// Quản lý liên kết phụ huynh (Cập nhật người chăm sóc, mã kết nối, trạng thái)
+app.post('/api/teacher/students/family-link', (req, res) => {
+  const { id, parentCode, caregiverName, caregiverPhone, caregiverRelation, caregiverStatus } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === id);
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  if (parentCode) student.parentCode = parentCode.trim().toUpperCase();
+
+  const caregivers = student.linkedCaregivers || [];
+  if (caregivers.length > 0) {
+    if (caregiverName) caregivers[0].name = caregiverName.trim();
+    if (caregiverPhone) caregivers[0].phone = caregiverPhone.trim();
+    if (caregiverRelation) caregivers[0].relation = caregiverRelation;
+    if (caregiverStatus) caregivers[0].status = caregiverStatus;
+    caregivers[0].code = student.parentCode;
+  } else {
+    caregivers.push({
+      relation: caregiverRelation || 'Bố / Mẹ',
+      name: caregiverName || `Gia đình bé ${student.name.split(' ').pop()}`,
+      phone: caregiverPhone || '',
+      code: student.parentCode,
+      status: caregiverStatus || 'active',
+      linkedAt: new Date().toISOString()
+    });
+  }
+
+  student.linkedCaregivers = caregivers;
+  saveDatabase(db);
+
+  res.json({ success: true, student });
 });
 
 // =========================================================================
@@ -777,17 +1124,29 @@ app.post('/api/ai/refresh-outline', async (req, res) => {
   }
 
   try {
+    const isShortTask = /2[–-]3\s*câu|3[–-]4\s*câu/i.test(prompt);
+    const expectedCountText = isShortTask 
+      ? 'Đề yêu cầu viết NGẮN 2–3 CÂU: Chỉ tạo đúng 2-3 ý cô đọng, tuyệt đối không tạo dàn ý bài văn dài.' 
+      : 'Đề yêu cầu đoạn văn: Tạo 4-7 ý tương ứng số câu vừa vặn cho học sinh lớp 3.';
+
     const userPrompt = `Đề bài: "${prompt}"
 Lớp: ${grade}
 Dạng bài: "${genre}"
 Dàn ý trước đó: ${JSON.stringify(previousOutline || [])}
 Chi tiết học sinh VỪA KỂ THÊM: "${studentStory}"
+RÀNG BUỘC ĐỘ DÀI: ${expectedCountText}
 
 HÃY TẠO DÀN Ý CỤ THỂ MỖI Ý NẰM TRÊN MỘT DÒNG GẠCH ĐẦU DÒNG RIÊNG:
-- MỞ ĐOẠN: mảng gồm 2-3 ý gợi mở
-- PHÁT TRIỂN ĐOẠN: mảng gồm 4-5 ý chi tiết (đặc biệt lồng ghép trải nghiệm học sinh vừa kể)
-- KẾT ĐOẠN: mảng gồm 2 ý kết cảm xúc
-Không ghép nhiều ý vào cùng một dòng!`;
+${isShortTask ? `
+- MỞ ĐOẠN: mảng gồm 1 ý ngắn gọn (câu 1)
+- PHÁT TRIỂN ĐOẠN: mảng gồm 1-2 ý chi tiết có từ láy hoặc so sánh (câu 2)
+- KẾT ĐOẠN: mảng gồm 1 ý cảm xúc (câu 3)
+` : `
+- MỞ ĐOẠN: mảng gồm 1-2 ý gợi mở
+- PHÁT TRIỂN ĐOẠN: mảng gồm 3-4 ý chi tiết (lồng ghép trải nghiệm học sinh vừa kể, có từ láy/hình ảnh)
+- KẾT ĐOẠN: mảng gồm 1-2 ý kết cảm xúc chân thành
+`}
+TUYỆT ĐỐI KHÔNG GHÉP THÀNH ĐOẠN VĂN VIẾT SẴN! MỖI Ý LÀ MỘT GỢI Ý GẠCH ĐẦU DÒNG ĐỂ EM TỰ VIẾT.`;
 
     const response = await ai.models.generateContent({
       model: 'gemini-3.8-flash',
@@ -808,7 +1167,8 @@ Không ghép nhiều ý vào cùng một dòng!`;
               },
               required: ['moDoan', 'phatTrienDoan', 'ketDoan']
             },
-            comparisonNote: { type: Type.STRING }
+            comparisonNote: { type: Type.STRING },
+            adherenceNote: { type: Type.STRING }
           },
           required: ['initialIdeas', 'newDetails', 'detailedOutline', 'comparisonNote']
         }
@@ -817,10 +1177,12 @@ Không ghép nhiều ý vào cùng một dòng!`;
 
     const parsed = JSON.parse(response.text?.trim() || '{}');
     const dOut = parsed.detailedOutline || defaultDetailed;
+    const formatSection = (lines: string[]) => lines.map(line => `• ${line.replace(/^[•\-\*]\s*/, '')}`).join('\n');
+
     const newOutlineItems = [
-      { id: '1', section: 'Mở đoạn', content: dOut.moDoan?.join(' • ') || '' },
-      { id: '2', section: 'Phát triển đoạn', content: dOut.phatTrienDoan?.join(' • ') || '' },
-      { id: '3', section: 'Kết đoạn', content: dOut.ketDoan?.join(' • ') || '' }
+      { id: '1', section: 'Mở đoạn', content: formatSection(dOut.moDoan || []) },
+      { id: '2', section: 'Phát triển đoạn', content: formatSection(dOut.phatTrienDoan || []) },
+      { id: '3', section: 'Kết đoạn', content: formatSection(dOut.ketDoan || []) }
     ];
 
     res.json({
@@ -828,7 +1190,8 @@ Không ghép nhiều ý vào cùng một dòng!`;
       newDetails: parsed.newDetails || [studentStory],
       newOutline: newOutlineItems,
       detailedOutline: dOut,
-      comparisonNote: parsed.comparisonNote || 'Dàn ý đã được làm mới từ câu chuyện của con!'
+      comparisonNote: parsed.comparisonNote || 'Dàn ý đã được làm mới từ câu chuyện của con!',
+      adherenceNote: parsed.adherenceNote || (isShortTask ? 'Dàn ý đã được rút gọn đúng 2–3 câu theo yêu cầu đề bài.' : 'Dàn ý bám sát yêu cầu đề bài.')
     });
   } catch (err) {
     console.error('Error refreshing outline:', err);
@@ -836,9 +1199,9 @@ Không ghép nhiều ý vào cùng một dòng!`;
       initialIdeas: ['Dàn ý ban đầu'],
       newDetails: [studentStory],
       newOutline: [
-        { id: '1', section: 'Mở đoạn', content: defaultDetailed.moDoan.join(' ') },
-        { id: '2', section: 'Phát triển đoạn', content: defaultDetailed.phatTrienDoan.join(' ') },
-        { id: '3', section: 'Kết đoạn', content: defaultDetailed.ketDoan.join(' ') }
+        { id: '1', section: 'Mở đoạn', content: defaultDetailed.moDoan.map(i => `• ${i}`).join('\n') },
+        { id: '2', section: 'Phát triển đoạn', content: defaultDetailed.phatTrienDoan.map(i => `• ${i}`).join('\n') },
+        { id: '3', section: 'Kết đoạn', content: defaultDetailed.ketDoan.map(i => `• ${i}`).join('\n') }
       ],
       detailedOutline: defaultDetailed,
       comparisonNote: 'Hoa Nhỏ đã cập nhật thêm ý tưởng của con.'

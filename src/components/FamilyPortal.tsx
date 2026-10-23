@@ -1,6 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { Student, Submission, AppSettings } from '../types';
+import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { playPop } from '../utils/audio';
+import { getFamilyGreeting } from '../utils/timeGreeting';
+import { HoaNhoMascot } from './HoaNhoMascot';
 import { 
   Heart, 
   Sparkles, 
@@ -30,6 +33,8 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
 }) => {
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSub, setSelectedSub] = useState<Submission | null>(null);
+
+  const studentDisplayName = settings.demoPrivacyMode ? student.demoName : student.name;
 
   useEffect(() => {
     fetch(`/api/submissions?studentId=${student.id}`)
@@ -80,7 +85,7 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
               <span className="text-xs text-stone-500 font-bold">Mã kết nối: {student.parentCode}</span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-rose-950 font-display">
-              Hành trình học viết của bé {settings.demoPrivacyMode ? student.demoName : student.name}
+              Hành trình học viết của bé {studentDisplayName}
             </h2>
           </div>
         </div>
@@ -92,6 +97,16 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
           <Trees className="w-4 h-4 text-emerald-600" />
           <span>Vườn hoa của con ({student.flowersEarned} 🌸)</span>
         </button>
+      </div>
+
+      {/* Hoa Nhỏ Family Greeting */}
+      <div className="flex justify-start">
+        <HoaNhoMascot
+          mood="happy"
+          size="sm"
+          reducedMotion={settings.reducedMotion}
+          message={getFamilyGreeting(studentDisplayName, student.flowersEarned)}
+        />
       </div>
 
       {/* Main Grid: Left is Essay & Teacher Feedback, Right is Family Conversation & Highlights */}
@@ -121,25 +136,50 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
                 "{selectedSub.finalContent}"
               </div>
 
-              {/* Lời cô giáo gửi gia đình */}
-              {selectedSub.teacherFeedback ? (
-                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-200 space-y-2">
+              {/* Lời cô giáo gửi gia đình (Chỉ hiển thị khi đã công bố) */}
+              {selectedSub.teacherFeedback && selectedSub.teacherFeedback.status !== 'draft' ? (
+                <div className="p-4 rounded-2xl bg-emerald-50 border-2 border-emerald-200 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-emerald-900 text-xs sm:text-sm flex items-center gap-1.5">
                       <span>👩‍🏫</span>
-                      <span>Lời cô giáo gửi gia đình:</span>
+                      <span>Lời nhận xét chính thức từ {selectedSub.teacherFeedback.teacherName || TEACHER_CONFIG.name}:</span>
                     </span>
                     <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-200 text-emerald-900">
                       {selectedSub.teacherFeedback.flowerSticker || '🌸 Bông hoa chăm ngoan'}
                     </span>
                   </div>
-                  <p className="text-xs sm:text-sm text-stone-700 leading-relaxed italic">
+
+                  <p className="text-xs sm:text-sm text-stone-800 leading-relaxed font-semibold italic bg-white p-3 rounded-xl border border-emerald-100">
                     "{selectedSub.teacherFeedback.comment}"
                   </p>
+
+                  {/* 4 Qualitative criteria details if available */}
+                  {(selectedSub.teacherFeedback.praiseIdea || selectedSub.teacherFeedback.wordSentenceSuggestions || selectedSub.teacherFeedback.emotionCreativityEncouragement) && (
+                    <div className="space-y-2 pt-1 text-xs">
+                      {selectedSub.teacherFeedback.praiseIdea && (
+                        <div className="bg-rose-50/80 p-2.5 rounded-xl border border-rose-200">
+                          <strong className="text-rose-900 block font-bold">🌸 Ý tưởng nổi bật:</strong>
+                          <span className="text-stone-700">{selectedSub.teacherFeedback.praiseIdea}</span>
+                        </div>
+                      )}
+                      {selectedSub.teacherFeedback.wordSentenceSuggestions && (
+                        <div className="bg-emerald-50/80 p-2.5 rounded-xl border border-emerald-200">
+                          <strong className="text-emerald-900 block font-bold">✏️ Góp ý dùng từ & diễn đạt:</strong>
+                          <span className="text-stone-700">{selectedSub.teacherFeedback.wordSentenceSuggestions}</span>
+                        </div>
+                      )}
+                      {selectedSub.teacherFeedback.emotionCreativityEncouragement && (
+                        <div className="bg-amber-50/80 p-2.5 rounded-xl border border-amber-200">
+                          <strong className="text-amber-900 block font-bold">💖 Khích lệ tinh thần:</strong>
+                          <span className="text-stone-700">{selectedSub.teacherFeedback.emotionCreativityEncouragement}</span>
+                        </div>
+                      )}
+                    </div>
+                  )}
                 </div>
               ) : (
                 <div className="p-3 bg-stone-50 rounded-2xl text-xs text-stone-500 italic">
-                  Bài viết đang được cô giáo đọc và sẽ sớm có lời nhận xét gửi đến gia đình.
+                  Bài viết đang được cô giáo đọc và sẽ sớm công bố lời nhận xét ân cần gửi đến gia đình.
                 </div>
               )}
 
@@ -198,42 +238,33 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
                 <span className="text-amber-600 font-bold">✨</span>
                 <div>
                   <strong className="text-amber-900 block">Phát triển ý tưởng cá nhân:</strong>
-                  Con tự dùng lời văn và kỷ niệm của riêng mình, không sao chép bài mẫu.
+                  Con tự do lựa chọn chi tiết độc đáo từ chính trải nghiệm thật của mình.
                 </div>
               </div>
               <div className="p-2.5 rounded-xl bg-emerald-50/70 border border-emerald-100 flex items-start gap-2">
                 <span className="text-emerald-600 font-bold">🍃</span>
                 <div>
-                  <strong className="text-emerald-900 block">Tự sửa bài viết:</strong>
-                  Con đã tự đọc lại, bổ sung dấu câu và rèn chữ ngày càng nắn nót.
+                  <strong className="text-emerald-900 block">Học cách tự soát lỗi:</strong>
+                  Con biết đọc lại câu chữ, chú ý ngắt nghỉ và dùng từ ngữ biểu cảm.
                 </div>
               </div>
             </div>
           </div>
 
-          {/* Section: Bố mẹ cùng con trò chuyện */}
-          <div className="bg-gradient-to-b from-white to-amber-50/60 rounded-3xl border-2 border-amber-300 p-5 shadow-sm space-y-3">
-            <h4 className="font-extrabold text-sm text-amber-950 font-display flex items-center gap-2">
-              <MessageCircle className="w-4 h-4 text-amber-600" />
-              <span>Bố mẹ cùng con trò chuyện</span>
+          {/* Section: Gợi ý trò chuyện cùng con */}
+          <div className="bg-white rounded-3xl border-2 border-rose-200 p-5 shadow-sm space-y-3">
+            <h4 className="font-extrabold text-sm text-rose-950 font-display flex items-center gap-2">
+              <MessageCircle className="w-4 h-4 text-rose-600" />
+              <span>Gợi ý để bố mẹ trò chuyện cùng con:</span>
             </h4>
-            <p className="text-xs text-stone-600 font-medium">
-              Sau giờ học, bố mẹ có thể hỏi con những câu hỏi nhẹ nhàng để khơi gợi thêm cảm xúc:
-            </p>
-
-            <div className="space-y-2">
-              {conversationPrompts.map((prompt, i) => (
-                <div
-                  key={i}
-                  className="p-3 rounded-2xl bg-white border border-amber-200 text-xs text-stone-800 font-semibold shadow-2xs flex items-center gap-2.5"
-                >
-                  <span className="w-5 h-5 rounded-full bg-amber-100 text-amber-800 flex items-center justify-center text-[10px] font-bold flex-shrink-0">
-                    {i + 1}
-                  </span>
-                  <span>"{prompt}"</span>
-                </div>
+            <ul className="space-y-2 text-xs text-stone-700">
+              {conversationPrompts.map((prompt, index) => (
+                <li key={index} className="flex items-start gap-2 p-2 rounded-xl bg-stone-50 border border-stone-100">
+                  <span className="text-rose-500 font-bold">•</span>
+                  <span>{prompt}</span>
+                </li>
               ))}
-            </div>
+            </ul>
           </div>
         </div>
       </div>
