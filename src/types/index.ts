@@ -1,11 +1,23 @@
 export interface LinkedCaregiver {
+  id?: string;
   relation: string; // 'Bố' | 'Mẹ' | 'Ông' | 'Bà' | 'Người giám hộ'
-  name?: string;
+  name: string;
   phone?: string;
-  code: string; // PH001 - PH035
+  email?: string;
+  code: string; // PH001 hoặc mã định danh phụ huynh
   pin?: string;
   status: 'active' | 'locked';
   linkedAt?: string;
+}
+
+export interface FamilyInviteCode {
+  code: string; // vd: KN-HS001-7281
+  studentId: string;
+  createdAt: string;
+  expiresAt: string;
+  status: 'active' | 'used' | 'revoked' | 'expired';
+  createdBy?: string;
+  redeemedBy?: string;
 }
 
 export interface Student {
@@ -14,7 +26,7 @@ export interface Student {
   demoName: string; // Tên mẫu hiển thị khi cần bảo vệ riêng tư
   avatar: string; // Biểu tượng con vật / hoa đáng yêu
   pin: string; // Mã số 4 số (vd: 2016)
-  parentCode: string; // Mã gia đình
+  parentCode: string; // Mã gia đình chính
   treeLevel: number; // 1: Mầm cây, 2: Cây non, 3: Cây ra nụ, 4: Cây nở hoa, 5: Vườn rực rỡ
   flowersEarned: number;
   starsEarned: number;
@@ -25,7 +37,8 @@ export interface Student {
   accountStatus?: 'active' | 'locked' | 'deleted'; // Tình trạng tài khoản: đang hoạt động, tạm khóa, hoặc đã xóa
   lastLogin?: string; // Lần đăng nhập gần nhất
   temporaryPassword?: string; // Mật khẩu mới cấp một lần
-  linkedCaregivers?: LinkedCaregiver[]; // Danh sách tài khoản gia đình liên kết
+  linkedCaregivers?: LinkedCaregiver[]; // Danh sách tài khoản gia đình liên kết (Bố, Mẹ, Người giám hộ)
+  inviteCodes?: FamilyInviteCode[]; // Danh sách mã mời kết nối gia đình tạm thời
 }
 
 export type GardenType = 
@@ -103,7 +116,11 @@ export interface AuthUser {
   role: 'student' | 'teacher' | 'family';
   student?: Student;
   teacherName?: string;
+  teacherSalutation?: 'thầy' | 'cô' | 'thầy/cô';
+  parentName?: string;
+  parentRelation?: string;
   parentCode?: string;
+  caregiver?: LinkedCaregiver;
   token?: string;
 }
 
@@ -279,4 +296,42 @@ export interface TextbookOcrResult {
   exercises: TextbookExercise[];
   overall_quality_note?: string;
 }
+
+// ------------------- BẢN ĐỒ Ý TƯỞNG & PHÂN TÍCH ĐỀ CÁ NHÂN HÓA -------------------
+
+export interface PromptChoice {
+  id: string;
+  label: string;
+  description: string;
+  suggestedGenre: EssayGenre;
+  icon?: string;
+}
+
+export interface MindMapBranch {
+  id: string;
+  title: string;
+  icon: string;
+  color: string;
+  points: string[];
+}
+
+export interface PromptAnalysisData {
+  originalPrompt: string;
+  grade: number;
+  writingType?: EssayGenre;
+  hasChoices?: boolean;
+  choices?: PromptChoice[];
+  selectedChoiceId?: string;
+  selectedChoiceLabel?: string;
+  coreSubject: string;
+  promptEvidence?: string[];
+  suggestedLength: string;
+  hoaNhoUnderstand?: string;
+  specificRequirements?: string[];
+  socraticQuestions: string[];
+  branches: MindMapBranch[];
+  outline: DetailedOutlineGroup;
+  vocabularySuggestions: VocabularyImageryBank;
+}
+
 

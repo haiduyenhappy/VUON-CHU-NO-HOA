@@ -38,7 +38,8 @@ import {
   Trash2,
   RotateCcw,
   EyeOff,
-  AlertTriangle
+  AlertTriangle,
+  Plus
 } from 'lucide-react';
 
 interface TeacherPortalProps {
@@ -112,12 +113,18 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [editErrorMsg, setEditErrorMsg] = useState('');
   const [isSavingEdit, setIsSavingEdit] = useState(false);
 
-  // Modal 3: Family connection management
+  // Modal 3: Family connection management (Quản lý gia đình đa người chăm sóc & mã mời)
   const [familyLinkStudent, setFamilyLinkStudent] = useState<Student | null>(null);
   const [familyCaregiverName, setFamilyCaregiverName] = useState('');
   const [familyCaregiverPhone, setFamilyCaregiverPhone] = useState('');
   const [familyCaregiverRelation, setFamilyCaregiverRelation] = useState('Bố / Mẹ');
+  const [familyCaregiverEmail, setFamilyCaregiverEmail] = useState('');
   const [familyConnectionCode, setFamilyConnectionCode] = useState('');
+  const [isAddingCaregiver, setIsAddingCaregiver] = useState(false);
+  const [editingCaregiverId, setEditingCaregiverId] = useState<string | null>(null);
+  const [copiedInviteCode, setCopiedInviteCode] = useState<string | null>(null);
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false);
+  const [familyActionMsg, setFamilyActionMsg] = useState('');
 
   // Modal 4: Add new student
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
@@ -319,7 +326,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     playPop(settings.soundEnabled);
     setEditingStudent(st);
     setEditName(st.name);
-    setEditDemoName(st.demoName || `${st.name.split(' ').slice(-1)[0]} (Học sinh mẫu)`);
+    setEditDemoName(st.demoName || st.name.split(' ').slice(-1)[0] || st.name);
     setEditUsername(st.username || st.id.toLowerCase());
     setEditClassName(st.className || `${TEACHER_CONFIG.className} – ${TEACHER_CONFIG.schoolShort}`);
     setEditAccountStatus(st.accountStatus === 'locked' ? 'locked' : 'active');
@@ -429,41 +436,211 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     }
   };
 
-  // Action: Open Family Link Modal
+  // Action: Open Family Management Modal
   const handleOpenFamilyLink = (st: Student) => {
     playPop(settings.soundEnabled);
     setFamilyLinkStudent(st);
-    const caregiver = st.linkedCaregivers?.[0];
-    setFamilyCaregiverName(caregiver?.name || `Gia đình em ${st.name.split(' ').slice(-1)[0]}`);
-    setFamilyCaregiverPhone(caregiver?.phone || '');
-    setFamilyCaregiverRelation(caregiver?.relation || 'Bố / Mẹ');
     setFamilyConnectionCode(st.parentCode || `PH${st.id.replace(/[^0-9]/g, '')}`);
+    setIsAddingCaregiver(false);
+    setEditingCaregiverId(null);
+    setFamilyCaregiverName('');
+    setFamilyCaregiverPhone('');
+    setFamilyCaregiverRelation('Bố / Mẹ');
+    setFamilyCaregiverEmail('');
+    setFamilyActionMsg('');
+    setCopiedInviteCode(null);
   };
 
-  // Action: Save Family Link
-  const handleSaveFamilyLink = async () => {
-    if (!familyLinkStudent) return;
+  // Action: Save Primary Family Connection Code
+  const handleSavePrimaryCode = async () => {
+    if (!familyLinkStudent || !familyConnectionCode.trim()) return;
     try {
       const res = await fetch('/api/teacher/students/family-link', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: familyLinkStudent.id,
-          parentCode: familyConnectionCode,
-          caregiverName: familyCaregiverName,
-          caregiverPhone: familyCaregiverPhone,
-          caregiverRelation: familyCaregiverRelation,
-          caregiverStatus: 'active'
+          parentCode: familyConnectionCode.trim().toUpperCase()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
+        setFamilyLinkStudent(data.student);
+        setFamilyActionMsg('✓ Đã cập nhật mã kết nối gia đình chính!');
+        setTimeout(() => setFamilyActionMsg(''), 3000);
+      }
+    } catch (e) {
+      alert('Không thể cập nhật mã kết nối gia đình.');
+    }
+  };
+
+  // Action: Add New Caregiver to Student
+  const handleAddNewCaregiver = async () => {
+    if (!familyLinkStudent || !familyCaregiverName.trim()) return;
+    try {
+      const res = await fetch('/api/teacher/students/caregivers/add', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: familyLinkStudent.id,
+          name: familyCaregiverName.trim(),
+          relation: familyCaregiverRelation,
+          phone: familyCaregiverPhone.trim(),
+          email: familyCaregiverEmail.trim(),
+          status: 'active'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
+        setFamilyLinkStudent(data.student);
+        setIsAddingCaregiver(false);
+        setFamilyCaregiverName('');
+        setFamilyCaregiverPhone('');
+        setFamilyCaregiverEmail('');
+        setFamilyActionMsg(`✓ Đã thêm ${familyCaregiverRelation} (${data.caregiver.name}) thành công!`);
+        setTimeout(() => setFamilyActionMsg(''), 3500);
+      }
+    } catch (e) {
+      alert('Không thể thêm người chăm sóc.');
+    }
+  };
+
+  // Action: Update Existing Caregiver
+  const handleUpdateCaregiver = async (cgId: string) => {
+    if (!familyLinkStudent || !familyCaregiverName.trim()) return;
+    try {
+      const res = await fetch('/api/teacher/students/caregivers/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: familyLinkStudent.id,
+          caregiverId: cgId,
+          name: familyCaregiverName.trim(),
+          relation: familyCaregiverRelation,
+          phone: familyCaregiverPhone.trim(),
+          email: familyCaregiverEmail.trim()
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
+        setFamilyLinkStudent(data.student);
+        setEditingCaregiverId(null);
+        setFamilyActionMsg('✓ Đã cập nhật thông tin phụ huynh thành công!');
+        setTimeout(() => setFamilyActionMsg(''), 3000);
+      }
+    } catch (e) {
+      alert('Không thể cập nhật thông tin phụ huynh.');
+    }
+  };
+
+  // Action: Toggle Caregiver Access (Active / Locked)
+  const handleToggleCaregiver = async (cgId: string, currentStatus: string) => {
+    if (!familyLinkStudent) return;
+    playPop(settings.soundEnabled);
+    const nextStatus = currentStatus === 'locked' ? 'active' : 'locked';
+    try {
+      const res = await fetch('/api/teacher/students/caregivers/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: familyLinkStudent.id,
+          caregiverId: cgId,
+          status: nextStatus
         })
       });
       const data = await res.json();
       if (data.success) {
         setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
-        setFamilyLinkStudent(null);
+        setFamilyLinkStudent(data.student);
       }
     } catch (e) {
-      alert('Không thể cập nhật liên kết gia đình.');
+      alert('Không thể thay đổi trạng thái phụ huynh.');
     }
+  };
+
+  // Action: Delete Caregiver
+  const handleDeleteCaregiver = async (cgId: string, cgName: string) => {
+    if (!familyLinkStudent) return;
+    if (!confirm(`Cô có chắc chắn muốn xóa liên kết của phụ huynh "${cgName}"?`)) return;
+    playPop(settings.soundEnabled);
+    try {
+      const res = await fetch('/api/teacher/students/caregivers/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentId: familyLinkStudent.id,
+          caregiverId: cgId
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
+        setFamilyLinkStudent(data.student);
+        setFamilyActionMsg('✓ Đã xóa người chăm sóc.');
+        setTimeout(() => setFamilyActionMsg(''), 3000);
+      }
+    } catch (e) {
+      alert('Không thể xóa người chăm sóc.');
+    }
+  };
+
+  // Action: Generate Safe Family Invite Code (7-day validity)
+  const handleGenerateInviteCode = async () => {
+    if (!familyLinkStudent) return;
+    setIsGeneratingInvite(true);
+    try {
+      const res = await fetch('/api/teacher/students/invite-codes/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: familyLinkStudent.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
+        setFamilyLinkStudent(data.student);
+        setFamilyActionMsg(`✓ Đã tạo mã mời mới: ${data.inviteCode.code}`);
+        handleCopyInviteMessage(data.inviteCode.code, data.invitationMessage);
+      }
+    } catch (e) {
+      alert('Không thể tạo mã mời vào lúc này.');
+    } finally {
+      setIsGeneratingInvite(false);
+    }
+  };
+
+  // Action: Revoke Invite Code
+  const handleRevokeInviteCode = async (code: string) => {
+    if (!familyLinkStudent) return;
+    playPop(settings.soundEnabled);
+    try {
+      const res = await fetch('/api/teacher/students/invite-codes/revoke', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ studentId: familyLinkStudent.id, code })
+      });
+      const data = await res.json();
+      if (data.success) {
+        setLocalStudents(prev => prev.map(s => s.id === familyLinkStudent.id ? data.student : s));
+        setFamilyLinkStudent(data.student);
+      }
+    } catch (e) {
+      alert('Không thể thu hồi mã mời.');
+    }
+  };
+
+  // Action: Copy Invite Text
+  const handleCopyInviteMessage = (code: string, customMsg?: string) => {
+    const text = customMsg || `Kính gửi Quý Phụ huynh em ${familyLinkStudent?.name},\nCô Nguyễn Thị Hải Duyên gửi mã mời kết nối ứng dụng "Vườn Chữ Nở Hoa" để theo dõi các bài viết và nhận xét của con: ${code} (Hạn dùng 7 ngày). Quý phụ huynh đăng nhập tại Góc Gia Đình nhé!`;
+    navigator.clipboard?.writeText(text);
+    setCopiedInviteCode(code);
+    setTimeout(() => setCopiedInviteCode(null), 3000);
   };
 
   // Action: Add New Student
@@ -1217,13 +1394,14 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                                     <span>Xóa</span>
                                   </button>
 
-                                  {/* Liên kết gia đình */}
+                                  {/* Quản lý gia đình */}
                                   <button
                                     onClick={() => handleOpenFamilyLink(st)}
-                                    className="px-2 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold text-xs"
-                                    title="Quản lý mã kết nối gia đình"
+                                    className="px-2.5 py-1 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-950 border border-purple-300 font-extrabold text-xs flex items-center gap-1 shadow-2xs transition-colors"
+                                    title="Quản lý kết nối phụ huynh (Bố, Mẹ, Người giám hộ) & mã mời"
                                   >
-                                    👨‍👩‍👧
+                                    <span>👨‍👩‍👧</span>
+                                    <span>Gia đình ({st.linkedCaregivers?.length || 1})</span>
                                   </button>
                                 </>
                               )}
@@ -1487,13 +1665,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
               {/* Tên gọi / Demo name */}
               <div>
                 <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Tên gọi hiển thị (Chế độ ẩn danh):
+                  Tên gọi thân mật của học sinh:
                 </label>
                 <input
                   type="text"
                   value={editDemoName}
                   onChange={e => setEditDemoName(e.target.value)}
-                  placeholder="Ví dụ: Tuệ An (Học sinh mẫu)"
+                  placeholder="Ví dụ: Tuệ An hoặc Bé An"
                   className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
                 />
               </div>
@@ -1676,10 +1854,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL 3: LIÊN KẾT GIA ĐÌNH ================= */}
+      {/* ================= MODAL 3: QUẢN LÝ GIA ĐÌNH ĐA PHỤ HUYNH & MÃ MỜI ================= */}
       {familyLinkStudent && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white rounded-3xl border-3 border-purple-400 max-w-md w-full p-6 shadow-2xl space-y-4 animate-fade-in relative">
+          <div className="bg-white rounded-3xl border-3 border-purple-400 max-w-2xl w-full p-5 sm:p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[92vh] overflow-y-auto">
             <button
               onClick={() => setFamilyLinkStudent(null)}
               className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
@@ -1687,83 +1865,460 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
               <X className="w-5 h-5" />
             </button>
 
-            <div>
-              <h3 className="text-lg font-black text-purple-950 font-display">
-                Quản Lý Liên Kết Gia Đình
-              </h3>
-              <p className="text-xs text-stone-500 font-medium">
-                Học sinh: {familyLinkStudent.name} ({familyLinkStudent.id})
-              </p>
+            {/* Header */}
+            <div className="flex items-center gap-3 border-b border-purple-100 pb-3">
+              <div className="w-12 h-12 rounded-2xl bg-purple-100 border border-purple-300 flex items-center justify-center text-2xl shadow-xs">
+                {familyLinkStudent.avatar || '🌸'}
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-purple-600 text-white">
+                    Quản Lý Gia Đình
+                  </span>
+                  <span className="text-xs text-stone-500 font-mono font-bold">
+                    {familyLinkStudent.id}
+                  </span>
+                </div>
+                <h3 className="text-lg sm:text-xl font-black text-purple-950 font-display">
+                  Hồ Sơ Gia Đình Em {familyLinkStudent.name}
+                </h3>
+              </div>
             </div>
 
-            <div className="space-y-3">
+            {/* Action Feedback Banner */}
+            {familyActionMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs text-emerald-900 font-bold flex items-center gap-2 animate-fade-in">
+                <CheckCircle className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>{familyActionMsg}</span>
+              </div>
+            )}
+
+            {/* Primary Family Code Configuration */}
+            <div className="p-3.5 rounded-2xl bg-purple-50/70 border border-purple-200 flex flex-wrap items-center justify-between gap-3">
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Mã kết nối phụ huynh (Đăng nhập Góc Gia Đình):
-                </label>
+                <span className="text-xs font-extrabold text-purple-900 block">
+                  Mã kết nối gia đình chính (Cố định):
+                </span>
+                <span className="text-[11px] text-stone-500">
+                  Dùng để phụ huynh đăng nhập nhanh tại Góc Gia Đình
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
                 <input
                   type="text"
                   value={familyConnectionCode}
-                  onChange={e => setFamilyConnectionCode(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 font-mono font-bold text-xs sm:text-sm uppercase text-purple-900 focus:border-purple-500 focus:outline-hidden"
+                  onChange={e => setFamilyConnectionCode(e.target.value.toUpperCase())}
+                  className="w-28 px-3 py-1.5 rounded-xl border border-purple-300 font-mono font-black text-xs text-center text-purple-900 uppercase bg-white focus:outline-hidden"
                 />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Người chăm sóc / Vai trò:
-                </label>
-                <select
-                  value={familyCaregiverRelation}
-                  onChange={e => setFamilyCaregiverRelation(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm font-semibold bg-white"
+                <button
+                  type="button"
+                  onClick={handleSavePrimaryCode}
+                  className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs"
                 >
-                  <option value="Bố / Mẹ">Bố / Mẹ</option>
-                  <option value="Bố">Bố</option>
-                  <option value="Mẹ">Mẹ</option>
-                  <option value="Ông / Bà">Ông / Bà</option>
-                  <option value="Người giám hộ">Người giám hộ</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Họ tên người chăm sóc:
-                </label>
-                <input
-                  type="text"
-                  value={familyCaregiverName}
-                  onChange={e => setFamilyCaregiverName(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-purple-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Số điện thoại phụ huynh:
-                </label>
-                <input
-                  type="text"
-                  value={familyCaregiverPhone}
-                  onChange={e => setFamilyCaregiverPhone(e.target.value)}
-                  placeholder="Ví dụ: 0912345678"
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-purple-500 focus:outline-hidden"
-                />
+                  Lưu mã
+                </button>
               </div>
             </div>
 
+            {/* SECTION A: DANH SÁCH PHỤ HUYNH / NGƯỜI CHĂM SÓC */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-extrabold text-sm text-stone-900 flex items-center gap-1.5">
+                    <span>👨‍👩‍👧</span>
+                    <span>Tài khoản người thân & phụ huynh ({familyLinkStudent.linkedCaregivers?.length || 0})</span>
+                  </h4>
+                  <p className="text-[11px] text-stone-500">
+                    Mỗi học sinh có thể liên kết nhiều phụ huynh (Bố, Mẹ, Ông, Bà, Người giám hộ)
+                  </p>
+                </div>
+                {!isAddingCaregiver && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsAddingCaregiver(true);
+                      setEditingCaregiverId(null);
+                      setFamilyCaregiverName('');
+                      setFamilyCaregiverPhone('');
+                      setFamilyCaregiverEmail('');
+                      setFamilyCaregiverRelation('Bố');
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center gap-1 transition-colors"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm người thân</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Add New Caregiver Form */}
+              {isAddingCaregiver && (
+                <div className="p-3.5 rounded-2xl bg-emerald-50/50 border-2 border-emerald-300 space-y-3 animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-emerald-200 pb-1.5">
+                    <span className="text-xs font-bold text-emerald-900">
+                      Thêm người thân / người chăm sóc mới
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCaregiver(false)}
+                      className="text-stone-400 hover:text-stone-700 text-xs"
+                    >
+                      ✕ Hủy
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                    <div>
+                      <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                        Mối quan hệ:
+                      </label>
+                      <select
+                        value={familyCaregiverRelation}
+                        onChange={e => setFamilyCaregiverRelation(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-stone-200 text-xs bg-white"
+                      >
+                        <option value="Bố">Bố</option>
+                        <option value="Mẹ">Mẹ</option>
+                        <option value="Bố / Mẹ">Bố / Mẹ</option>
+                        <option value="Ông">Ông</option>
+                        <option value="Bà">Bà</option>
+                        <option value="Người giám hộ">Người giám hộ</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                        Họ và tên: <span className="text-rose-500">*</span>
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: Nguyễn Văn Hải"
+                        value={familyCaregiverName}
+                        onChange={e => setFamilyCaregiverName(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-stone-200 text-xs bg-white"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                        Số điện thoại (để đăng nhập):
+                      </label>
+                      <input
+                        type="text"
+                        placeholder="Ví dụ: 0912345678"
+                        value={familyCaregiverPhone}
+                        onChange={e => setFamilyCaregiverPhone(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-stone-200 text-xs bg-white font-mono"
+                      />
+                    </div>
+                    <div>
+                      <label className="text-[11px] font-bold text-stone-700 block mb-1">
+                        Email (tùy chọn):
+                      </label>
+                      <input
+                        type="email"
+                        placeholder="Ví dụ: phuhuynh@gmail.com"
+                        value={familyCaregiverEmail}
+                        onChange={e => setFamilyCaregiverEmail(e.target.value)}
+                        className="w-full p-2 rounded-xl border border-stone-200 text-xs bg-white"
+                      />
+                    </div>
+                  </div>
+                  <div className="flex justify-end gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsAddingCaregiver(false)}
+                      className="px-3 py-1.5 rounded-xl bg-stone-100 text-stone-600 text-xs font-bold"
+                    >
+                      Hủy
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleAddNewCaregiver}
+                      className="px-4 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold shadow-xs"
+                    >
+                      Lưu người chăm sóc
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Caregivers List */}
+              <div className="space-y-2">
+                {(!familyLinkStudent.linkedCaregivers || familyLinkStudent.linkedCaregivers.length === 0) ? (
+                  <div className="p-4 rounded-2xl bg-stone-50 border border-stone-200 text-center text-xs text-stone-400">
+                    Chưa có phụ huynh nào được liên kết riêng.
+                  </div>
+                ) : (
+                  familyLinkStudent.linkedCaregivers.map((cg, idx) => {
+                    const isLocked = cg.status === 'locked';
+                    const isEditingThis = editingCaregiverId === cg.id;
+
+                    if (isEditingThis) {
+                      return (
+                        <div key={cg.id || idx} className="p-3.5 rounded-2xl bg-amber-50 border-2 border-amber-300 space-y-2.5 animate-fade-in">
+                          <span className="text-xs font-bold text-amber-900 block">
+                            Chỉnh sửa thông tin: {cg.name}
+                          </span>
+                          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                            <div>
+                              <label className="text-[10px] font-bold text-stone-600 block">Quan hệ:</label>
+                              <select
+                                value={familyCaregiverRelation}
+                                onChange={e => setFamilyCaregiverRelation(e.target.value)}
+                                className="w-full p-1.5 rounded-lg border text-xs bg-white"
+                              >
+                                <option value="Bố">Bố</option>
+                                <option value="Mẹ">Mẹ</option>
+                                <option value="Bố / Mẹ">Bố / Mẹ</option>
+                                <option value="Ông">Ông</option>
+                                <option value="Bà">Bà</option>
+                                <option value="Người giám hộ">Người giám hộ</option>
+                              </select>
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-stone-600 block">Họ tên:</label>
+                              <input
+                                type="text"
+                                value={familyCaregiverName}
+                                onChange={e => setFamilyCaregiverName(e.target.value)}
+                                className="w-full p-1.5 rounded-lg border text-xs bg-white font-semibold"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-stone-600 block">SĐT:</label>
+                              <input
+                                type="text"
+                                value={familyCaregiverPhone}
+                                onChange={e => setFamilyCaregiverPhone(e.target.value)}
+                                className="w-full p-1.5 rounded-lg border text-xs bg-white font-mono"
+                              />
+                            </div>
+                            <div>
+                              <label className="text-[10px] font-bold text-stone-600 block">Email:</label>
+                              <input
+                                type="email"
+                                value={familyCaregiverEmail}
+                                onChange={e => setFamilyCaregiverEmail(e.target.value)}
+                                className="w-full p-1.5 rounded-lg border text-xs bg-white"
+                              />
+                            </div>
+                          </div>
+                          <div className="flex justify-end gap-2 pt-1">
+                            <button
+                              type="button"
+                              onClick={() => setEditingCaregiverId(null)}
+                              className="px-3 py-1 rounded-lg bg-stone-100 text-stone-600 text-xs font-bold"
+                            >
+                              Hủy
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleUpdateCaregiver(cg.id || '')}
+                              className="px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold"
+                            >
+                              Lưu thay đổi
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    }
+
+                    return (
+                      <div
+                        key={cg.id || idx}
+                        className={`p-3 rounded-2xl border transition-all flex flex-wrap items-center justify-between gap-3 ${
+                          isLocked 
+                            ? 'bg-stone-50 border-stone-200 opacity-75' 
+                            : 'bg-white border-purple-100 hover:border-purple-300 shadow-2xs'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5">
+                          <span className="w-8 h-8 rounded-xl bg-purple-50 text-purple-700 border border-purple-200 flex items-center justify-center font-bold text-xs">
+                            {cg.relation.charAt(0)}
+                          </span>
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-xs sm:text-sm text-stone-900">
+                                {cg.name}
+                              </span>
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-purple-100 text-purple-900 border border-purple-200">
+                                {cg.relation}
+                              </span>
+                              {isLocked ? (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-rose-100 text-rose-800">
+                                  Tạm dừng
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                                  Đang hoạt động
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-stone-500 flex items-center gap-3 mt-0.5">
+                              {cg.phone && <span>📞 SĐT: <strong className="text-stone-700 font-mono">{cg.phone}</strong></span>}
+                              {cg.email && <span>✉️ {cg.email}</span>}
+                              {cg.linkedAt && <span>🗓️ {cg.linkedAt}</span>}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Actions per caregiver */}
+                        <div className="flex items-center gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingCaregiverId(cg.id || String(idx));
+                              setFamilyCaregiverName(cg.name);
+                              setFamilyCaregiverRelation(cg.relation);
+                              setFamilyCaregiverPhone(cg.phone || '');
+                              setFamilyCaregiverEmail(cg.email || '');
+                            }}
+                            className="px-2.5 py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 text-xs font-bold"
+                            title="Chỉnh sửa thông tin"
+                          >
+                            <Edit3 className="w-3 h-3 inline mr-1" />
+                            Sửa
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleToggleCaregiver(cg.id || '', cg.status)}
+                            className={`px-2.5 py-1 rounded-xl text-xs font-bold border ${
+                              isLocked
+                                ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+                                : 'bg-rose-50 text-rose-800 border-rose-300'
+                            }`}
+                            title={isLocked ? 'Cho phép phụ huynh đăng nhập lại' : 'Tạm dừng quyền đăng nhập'}
+                          >
+                            {isLocked ? 'Mở khóa' : 'Khóa'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCaregiver(cg.id || '', cg.name)}
+                            className="p-1.5 rounded-xl text-stone-400 hover:text-rose-600 hover:bg-rose-50"
+                            title="Xóa liên kết"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </div>
+
+            {/* SECTION B: MÃ MỜI KẾT NỐI GIA ĐÌNH AN TOÀN (INVITE CODES) */}
+            <div className="pt-2 border-t border-purple-100 space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h4 className="font-extrabold text-sm text-stone-900 flex items-center gap-1.5">
+                    <span>🎟️</span>
+                    <span>Mã mời kết nối gia đình an toàn (Hạn dùng 7 ngày)</span>
+                  </h4>
+                  <p className="text-[11px] text-stone-500">
+                    Cô có thể tạo mã mời ngẫu nhiên gửi phụ huynh qua Zalo/tin nhắn mà không sợ lộ mật khẩu cố định
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleGenerateInviteCode}
+                  disabled={isGeneratingInvite}
+                  className="px-3.5 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-yellow-300" />
+                  <span>{isGeneratingInvite ? 'Đang tạo...' : 'Tạo mã mời mới'}</span>
+                </button>
+              </div>
+
+              {/* List of active invite codes */}
+              {familyLinkStudent.inviteCodes && familyLinkStudent.inviteCodes.length > 0 ? (
+                <div className="space-y-2">
+                  {familyLinkStudent.inviteCodes.map((inv, idx) => {
+                    const isExpired = new Date(inv.expiresAt) <= new Date();
+                    const isRevoked = inv.status === 'revoked';
+                    const isActive = inv.status === 'active' && !isExpired;
+
+                    return (
+                      <div
+                        key={inv.code || idx}
+                        className={`p-3 rounded-2xl border flex flex-wrap items-center justify-between gap-2 text-xs ${
+                          isActive
+                            ? 'bg-gradient-to-r from-purple-50 to-pink-50 border-purple-300'
+                            : 'bg-stone-50 border-stone-200 opacity-60'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className="font-mono font-black text-sm text-purple-950 bg-white px-2.5 py-1 rounded-xl border border-purple-200">
+                            {inv.code}
+                          </span>
+                          <div>
+                            <span className={`inline-block px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              isActive
+                                ? 'bg-emerald-100 text-emerald-900'
+                                : isRevoked
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-stone-200 text-stone-700'
+                            }`}>
+                              {isActive ? '🟢 Còn hiệu lực' : isRevoked ? 'Đã thu hồi' : 'Hết hạn'}
+                            </span>
+                            <span className="text-[11px] text-stone-500 block mt-0.5">
+                              Hết hạn: {new Date(inv.expiresAt).toLocaleDateString('vi-VN')}
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-2">
+                          {isActive && (
+                            <>
+                              <button
+                                type="button"
+                                onClick={() => handleCopyInviteMessage(inv.code)}
+                                className="px-3 py-1.5 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-2xs flex items-center gap-1"
+                              >
+                                {copiedInviteCode === inv.code ? (
+                                  <>
+                                    <Check className="w-3.5 h-3.5" />
+                                    <span>Đã chép!</span>
+                                  </>
+                                ) : (
+                                  <>
+                                    <Share2 className="w-3.5 h-3.5" />
+                                    <span>Chép tin nhắn Zalo</span>
+                                  </>
+                                )}
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => handleRevokeInviteCode(inv.code)}
+                                className="px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-rose-50 text-stone-600 hover:text-rose-700 text-xs font-bold"
+                                title="Thu hồi mã mời này ngay"
+                              >
+                                Thu hồi
+                              </button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              ) : (
+                <div className="p-3 bg-purple-50/50 rounded-2xl border border-dashed border-purple-200 text-center text-xs text-stone-500">
+                  Chưa có mã mời tạm thời nào. Bấm nút <strong>"Tạo mã mời mới"</strong> ở trên để tạo mã an toàn gửi cho phụ huynh.
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
               <button
+                type="button"
                 onClick={() => setFamilyLinkStudent(null)}
-                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
+                className="px-5 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
               >
-                Hủy
-              </button>
-              <button
-                onClick={handleSaveFamilyLink}
-                className="px-5 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-xs"
-              >
-                Lưu liên kết
+                Đóng lại
               </button>
             </div>
           </div>

@@ -11,7 +11,10 @@ import {
   RefreshOutlineResult,
   ChatMessage,
   TextbookExercise,
-  TextbookOcrResult 
+  TextbookOcrResult,
+  PromptChoice,
+  MindMapBranch,
+  PromptAnalysisData 
 } from '../types';
 import { HoaNhoMascot } from './HoaNhoMascot';
 import { AiStatusBar } from './AiStatusBar';
@@ -42,7 +45,9 @@ import {
   Crop,
   AlertTriangle,
   MoveLeft,
-  MoveRight
+  MoveRight,
+  Target,
+  Share2
 } from 'lucide-react';
 
 interface IdeaMapPageProps {
@@ -67,10 +72,13 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   onProceedToWrite,
   onBackToGarden,
   initialPrompt = '',
-  initialGenre = 'ke_su_viec'
+  initialGenre = 'khac'
 }) => {
   // 1. Prompt input & image OCR
-  const [promptText, setPromptText] = useState(initialPrompt || 'Kể lại một hoạt động ngoài trời em đã tham gia cùng người thân hoặc bạn bè.');
+  const [promptText, setPromptText] = useState(
+    initialPrompt || 'Viết một đoạn văn giới thiệu về bản thân em: họ tên, sở thích, ước mơ và một điểm đặc biệt của mình.'
+  );
+  const [lastAnalyzedPrompt, setLastAnalyzedPrompt] = useState<string>('');
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [uncertainWords, setUncertainWords] = useState<string[]>([]);
@@ -90,6 +98,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const [cropSettings, setCropSettings] = useState<{ top: number; bottom: number; left: number; right: number }>({ top: 5, bottom: 5, left: 5, right: 5 });
   const [confirmedExerciseId, setConfirmedExerciseId] = useState<string | null>(null);
 
+  // Core subject & Internal auto-detected Genre
+  const [coreSubject, setCoreSubject] = useState<string>('');
+  const [genre, setGenre] = useState<EssayGenre>(initialGenre || 'khac');
+
   // Keep prompt in sync if initialPrompt changes
   useEffect(() => {
     if (initialPrompt) {
@@ -97,44 +109,27 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   }, [initialPrompt]);
 
-  useEffect(() => {
-    if (initialGenre) {
-      setGenre(initialGenre);
-    }
-  }, [initialGenre]);
+  // Grade selection (Lớp 1 đến Lớp 12, mặc định Lớp 3)
+  const [grade, setGrade] = useState<number>(3);
+  const [specialWishes, setSpecialWishes] = useState<string>('Có từ láy, có hình ảnh so sánh, kể thật từ trải nghiệm của em');
 
-  // 2. Grade and Genre selection
-  const [grade, setGrade] = useState<number>(3); // Mặc định Lớp 3
-  const [genre, setGenre] = useState<EssayGenre>(initialGenre || 'ke_su_viec');
-  const [specialWishes, setSpecialWishes] = useState<string>('Có hình ảnh so sánh, kể thật từ trải nghiệm của em');
-
-  // 3. AI Understanding state ("Cùng Hoa Nhỏ hiểu đề nhé!")
+  // AI Understanding state ("HOA NHỎ CÙNG CON HIỂU ĐỀ")
   const [isUnderstandingLoading, setIsUnderstandingLoading] = useState(false);
   const [understanding, setUnderstanding] = useState<PromptUnderstanding | null>(null);
 
-  // 4. Outline state - 3 Parts with bullet points
+  // Visual Mind Map Branches (5 Branches - Generated dynamically from prompt)
+  const [mindMapBranches, setMindMapBranches] = useState<MindMapBranch[]>([]);
+  const [editingBranchId, setEditingBranchId] = useState<string | null>(null);
+  const [newBranchPointText, setNewBranchPointText] = useState<{ branchId: string; text: string } | null>(null);
+
+  // Outline state - 3 Parts with bullet points (Generated dynamically from prompt)
   const [detailedOutline, setDetailedOutline] = useState<DetailedOutlineGroup>({
-    moDoan: [
-      'Giới thiệu hoạt động ngoài trời em đã tham gia là gì.',
-      'Thời gian và địa điểm diễn ra hoạt động đó (một buổi sáng đẹp trời, ở công viên...).'
-    ],
-    phatTrienDoan: [
-      'Khung cảnh thiên nhiên, thời tiết và không khí hôm đó thế nào.',
-      'Em và người thân/bạn bè đã chuẩn bị và bắt đầu hoạt động ra sao.',
-      'Kể lần lượt các việc đã làm theo thứ tự (chạy nhảy, thả diều, đá bóng...).',
-      'Chi tiết vui nhất hoặc kỷ niệm đáng nhớ nhất trong buổi hoạt động.'
-    ],
-    ketDoan: [
-      'Cảm xúc vui tươi, sảng khoái và gắn bó sau hoạt động.',
-      'Mong ước hoặc lời hứa cùng người thân/bạn bè tiếp tục tham gia lần sau.'
-    ]
+    moDoan: [],
+    phatTrienDoan: [],
+    ketDoan: []
   });
 
-  const [activeOutline, setActiveOutline] = useState<OutlineItem[]>([
-    { id: '1', section: 'Mở đoạn', content: 'Giới thiệu hoạt động ngoài trời em đã tham gia vào lúc nào và ở đâu.' },
-    { id: '2', section: 'Phát triển đoạn', content: 'Kể các việc em và người thân/bạn bè đã làm theo thứ tự và chi tiết đáng nhớ.' },
-    { id: '3', section: 'Kết đoạn', content: 'Cảm nghĩ vui sướng và kỷ niệm khó quên trong lòng em.' }
-  ]);
+  const [activeOutline, setActiveOutline] = useState<OutlineItem[]>([]);
   const [initialOutlineBackup, setInitialOutlineBackup] = useState<OutlineItem[]>([]);
   const [refreshComparison, setRefreshComparison] = useState<RefreshOutlineResult | null>(null);
   const [isRefreshingOutline, setIsRefreshingOutline] = useState(false);
@@ -142,27 +137,65 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   // Editing state for outline bullets
   const [newBulletText, setNewBulletText] = useState<{ section: 'moDoan' | 'phatTrienDoan' | 'ketDoan'; text: string } | null>(null);
 
-  // 5. Socratic Brainstorming / Personal experiences chat
+  // 7. Socratic Brainstorming / Personal experiences chat (Contextual)
   const [studentExperienceText, setStudentExperienceText] = useState('');
-  const [socraticQuestion, setSocraticQuestion] = useState('Em đã từng tham gia hoạt động đó vào một ngày nắng đẹp hay chiều mát thế nào?');
+  const [socraticQuestion, setSocraticQuestion] = useState(
+    'Trong ngôi nhà thân yêu, góc nhỏ nào (bàn học bên cửa sổ, góc đọc sách, gian bếp...) làm con thấy gắn bó và ấm áp nhất?'
+  );
   const [isSocraticLoading, setIsSocraticLoading] = useState(false);
 
-  // 6. "Góc sáng tạo ý tưởng" (Continuous creative conversation)
+  // 8. "Góc sáng tạo ý tưởng" (Continuous creative conversation)
   const [creativeChat, setCreativeChat] = useState<ChatMessage[]>([
     {
       id: 'c-1',
       sender: 'hoanho',
-      text: 'Con còn điều gì băn khoăn? Hãy chia sẻ với Hoa Nhỏ nhé! Mỗi ý tưởng của con đều rất đáng quý.',
+      text: 'Con còn điều gì băn khoăn về cách chọn góc nhỏ hay từ ngữ miêu tả? Hãy chia sẻ cùng Hoa Nhỏ nhé! Mỗi ý tưởng của con đều rất đáng quý.',
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [creativeInput, setCreativeInput] = useState('');
   const [isCreativeChatLoading, setIsCreativeChatLoading] = useState(false);
 
-  // 7. Contextual Vocabulary & Imagery Bank
-  const [vocabBank, setVocabBank] = useState<VocabularyImageryBank | null>(null);
+  // 9. Contextual Vocabulary & Imagery Bank
+  const [vocabBank, setVocabBank] = useState<VocabularyImageryBank | null>({
+    goodWords: [
+      { word: 'ấm cúng', meaningAndUsage: 'Gợi không gian gia đình thân thương, an yên và chan chứa tình yêu thương' },
+      { word: 'ngăn nắp', meaningAndUsage: 'Mọi đồ dùng sách vở được xếp đặt gọn gàng, trật tự, sạch đẹp' },
+      { word: 'xinh xắn', meaningAndUsage: 'Nhỏ nhắn, đáng yêu và ưa nhìn' },
+      { word: 'yên bình', meaningAndUsage: 'Tĩnh lặng, dễ chịu, không ồn ào vội vã' }
+    ],
+    imageries: [
+      { type: 'So sánh', example: 'Góc học tập như người bạn nhỏ thầm lặng luôn kiên nhẫn đợi em trở về', explanation: 'Gợi sự gắn bó thân thiết và gần gũi' },
+      { type: 'Nhân hóa', example: 'Khung cửa sổ mỉm cười đón những tia nắng vàng ấm áp rọi vào phòng', explanation: 'Làm không gian trở nên sống động, có tâm hồn' }
+    ],
+    sampleSentences: [
+      {
+        type: 'mo_bai',
+        label: 'Gợi ý mở đoạn tả góc nhỏ yêu thích',
+        sentence: 'Trong ngôi nhà thân yêu của em, nơi em gắn bó nhiều nhất chính là góc học tập nhỏ bên khung cửa sổ.',
+        whyItIsGood: 'Nêu trực tiếp góc nhỏ yêu thích một cách tự nhiên và ấm áp.'
+      },
+      {
+        type: 'mieu_ta',
+        label: 'Gợi ý chi tiết sinh động',
+        sentence: 'Mỗi buổi chiều, từng tia nắng vàng ấm áp lại rọi qua ô cửa kính, sưởi ấm hàng sách được xếp ngay ngắn.',
+        whyItIsGood: 'Kết hợp ánh sáng thiên nhiên với sự ngăn nắp, gợi cảm giác êm đềm.'
+      },
+      {
+        type: 'ket_bai',
+        label: 'Gợi ý câu kết lắng đọng',
+        sentence: 'Góc nhỏ ấy không chỉ giúp em học tập chăm chỉ mà còn là nơi lưu giữ những ước mơ thơ ấu của em.',
+        whyItIsGood: 'Nâng ý nghĩa của góc nhỏ lên thành nơi nuôi dưỡng ước mơ.'
+      }
+    ],
+    creativeIdeas: [
+      'Kể về mùi hương thoang thoảng của trang vở mới',
+      'Chi tiết một món đồ nhỏ tự tay em trang trí đặt trên bàn'
+    ]
+  });
   const [isLoadingVocab, setIsLoadingVocab] = useState(false);
   const [activeVocabTab, setActiveVocabTab] = useState<'words' | 'images' | 'sentences'>('words');
+
 
   // Genre labels mapping
   const genreOptions: { value: EssayGenre; label: string; icon: string }[] = [
@@ -409,76 +442,124 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
   // Generate / Update Idea Map ("Tạo bản đồ ý tưởng")
   const handleGenerateIdeaMap = async () => {
+    if (!promptText.trim()) return;
+
     playChime(settings.soundEnabled);
     setIsUnderstandingLoading(true);
     setIsLoadingVocab(true);
 
+    // XÓA SẠCH DỮ LIỆU CŨ CỦA ĐỀ TRƯỚC - KHÔNG ĐỂ DỮ LIỆU CŨ LƯU LẠI
+    setMindMapBranches([]);
+    setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
+    setActiveOutline([]);
+    setVocabBank(null);
+    setUnderstanding(null);
+
     try {
-      // 1. Understand prompt
-      const resUnderstand = await fetch('/api/ai/understand-prompt', {
+      // Gọi bộ phân tích đề sâu trực tiếp từ đề bài học sinh nhập
+      const resDeep = await fetch('/api/ai/analyze-prompt-deep', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: promptText,
+          prompt: promptText.trim(),
           grade,
-          genre,
           specialWishes
         })
       });
-      const understandData = await resUnderstand.json();
-      setUnderstanding(understandData);
 
-      // 2. Synthesize base outline
-      const resOutline = await fetch('/api/ai/synthesize-outline', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          taskTitle: promptText,
-          prompt: promptText,
-          grade,
-          genre,
-          specialWishes,
-          chatHistory: []
-        })
-      });
-      const outlineData = await resOutline.json();
-      if (outlineData.outline?.length) {
-        setActiveOutline(outlineData.outline);
-        setInitialOutlineBackup(outlineData.outline);
-      }
-      if (outlineData.detailedOutline) {
-        setDetailedOutline(outlineData.detailedOutline);
-      }
+      if (resDeep.ok) {
+        const deepData: PromptAnalysisData = await resDeep.json();
+        setLastAnalyzedPrompt(promptText.trim());
 
-      // Update Socratic question contextually
-      const pLow = promptText.toLowerCase();
-      if (pLow.includes('nhà') || pLow.includes('góc') || pLow.includes('phòng') || pLow.includes('bàn học')) {
-        setSocraticQuestion('Trong ngôi nhà thân yêu, góc nhỏ nào hoặc món đồ nào khiến con cảm thấy ấm áp và yêu quý nhất?');
-      } else if (pLow.includes('bạn') || pLow.includes('thầy') || pLow.includes('cô') || pLow.includes('mẹ') || pLow.includes('bà')) {
-        setSocraticQuestion('Kỷ niệm hoặc cử chỉ đáng yêu nào của người ấy làm con nhớ mãi không quên?');
+        if (deepData.coreSubject) {
+          setCoreSubject(deepData.coreSubject);
+        }
+        if (deepData.branches && deepData.branches.length > 0) {
+          setMindMapBranches(deepData.branches);
+        }
+        if (deepData.outline) {
+          setDetailedOutline(deepData.outline);
+          const newActive: OutlineItem[] = [
+            { id: '1', section: 'Mở đoạn', content: deepData.outline.moDoan[0] || 'Giới thiệu đối tượng theo đề bài' },
+            { id: '2', section: 'Phát triển đoạn', content: deepData.outline.phatTrienDoan.slice(0, 2).join(' ') || 'Miêu tả và chia sẻ các nội dung chi tiết' },
+            { id: '3', section: 'Kết đoạn', content: deepData.outline.ketDoan[0] || 'Bộc lộ cảm nghĩ và mong ước' }
+          ];
+          setActiveOutline(newActive);
+          setInitialOutlineBackup(newActive);
+        }
+        if (deepData.vocabularySuggestions) {
+          setVocabBank(deepData.vocabularySuggestions);
+        }
+        if (deepData.socraticQuestions && deepData.socraticQuestions.length > 0) {
+          setSocraticQuestion(deepData.socraticQuestions[0]);
+        }
+
+        // Cập nhật CÙNG HOA NHỎ HIỂU ĐỀ
+        setUnderstanding({
+          target: deepData.coreSubject || promptText,
+          genreEvaluation: deepData.hoaNhoUnderstand || `Đề bài muốn con bám sát chủ đề "${deepData.coreSubject || promptText}" để viết đoạn văn thật sinh động.`,
+          contentRequirements: deepData.specificRequirements || deepData.branches?.map(b => b.title) || [
+            'Nêu đối tượng hoặc sự việc trong đề',
+            'Kể và miêu tả các chi tiết cụ thể',
+            'Bộc lộ cảm xúc chân thật của con'
+          ],
+          suggestedSentenceCount: deepData.suggestedLength || (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'),
+          specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
+          advice: 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!'
+        });
       } else {
-        setSocraticQuestion(`Khi nghĩ về "${promptText.slice(0, 35)}...", hình ảnh hoặc kỷ niệm nào hiện lên đầu tiên trong lòng con?`);
+        // Fallback nhẹ nếu endpoint gặp sự cố
+        const resUnderstand = await fetch('/api/ai/understand-prompt', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ prompt: promptText, grade, specialWishes })
+        });
+        const understandData = await resUnderstand.json();
+        setUnderstanding(understandData);
       }
-
-      // 3. Fetch vocabulary & imagery bank
-      const resVocab = await fetch('/api/ai/vocabulary-imagery', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: promptText,
-          genre,
-          grade,
-          studentIdeas: specialWishes
-        })
-      });
-      const vocabData = await resVocab.json();
-      setVocabBank(vocabData);
     } catch (e) {
-      console.error(e);
+      console.error('Error generating idea map:', e);
     } finally {
       setIsUnderstandingLoading(false);
       setIsLoadingVocab(false);
     }
+  };
+
+  // Branch CRUD operations
+  const handleAddBranchPoint = (branchId: string, pointText: string) => {
+    if (!pointText.trim()) return;
+    setMindMapBranches(prev => prev.map(b => {
+      if (b.id === branchId) {
+        return { ...b, points: [...b.points, pointText.trim()] };
+      }
+      return b;
+    }));
+    setNewBranchPointText(null);
+    playPop(settings.soundEnabled);
+  };
+
+  const handleDeleteBranchPoint = (branchId: string, pointIndex: number) => {
+    setMindMapBranches(prev => prev.map(b => {
+      if (b.id === branchId) {
+        return { ...b, points: b.points.filter((_, idx) => idx !== pointIndex) };
+      }
+      return b;
+    }));
+    playPop(settings.soundEnabled);
+  };
+
+  const handleEditBranchPoint = (branchId: string, pointIndex: number, newText: string) => {
+    if (!newText.trim()) return;
+    setMindMapBranches(prev => prev.map(b => {
+      if (b.id === branchId) {
+        const nextPoints = [...b.points];
+        nextPoints[pointIndex] = newText.trim();
+        return { ...b, points: nextPoints };
+      }
+      return b;
+    }));
+    setEditingBranchId(null);
+    playPop(settings.soundEnabled);
   };
 
   // Socratic question response & outline refreshing
@@ -714,6 +795,23 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             placeholder="Nhập đề bài của con vào đây..."
             className="w-full p-3.5 rounded-2xl border-2 border-purple-100 focus:border-purple-300 focus:outline-hidden text-sm sm:text-base leading-relaxed bg-pink-50/20"
           />
+
+          {/* Cảnh báo khi đề bài thay đổi */}
+          {lastAnalyzedPrompt && promptText.trim() !== lastAnalyzedPrompt.trim() && (
+            <div className="p-3.5 bg-amber-50 border-2 border-amber-300 rounded-2xl flex flex-wrap items-center justify-between gap-3 animate-fade-in text-xs sm:text-sm">
+              <div className="flex items-center gap-2 text-amber-900 font-semibold">
+                <span className="text-xl">⚠️</span>
+                <span>Đề bài vừa được thay đổi! Bấm để cập nhật lại sơ đồ tư duy 5 nhánh và dàn ý bám sát đề mới.</span>
+              </div>
+              <button
+                onClick={() => handleGenerateIdeaMap()}
+                className="px-3.5 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-xs transition-colors flex items-center gap-1.5 text-xs cursor-pointer"
+              >
+                <Sparkles className="w-3.5 h-3.5" />
+                <span>Cập nhật ngay</span>
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Photo upload for prompt & textbook exercise parsing */}
@@ -1175,16 +1273,16 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         </div>
       </div>
 
-      {/* SECTION 2 & 3: CHỌN LỚP & DẠNG BÀI */}
+      {/* SECTION 2: CHỌN LỚP HỌC & TỰ ĐỘNG HIỂU ĐỀ */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
         {/* Grade selector (Lớp 1 đến Lớp 12, mặc định Lớp 3) */}
-        <div className="md:col-span-4 bg-white rounded-3xl border-2 border-purple-200 p-5 shadow-sm space-y-3">
+        <div className="md:col-span-5 bg-white rounded-3xl border-2 border-purple-200 p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between border-b border-purple-100 pb-2">
             <span className="font-extrabold text-xs uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
               <span>🎒</span>
               <span>2. Chọn lớp học của con</span>
             </span>
-            <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full">
+            <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
               Lớp {grade}
             </span>
           </div>
@@ -1201,7 +1299,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   playPop(settings.soundEnabled);
                   setGrade(g);
                 }}
-                className={`py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   grade === g
                     ? 'bg-purple-600 text-white shadow-xs scale-105'
                     : 'bg-stone-50 text-stone-700 hover:bg-purple-50 border border-stone-200'
@@ -1213,46 +1311,37 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           </div>
         </div>
 
-        {/* Genre selector (9 nhóm bài chi tiết) */}
-        <div className="md:col-span-8 bg-white rounded-3xl border-2 border-sky-200 p-5 shadow-sm space-y-3">
-          <div className="flex items-center justify-between border-b border-sky-100 pb-2">
-            <span className="font-extrabold text-xs uppercase tracking-wider text-sky-900 flex items-center gap-1.5">
-              <span>📚</span>
-              <span>3. Dạng bài con muốn viết</span>
-            </span>
-            <span className="text-xs font-bold text-sky-700 bg-sky-50 px-2.5 py-0.5 rounded-full">
-              Đúng cấu trúc lớp {grade}
-            </span>
+        {/* Helpful auto-genre indicator without forcing student selection */}
+        <div className="md:col-span-7 bg-gradient-to-br from-purple-50 via-pink-50 to-sky-50 rounded-3xl border-2 border-purple-200 p-5 shadow-sm flex flex-col justify-between space-y-3">
+          <div className="flex items-center gap-2 border-b border-purple-100 pb-2">
+            <span className="text-xl">🌸</span>
+            <h4 className="text-xs font-extrabold uppercase tracking-wider text-purple-900 font-display">
+              Hoa Nhỏ tự động nhận diện đề bài
+            </h4>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
-            {genreOptions.map(opt => (
-              <button
-                key={opt.value}
-                onClick={() => {
-                  playPop(settings.soundEnabled);
-                  setGenre(opt.value);
-                }}
-                className={`p-2.5 rounded-2xl border text-xs font-bold text-left transition-all flex items-center gap-2 ${
-                  genre === opt.value
-                    ? 'bg-sky-50 border-sky-400 text-sky-950 shadow-xs ring-2 ring-sky-200'
-                    : 'bg-white border-stone-200 hover:border-sky-200 hover:bg-sky-50/40 text-stone-700'
-                }`}
-              >
-                <span className="text-base">{opt.icon}</span>
-                <span className="line-clamp-2 leading-snug">{opt.label}</span>
-              </button>
-            ))}
+          <div className="space-y-2 text-xs sm:text-sm text-stone-700 font-medium leading-relaxed">
+            <p>
+              ✨ <strong>Con không cần tự chọn dạng bài!</strong> Trợ lý Hoa Nhỏ sẽ tự động đọc kỹ đề bài của con để nhận diện chính xác nhiệm vụ (tự giới thiệu, kể chuyện, tả đồ vật, tả cây cối hay bày tỏ tình cảm).
+            </p>
+            <p className="text-stone-600 text-xs">
+              🌱 Bấm <strong className="text-purple-800">Tạo bản đồ ý tưởng</strong> bên dưới, Hoa Nhỏ sẽ cùng con hiểu đề, đặt câu hỏi khơi mở và lập sơ đồ 5 nhánh bám sát 100% đề của con.
+            </p>
+          </div>
+
+          <div className="flex items-center gap-2 text-[11px] text-purple-800 font-bold bg-white/80 px-3 py-1.5 rounded-xl border border-purple-100">
+            <span>💡 Mẹo nhỏ:</span>
+            <span>Con có thể tải ảnh đề bài từ SGK hoặc gõ trực tiếp nội dung đề bài nhé!</span>
           </div>
         </div>
       </div>
 
-      {/* SECTION 4: YÊU CẦU THÊM CỦA HỌC SINH */}
+      {/* SECTION 3: YÊU CẦU THÊM CỦA HỌC SINH */}
       <div className="bg-white rounded-3xl border-2 border-pink-200 p-5 sm:p-6 shadow-sm space-y-3">
         <div className="flex items-center gap-2 border-b border-pink-100 pb-2">
           <span className="text-xl">🌟</span>
           <h3 className="text-base font-bold text-stone-900 font-display">
-            4. Con muốn bài viết của mình có điều gì đặc biệt?
+            3. Con muốn bài viết của mình có điều gì đặc biệt?
           </h3>
         </div>
 
@@ -1275,7 +1364,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                     setSpecialWishes(specialWishes ? `${specialWishes}, ${w}` : w);
                   }
                 }}
-                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all ${
+                className={`px-3 py-1.5 rounded-full text-xs font-bold transition-all cursor-pointer ${
                   isSelected
                     ? 'bg-pink-500 text-white shadow-xs'
                     : 'bg-pink-50 text-pink-900 hover:bg-pink-100 border border-pink-200'
@@ -1297,14 +1386,14 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
         <div className="pt-2 flex justify-center">
           <button
-            onClick={handleGenerateIdeaMap}
+            onClick={() => handleGenerateIdeaMap()}
             disabled={isUnderstandingLoading || isLoadingVocab}
             className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-purple-500 to-sky-500 hover:from-pink-600 hover:to-sky-600 text-white font-black text-sm sm:text-base shadow-md transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
             <Sparkles className={`w-5 h-5 ${isUnderstandingLoading || isLoadingVocab ? 'animate-spin text-yellow-300' : ''}`} />
             <span>
               {isUnderstandingLoading 
-                ? '🌸 Hoa Nhỏ đang khởi tạo dàn ý...' 
+                ? '🌸 Hoa Nhỏ đang khởi tạo sơ đồ...' 
                 : isLoadingVocab 
                 ? '🌼 Đang chọn lọc từ ngữ sinh động...' 
                 : 'Tạo bản đồ ý tưởng'}
@@ -1313,7 +1402,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         </div>
       </div>
 
-      {/* SECTION 5: "CÙNG HOA NHỎ HIỂU ĐỀ NHÉ!" */}
+      {/* SECTION 4: HOA NHỎ CÙNG CON HIỂU ĐỀ */}
       {understanding && (
         <div className="bg-gradient-to-br from-purple-50 via-pink-50 to-sky-50 rounded-3xl border-3 border-purple-300 p-5 sm:p-6 shadow-md space-y-4 animate-fade-in">
           <div className="flex items-center gap-3 border-b border-purple-200 pb-3">
@@ -1322,47 +1411,249 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             </div>
             <div>
               <span className="text-xs font-extrabold uppercase tracking-wider text-purple-800">
-                Hiểu đề sâu sắc
+                Hiểu đề sâu sắc • Không sợ lạc đề
               </span>
               <h3 className="text-xl font-black text-purple-950 font-display">
-                Cùng Hoa Nhỏ hiểu đề nhé!
+                HOA NHỎ CÙNG CON HIỂU ĐỀ
               </h3>
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm text-stone-700 font-medium">
-            <div className="p-3.5 bg-white/90 rounded-2xl border border-purple-200 shadow-2xs space-y-1">
-              <strong className="text-purple-900 block font-bold">1. Bài yêu cầu em viết về điều gì?</strong>
-              <p>{understanding.target}</p>
+            <div className="p-4 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5 md:col-span-2">
+              <strong className="text-purple-950 block font-bold text-sm sm:text-base flex items-center gap-1.5 font-display">
+                <span>💬</span>
+                <span>Lời khuyên của Hoa Nhỏ:</span>
+              </strong>
+              <p className="text-stone-800 leading-relaxed font-semibold italic bg-purple-50/60 p-3 rounded-xl border border-purple-100">
+                "{understanding.genreEvaluation}"
+              </p>
             </div>
 
-            <div className="p-3.5 bg-white/90 rounded-2xl border border-purple-200 shadow-2xs space-y-1">
-              <strong className="text-purple-900 block font-bold">2. Kiểu bài phù hợp:</strong>
-              <p>{understanding.genreEvaluation}</p>
-            </div>
-
-            <div className="p-3.5 bg-white/90 rounded-2xl border border-purple-200 shadow-2xs space-y-1">
-              <strong className="text-purple-900 block font-bold">3. Nội dung cần kể hoặc miêu tả:</strong>
-              <ul className="list-disc list-inside space-y-0.5 pl-1">
+            <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5">
+              <strong className="text-purple-900 block font-bold">1. Các yêu cầu cụ thể trong đề bài:</strong>
+              <ul className="space-y-1.5 pt-1">
                 {understanding.contentRequirements.map((r, i) => (
-                  <li key={i}>{r}</li>
+                  <li key={i} className="flex items-start gap-1.5">
+                    <span className="text-emerald-600 font-black">✓</span>
+                    <span className="text-stone-800 leading-snug">{r}</span>
+                  </li>
                 ))}
               </ul>
             </div>
 
-            <div className="p-3.5 bg-white/90 rounded-2xl border border-purple-200 shadow-2xs space-y-1">
-              <strong className="text-purple-900 block font-bold">4. Số câu & Lưu ý khi viết:</strong>
-              <p>• Dung lượng: <span className="font-bold text-sky-800">{understanding.suggestedSentenceCount}</span></p>
-              <p>• Lời dặn dò: {understanding.advice}</p>
+            <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-2">
+              <div>
+                <strong className="text-purple-900 block font-bold">2. Dung lượng & lưu ý:</strong>
+                <p className="text-stone-800 mt-0.5">• Dung lượng: <span className="font-extrabold text-sky-800">{understanding.suggestedSentenceCount}</span></p>
+                <p className="text-stone-600 text-xs mt-1">• {understanding.advice}</p>
+              </div>
+
+              {understanding.specialWishesNoted && understanding.specialWishesNoted.length > 0 && (
+                <div className="pt-2 border-t border-purple-100">
+                  <span className="text-[11px] font-bold text-pink-900 block">Yêu cầu bổ sung của con:</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {understanding.specialWishesNoted.map((w, idx) => (
+                      <span key={idx} className="px-2 py-0.5 bg-pink-50 text-pink-800 text-[11px] font-semibold rounded-md border border-pink-200">
+                        ⭐ {w}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* SECTION 6: DÀN Ý CHI TIẾT 3 PHẦN & KHƠI MỞ Ý TƯỞNG RIÊNG */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-        {/* Left (7 cols): Dàn ý chi tiết 3 phần theo gạch đầu dòng */}
-        <div className="lg:col-span-7 bg-white rounded-3xl border-2 border-purple-200 p-5 shadow-sm space-y-4">
+      {/* SƠ ĐỒ TƯ DUY 5 NHÁNH CÁ NHÂN HÓA (Bám sát đề tài của con) */}
+      {mindMapBranches && mindMapBranches.length > 0 && (
+        <div className="bg-white rounded-3xl border-3 border-purple-200 p-5 sm:p-6 shadow-sm space-y-4">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-purple-100 pb-3">
+          <div className="flex items-center gap-3">
+            <span className="text-2xl">🗺️</span>
+            <div>
+              <div className="flex items-center gap-2">
+                <h3 className="text-lg font-black text-purple-950 font-display">
+                  Sơ đồ tư duy 5 nhánh – Tỏa sáng ý tưởng
+                </h3>
+                <span className="px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-900 text-xs font-bold border border-pink-200">
+                  {coreSubject || 'Chủ đề của con'}
+                </span>
+              </div>
+              <p className="text-xs text-stone-600 font-medium mt-0.5">
+                Hoa Nhỏ gợi ý 5 nhánh ý tưởng bám sát đề bài. Con có thể sửa, thêm hoặc xóa từng ý theo suy nghĩ riêng của mình:
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => handleGenerateIdeaMap()}
+              disabled={isUnderstandingLoading}
+              className="px-3 py-1.5 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-800 border border-purple-200 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+              title="Khởi tạo lại sơ đồ tư duy"
+            >
+              <Sparkles className="w-3.5 h-3.5 text-purple-600" />
+              <span>Gợi ý lại</span>
+            </button>
+          </div>
+        </div>
+
+        {/* 5 Branches Grid */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
+          {mindMapBranches.map((branch) => {
+            const colorMap: Record<string, { bg: string; border: string; text: string; badge: string; accent: string }> = {
+              emerald: { bg: 'bg-emerald-50/50', border: 'border-emerald-200', text: 'text-emerald-950', badge: 'bg-emerald-100 text-emerald-800 border-emerald-200', accent: 'bg-emerald-600' },
+              purple: { bg: 'bg-purple-50/50', border: 'border-purple-200', text: 'text-purple-950', badge: 'bg-purple-100 text-purple-800 border-purple-200', accent: 'bg-purple-600' },
+              amber: { bg: 'bg-amber-50/50', border: 'border-amber-200', text: 'text-amber-950', badge: 'bg-amber-100 text-amber-800 border-amber-200', accent: 'bg-amber-600' },
+              sky: { bg: 'bg-sky-50/50', border: 'border-sky-200', text: 'text-sky-950', badge: 'bg-sky-100 text-sky-800 border-sky-200', accent: 'bg-sky-600' },
+              rose: { bg: 'bg-rose-50/50', border: 'border-rose-200', text: 'text-rose-950', badge: 'bg-rose-100 text-rose-800 border-rose-200', accent: 'bg-rose-600' }
+            };
+            const c = colorMap[branch.color] || colorMap.purple;
+
+            return (
+              <div
+                key={branch.id}
+                className={`p-3.5 rounded-2xl border-2 ${c.border} ${c.bg} flex flex-col justify-between space-y-3 transition-shadow hover:shadow-sm`}
+              >
+                <div className="space-y-2.5">
+                  {/* Branch Title & Icon */}
+                  <div className="flex items-center justify-between border-b border-black/5 pb-2">
+                    <span className={`text-xs font-black ${c.text} flex items-center gap-1.5 font-display`}>
+                      <span className="text-base">{branch.icon}</span>
+                      <span className="line-clamp-1">{branch.title}</span>
+                    </span>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${c.badge}`}>
+                      {branch.points.length} ý
+                    </span>
+                  </div>
+
+                  {/* Points list */}
+                  <div className="space-y-2">
+                    {branch.points.map((pt, pIdx) => {
+                      const editKey = `${branch.id}-${pIdx}`;
+                      const isEditing = editingBranchId === editKey;
+
+                      return (
+                        <div
+                          key={pIdx}
+                          className="bg-white rounded-xl p-2.5 border border-stone-200/80 shadow-2xs text-xs text-stone-800 relative group"
+                        >
+                          {isEditing ? (
+                            <div className="space-y-1.5">
+                              <input
+                                type="text"
+                                defaultValue={pt}
+                                id={`input-${editKey}`}
+                                className="w-full p-1.5 rounded-lg border border-purple-300 text-xs focus:outline-hidden"
+                                autoFocus
+                                onKeyDown={(e) => {
+                                  if (e.key === 'Enter') {
+                                    handleEditBranchPoint(branch.id, pIdx, (e.target as HTMLInputElement).value);
+                                  }
+                                }}
+                              />
+                              <div className="flex items-center justify-end gap-1">
+                                <button
+                                  onClick={() => setEditingBranchId(null)}
+                                  className="px-2 py-0.5 rounded-md text-[10px] text-stone-500 hover:bg-stone-100"
+                                >
+                                  Hủy
+                                </button>
+                                <button
+                                  onClick={() => {
+                                    const input = document.getElementById(`input-${editKey}`) as HTMLInputElement;
+                                    if (input) handleEditBranchPoint(branch.id, pIdx, input.value);
+                                  }}
+                                  className="px-2 py-0.5 rounded-md text-[10px] bg-purple-600 text-white font-bold"
+                                >
+                                  Lưu
+                                </button>
+                              </div>
+                            </div>
+                          ) : (
+                            <div className="flex items-start justify-between gap-1.5">
+                              <div className="flex items-start gap-1.5 flex-1 min-w-0">
+                                <span className="text-purple-600 font-bold shrink-0 mt-0.5">•</span>
+                                <span className="leading-snug font-medium text-stone-700 break-words">{pt}</span>
+                              </div>
+                              <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
+                                <button
+                                  onClick={() => setEditingBranchId(editKey)}
+                                  className="p-1 text-stone-400 hover:text-purple-700 rounded-md hover:bg-purple-50 transition-colors"
+                                  title="Chỉnh sửa ý này"
+                                >
+                                  <Edit3 className="w-3 h-3" />
+                                </button>
+                                <button
+                                  onClick={() => handleDeleteBranchPoint(branch.id, pIdx)}
+                                  className="p-1 text-stone-400 hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors"
+                                  title="Xóa ý này"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Add new point to branch */}
+                <div>
+                  {newBranchPointText?.branchId === branch.id ? (
+                    <div className="space-y-1.5 pt-1">
+                      <input
+                        type="text"
+                        value={newBranchPointText.text}
+                        onChange={(e) => setNewBranchPointText({ branchId: branch.id, text: e.target.value })}
+                        placeholder="Nhập ý tưởng mới của con..."
+                        className="w-full p-2 rounded-xl border border-purple-300 text-xs bg-white focus:outline-hidden"
+                        autoFocus
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') handleAddBranchPoint(branch.id, newBranchPointText.text);
+                        }}
+                      />
+                      <div className="flex items-center justify-end gap-1">
+                        <button
+                          onClick={() => setNewBranchPointText(null)}
+                          className="px-2.5 py-1 text-[11px] text-stone-500 rounded-lg hover:bg-stone-100"
+                        >
+                          Hủy
+                        </button>
+                        <button
+                          onClick={() => handleAddBranchPoint(branch.id, newBranchPointText.text)}
+                          className="px-3 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-[11px] font-bold"
+                        >
+                          Thêm ý
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setNewBranchPointText({ branchId: branch.id, text: '' })}
+                      className="w-full py-1.5 rounded-xl border border-dashed border-stone-300 hover:border-purple-400 hover:bg-white text-stone-600 hover:text-purple-700 text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Thêm ý tưởng</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+      )}
+
+      {/* SECTION 5: DÀN Ý CHI TIẾT 3 PHẦN & KHƠI MỞ Ý TƯỞNG RIÊNG */}
+      {(detailedOutline.moDoan.length > 0 || detailedOutline.phatTrienDoan.length > 0 || activeOutline.length > 0) && (
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
+          {/* Left (7 cols): Dàn ý chi tiết 3 phần theo gạch đầu dòng */}
+          <div className="lg:col-span-7 bg-white rounded-3xl border-2 border-purple-200 p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-purple-100 pb-2">
             <div className="flex items-center gap-2">
               <span className="text-xl">📋</span>
@@ -1751,8 +2042,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           </div>
         </div>
       </div>
+      )}
 
-      {/* SECTION 7: KHO TỪ NGỮ VÀ HÌNH ẢNH SÁNG TẠO (Từ hay – Hình ảnh – Câu mẫu ngữ cảnh hóa) */}
+      {/* SECTION 6: KHO TỪ NGỮ VÀ HÌNH ẢNH SÁNG TẠO (Từ hay – Hình ảnh – Câu mẫu ngữ cảnh hóa) */}
       {vocabBank && (
         <div className="bg-white rounded-3xl border-2 border-pink-200 p-5 sm:p-6 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-pink-100 pb-3">

@@ -56,15 +56,14 @@ export default function App() {
   });
   const [isProgressModalOpen, setIsProgressModalOpen] = useState(false);
 
-  // Shared state connecting Trang 1 (Bản đồ ý tưởng) & Trang 2 (Cô góp ý bài văn)
-  const [sharedPrompt, setSharedPrompt] = useState<string>('Kể lại một hoạt động ngoài trời em đã tham gia cùng người thân hoặc bạn bè.');
+  const [sharedPrompt, setSharedPrompt] = useState<string>('Viết một đoạn văn giới thiệu về bản thân em: họ tên, sở thích, ước mơ và một điểm đặc biệt của mình.');
   const [sharedGrade, setSharedGrade] = useState<number>(3);
-  const [sharedGenre, setSharedGenre] = useState<EssayGenre>('ke_su_viec');
-  const [sharedSpecialWishes, setSharedSpecialWishes] = useState<string>('Có hình ảnh so sánh, kể thật từ trải nghiệm của em');
+  const [sharedGenre, setSharedGenre] = useState<EssayGenre>('khac');
+  const [sharedSpecialWishes, setSharedSpecialWishes] = useState<string>('Có sử dụng từ láy, thể hiện cảm xúc chân thật');
   const [sharedOutline, setSharedOutline] = useState<OutlineItem[]>([
-    { id: '1', section: 'Mở đoạn', content: 'Giới thiệu hoạt động ngoài trời diễn ra vào lúc nào và ở đâu.' },
-    { id: '2', section: 'Thân đoạn', content: 'Kể lại các chi tiết nổi bật và diễn biến hoạt động cùng người thân.' },
-    { id: '3', section: 'Kết đoạn', content: 'Cảm xúc vui sướng và kỷ niệm khó quên trong lòng em.' }
+    { id: '1', section: 'Mở đoạn', content: 'Giới thiệu họ tên và một nét chung nhất về bản thân con.' },
+    { id: '2', section: 'Thân đoạn', content: 'Chia sẻ sở thích, ước mơ và một điểm đặc biệt khiến con tự hào là chính mình.' },
+    { id: '3', section: 'Kết đoạn', content: 'Nêu cảm nghĩ hoặc điều con mong muốn mọi người hiểu và nhớ về mình.' }
   ]);
   const [sharedEssayText, setSharedEssayText] = useState<string>('');
 

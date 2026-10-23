@@ -57,9 +57,9 @@ interface EssayFeedbackPageProps {
 export const EssayFeedbackPage: React.FC<EssayFeedbackPageProps> = ({
   student,
   settings,
-  initialPrompt = 'Kể lại một hoạt động ngoài trời em đã tham gia cùng người thân hoặc bạn bè.',
+  initialPrompt = 'Viết một đoạn văn giới thiệu về bản thân em: họ tên, sở thích, ước mơ và một điểm đặc biệt của mình.',
   initialGrade = 3,
-  initialGenre = 'ke_su_viec',
+  initialGenre = 'khac',
   initialSpecialWishes = '',
   initialOutline = [],
   initialEssayText = '',

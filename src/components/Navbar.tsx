@@ -1,5 +1,5 @@
 import React from 'react';
-import { Volume2, VolumeX, Eye, EyeOff, Sparkles, Home, BookOpen, Trees, Map, Edit3, Heart } from 'lucide-react';
+import { Volume2, VolumeX, Sparkles, Home, BookOpen, Trees, Map, Edit3, Heart } from 'lucide-react';
 import { AppSettings, Student, AuthUser } from '../types';
 import { TEACHER_CONFIG } from '../constants/teacherConfig';
 
@@ -156,41 +156,30 @@ export const Navbar: React.FC<NavbarProps> = ({
             <Sparkles className="w-4 h-4" />
           </button>
 
-          {/* Privacy demo toggle */}
-          <button
-            onClick={() => onUpdateSettings({ demoPrivacyMode: !settings.demoPrivacyMode })}
-            className={`flex items-center gap-1 px-2 py-1 rounded-full text-[11px] font-semibold border transition-colors ${
-              settings.demoPrivacyMode
-                ? 'bg-sky-100 text-sky-800 border-sky-300'
-                : 'bg-stone-100 text-stone-600 border-stone-200 hover:bg-stone-200'
-            }`}
-            title={settings.demoPrivacyMode ? 'Đang dùng tên học sinh mẫu để bảo vệ riêng tư' : 'Đang xem danh sách đầy đủ của lớp'}
-          >
-            {settings.demoPrivacyMode ? <EyeOff className="w-3 h-3 text-sky-700" /> : <Eye className="w-3 h-3 text-stone-500" />}
-            <span className="hidden lg:inline">
-              {settings.demoPrivacyMode ? 'Bản ẩn danh' : 'Bản đầy đủ'}
-            </span>
-          </button>
-
           {/* User session status badge and Logout */}
           {currentUser ? (
             <div className="flex items-center gap-1.5 ml-1">
-              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-900 border border-purple-200">
+              <div className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-purple-50 text-purple-900 border border-purple-200 max-w-[200px] sm:max-w-[340px]">
                 {currentUser.role === 'student' && (
-                  <span>
-                    {activeStudent?.avatar || '🌸'} Em: {settings.demoPrivacyMode ? activeStudent?.demoName : activeStudent?.name || 'Học sinh'}
+                  <span className="truncate">
+                    {activeStudent?.avatar || '🌸'} HS: {activeStudent?.name || 'Học sinh'}
                   </span>
                 )}
                 {currentUser.role === 'teacher' && (
-                  <span>👩‍🏫 {currentUser.teacherName || TEACHER_CONFIG.name}</span>
+                  <span className="truncate">
+                    👩‍🏫 GV: {currentUser.teacherName || TEACHER_CONFIG.name}
+                  </span>
                 )}
                 {currentUser.role === 'family' && (
-                  <span>🏡 PH: {settings.demoPrivacyMode ? activeStudent?.demoName : activeStudent?.name || 'Con'}</span>
+                  <span className="truncate" title={currentUser.parentName || currentUser.caregiver?.name ? `PH: ${currentUser.parentName || currentUser.caregiver?.name} (Phụ huynh của: ${activeStudent?.name || 'con'})` : `Phụ huynh của: ${activeStudent?.name || 'con'}`}>
+                    🏡 PH: {currentUser.parentName || currentUser.caregiver?.name || (activeStudent ? `Phụ huynh của: ${activeStudent.name}` : 'Gia đình')}
+                    {(currentUser.parentName || currentUser.caregiver?.name) && activeStudent?.name ? ` (Phụ huynh của: ${activeStudent.name})` : ''}
+                  </span>
                 )}
               </div>
               <button
                 onClick={onLogout}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 transition-colors"
+                className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 transition-colors whitespace-nowrap cursor-pointer"
                 title="Đăng xuất khỏi phiên làm việc"
               >
                 <span>Đăng xuất</span>

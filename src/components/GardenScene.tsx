@@ -138,7 +138,7 @@ export const GardenScene: React.FC<GardenSceneProps> = ({
             </div>
           </div>
 
-          {/* Gate 2: GÓC CÔ GIÁO */}
+          {/* Gate 2: GÓC GIÁO VIÊN */}
           <div
             onClick={handleTeacherGateClick}
             className="group relative bg-gradient-to-b from-white to-emerald-50/90 rounded-3xl p-6 sm:p-7 border-3 border-emerald-300 hover:border-emerald-400 shadow-lg hover:shadow-xl transition-all duration-300 cursor-pointer transform hover:-translate-y-1.5 flex flex-col justify-between"
@@ -153,15 +153,15 @@ export const GardenScene: React.FC<GardenSceneProps> = ({
                 👩‍🏫
               </div>
               <h2 className="text-2xl font-black text-emerald-950 mb-2 font-display">
-                GÓC CÔ GIÁO
+                GÓC GIÁO VIÊN
               </h2>
               <p className="text-sm text-stone-600 leading-relaxed font-medium">
-                Dành cho giáo viên: Theo dõi 35 học sinh, xem các bản nháp và dàn ý, gửi lời nhận xét ngọt ngào, chấm hoa thưởng và in phiếu tiến bộ.
+                Dành cho giáo viên: Quản lý học sinh, soạn và giao bài tập, xem bài làm, nhận xét, theo dõi tiến bộ và trao đổi với phụ huynh.
               </p>
             </div>
 
             <div className="mt-6 pt-4 border-t border-emerald-200/60 flex items-center justify-between">
-              <span className="text-sm font-extrabold text-emerald-800">Cô vào lớp học</span>
+              <span className="text-sm font-extrabold text-emerald-800">Vào lớp quản lý</span>
               <div className="w-9 h-9 rounded-full bg-emerald-400 group-hover:bg-emerald-500 text-emerald-950 flex items-center justify-center transition-colors">
                 <ArrowRight className="w-5 h-5" />
               </div>
@@ -211,7 +211,7 @@ export const GardenScene: React.FC<GardenSceneProps> = ({
 
           <div className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/80 text-amber-900 border border-amber-300 shadow-xs">
             <CheckCircle2 className="w-4 h-4 text-amber-600" />
-            <span>35 Học sinh Lớp 3 • 32 Nhiệm vụ viết Tiếng Việt 3</span>
+            <span>{students.length} Học sinh Lớp 3 • 32 Nhiệm vụ viết Tiếng Việt 3</span>
           </div>
         </div>
       </div>

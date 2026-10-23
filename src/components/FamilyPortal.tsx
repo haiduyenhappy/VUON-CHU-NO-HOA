@@ -78,15 +78,23 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
             🏡
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-rose-500 text-white">
                 Góc Gia Đình
               </span>
-              <span className="text-xs text-stone-500 font-bold">Mã kết nối: {student.parentCode}</span>
+              <span className="text-xs text-stone-600 font-bold">Mã kết nối: {student.parentCode}</span>
+              <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-300">
+                🛡️ Quyền xem an toàn (Chỉ xem)
+              </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-rose-950 font-display">
               Hành trình học viết của bé {studentDisplayName}
             </h2>
+            {student.linkedCaregivers && student.linkedCaregivers.length > 0 && (
+              <p className="text-xs text-stone-600 font-medium">
+                Gia đình: {student.linkedCaregivers.map(cg => `${cg.relation} (${cg.name})`).join(' • ')}
+              </p>
+            )}
           </div>
         </div>
 

@@ -5,8 +5,7 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_STUDENTS } from './src/data/studentsData.js';
-import { CURRICULUM_TASKS } from './src/data/curriculumData.js';
-import type { Student } from './src/types/index.js';
+import type { Student, LinkedCaregiver, FamilyInviteCode, PromptAnalysisData } from './src/types/index.js';
 
 dotenv.config();
 
@@ -185,23 +184,46 @@ function loadDatabase(): DatabaseStructure {
 
     // Normalize student accounts with full status and caregiver connections
     if (parsed.students && Array.isArray(parsed.students)) {
-      parsed.students = parsed.students.map((s: any, idx: number) => ({
-        ...s,
-        className: s.className || 'Lớp 3 – Trường TH Lê Đức Thọ',
-        username: s.username || s.id.toLowerCase(),
-        accountStatus: s.accountStatus || 'active',
-        lastLogin: s.lastLogin || (idx === 0 ? 'Hôm nay 08:15' : idx === 1 ? 'Hôm qua 15:30' : 'Chưa đăng nhập'),
-        linkedCaregivers: s.linkedCaregivers || [
-          {
-            relation: 'Bố / Mẹ',
-            name: `Phụ huynh em ${s.name.split(' ').slice(-1)[0]}`,
-            phone: '09' + String(10000000 + (idx + 1) * 2345).slice(0, 8),
-            code: s.parentCode || `PH${String(idx + 1).padStart(3, '0')}`,
-            status: 'active',
-            linkedAt: '2026-09-05'
-          }
-        ]
-      }));
+      parsed.students = parsed.students.map((s: any, idx: number) => {
+        const studentId = s.id || `HS${String(idx + 1).padStart(3, '0')}`;
+        const parentCode = s.parentCode || `PH${String(idx + 1).padStart(3, '0')}`;
+        
+        let caregivers = s.linkedCaregivers;
+        if (!caregivers || !Array.isArray(caregivers) || caregivers.length === 0) {
+          caregivers = [
+            {
+              id: `cg-${studentId}-1`,
+              relation: 'Bố / Mẹ',
+              name: `Phụ huynh em ${s.name ? s.name.split(' ').slice(-1)[0] : 'học sinh'}`,
+              phone: '09' + String(10000000 + (idx + 1) * 2345).slice(0, 8),
+              code: parentCode,
+              status: 'active',
+              linkedAt: '2026-09-05'
+            }
+          ];
+        } else {
+          caregivers = caregivers.map((cg: any, cgIdx: number) => ({
+            ...cg,
+            id: cg.id || `cg-${studentId}-${cgIdx + 1}`,
+            status: cg.status || 'active',
+            code: cg.code || parentCode,
+            relation: cg.relation || 'Bố / Mẹ',
+            name: cg.name || `Phụ huynh em ${s.name.split(' ').slice(-1)[0]}`
+          }));
+        }
+
+        const inviteCodes = Array.isArray(s.inviteCodes) ? s.inviteCodes : [];
+
+        return {
+          ...s,
+          className: s.className || 'Lớp 3 – Trường TH Lê Đức Thọ',
+          username: s.username || studentId.toLowerCase(),
+          accountStatus: s.accountStatus || 'active',
+          lastLogin: s.lastLogin || (idx === 0 ? 'Hôm nay 08:15' : idx === 1 ? 'Hôm qua 15:30' : 'Chưa đăng nhập'),
+          linkedCaregivers: caregivers,
+          inviteCodes
+        };
+      });
     }
 
     memoryDb = parsed;
@@ -269,26 +291,100 @@ app.post('/api/auth', (req, res) => {
 
   if (role === 'family') {
     const cleanCode = rawInput.toUpperCase().replace(/\s+/g, '');
-    const student = db.students.find(s => 
-      s.parentCode.toUpperCase() === cleanCode || 
-      s.id.toUpperCase() === cleanCode ||
-      (rawInput.length >= 2 && s.name.toLowerCase().includes(rawInput.toLowerCase())) ||
-      cleanCode === `PH${s.id.replace(/[^0-9]/g, '')}`
-    );
+    const cleanPhone = rawInput.replace(/[^0-9]/g, '');
 
-    if (student) {
-      if (student.accountStatus === 'deleted') {
+    // 1. Check if user is logging in using an active Invite Code (e.g. KN-HS001-XXXX)
+    let matchedStudent: any = null;
+    let matchedCaregiver: any = null;
+    let usedInviteCode: any = null;
+
+    for (const s of db.students) {
+      if (s.inviteCodes && Array.isArray(s.inviteCodes)) {
+        const foundInvite = s.inviteCodes.find((inv: any) => 
+          inv.code.toUpperCase() === cleanCode && 
+          inv.status === 'active' && 
+          new Date(inv.expiresAt) > new Date()
+        );
+        if (foundInvite) {
+          matchedStudent = s;
+          usedInviteCode = foundInvite;
+          matchedCaregiver = {
+            relation: 'Phụ huynh khách mời',
+            name: `Phụ huynh em ${s.name.split(' ').slice(-1)[0]}`,
+            code: foundInvite.code,
+            status: 'active'
+          };
+          break;
+        }
+      }
+    }
+
+    // 2. Check if user is logging in by phone number
+    if (!matchedStudent && cleanPhone.length >= 9) {
+      for (const s of db.students) {
+        if (s.linkedCaregivers && Array.isArray(s.linkedCaregivers)) {
+          const foundCg = s.linkedCaregivers.find((cg: any) => cg.phone && cg.phone.replace(/[^0-9]/g, '') === cleanPhone);
+          if (foundCg) {
+            matchedStudent = s;
+            matchedCaregiver = foundCg;
+            break;
+          }
+        }
+      }
+    }
+
+    // 3. Check by parentCode, student ID, student name, or specific caregiver code
+    if (!matchedStudent) {
+      matchedStudent = db.students.find(s => 
+        (s.parentCode && s.parentCode.toUpperCase() === cleanCode) || 
+        s.id.toUpperCase() === cleanCode ||
+        (rawInput.length >= 2 && s.name.toLowerCase().includes(rawInput.toLowerCase())) ||
+        cleanCode === `PH${s.id.replace(/[^0-9]/g, '')}` ||
+        (s.linkedCaregivers && s.linkedCaregivers.some((cg: any) => cg.code && cg.code.toUpperCase() === cleanCode))
+      );
+
+      if (matchedStudent && matchedStudent.linkedCaregivers) {
+        matchedCaregiver = matchedStudent.linkedCaregivers.find((cg: any) => cg.code && cg.code.toUpperCase() === cleanCode) || matchedStudent.linkedCaregivers[0];
+      }
+    }
+
+    if (matchedStudent) {
+      if (matchedStudent.accountStatus === 'deleted') {
         return res.status(403).json({ success: false, message: 'Tài khoản học sinh này đã bị xóa hoặc ngưng sử dụng. Quý phụ huynh vui lòng liên hệ Cô Nguyễn Thị Hải Duyên.' });
       }
-      if (student.accountStatus === 'locked') {
+      if (matchedStudent.accountStatus === 'locked') {
         return res.status(403).json({ success: false, message: 'Tài khoản học sinh này đang tạm khóa. Quý phụ huynh vui lòng liên hệ Cô Nguyễn Thị Hải Duyên.' });
       }
-      if (!rawPass || rawPass === student.pin || rawPass === '2016' || rawPass === '123456' || rawPass.toUpperCase() === student.parentCode) {
-        return res.json({ success: true, role: 'family', student });
+      if (matchedCaregiver && matchedCaregiver.status === 'locked') {
+        return res.status(403).json({ success: false, message: 'Tài khoản phụ huynh này đang tạm dừng liên kết. Quý phụ huynh vui lòng liên hệ Cô Nguyễn Thị Hải Duyên.' });
+      }
+
+      // Password check (accept pin, default 2016, 2026, 123456, or parentCode/inviteCode directly)
+      const validPasswords = [
+        matchedStudent.pin, 
+        '2016', 
+        '2026', 
+        '123456', 
+        matchedStudent.parentCode?.toUpperCase(),
+        cleanCode
+      ];
+
+      if (!rawPass || validPasswords.includes(rawPass.toUpperCase()) || usedInviteCode) {
+        return res.json({ 
+          success: true, 
+          role: 'family', 
+          student: matchedStudent,
+          caregiver: matchedCaregiver || {
+            relation: 'Bố / Mẹ',
+            name: `Phụ huynh em ${matchedStudent.name.split(' ').slice(-1)[0]}`,
+            code: matchedStudent.parentCode,
+            status: 'active'
+          }
+        });
       }
       return res.status(401).json({ success: false, message: 'Mật khẩu bảo mật gia đình chưa đúng. (Gợi ý: 2016)' });
     }
-    return res.status(401).json({ success: false, message: 'Không tìm thấy mã kết nối gia đình. (Ví dụ: PH001, PH002...)' });
+    return res.status(401).json({ success: false, message: 'Không tìm thấy mã kết nối gia đình hoặc số điện thoại. (Ví dụ: PH001, PH002 hoặc mã mời KN-HS001-XXXX...)' });
   }
 
   if (role === 'student') {
@@ -609,7 +705,7 @@ app.post('/api/teacher/students/add', (req, res) => {
   const newStudent: Student = {
     id,
     name: name.trim(),
-    demoName: `${name.trim().split(' ').pop()} (Học sinh mẫu)`,
+    demoName: name.trim().split(' ').pop() || name.trim(),
     avatar: avatar || '🌸',
     pin: '2016',
     parentCode,
@@ -638,7 +734,7 @@ app.post('/api/teacher/students/add', (req, res) => {
   res.json({ success: true, student: newStudent });
 });
 
-// Quản lý liên kết phụ huynh (Cập nhật người chăm sóc, mã kết nối, trạng thái)
+// 1. Quản lý liên kết phụ huynh (Cập nhật người chăm sóc, mã kết nối, trạng thái) - Tương thích ngược
 app.post('/api/teacher/students/family-link', (req, res) => {
   const { id, parentCode, caregiverName, caregiverPhone, caregiverRelation, caregiverStatus } = req.body;
   const db = loadDatabase();
@@ -659,6 +755,7 @@ app.post('/api/teacher/students/family-link', (req, res) => {
     caregivers[0].code = student.parentCode;
   } else {
     caregivers.push({
+      id: `cg-${student.id}-1`,
       relation: caregiverRelation || 'Bố / Mẹ',
       name: caregiverName || `Gia đình bé ${student.name.split(' ').pop()}`,
       phone: caregiverPhone || '',
@@ -669,6 +766,154 @@ app.post('/api/teacher/students/family-link', (req, res) => {
   }
 
   student.linkedCaregivers = caregivers;
+  saveDatabase(db);
+
+  res.json({ success: true, student });
+});
+
+// 2. Thêm phụ huynh / người giám hộ mới cho học sinh (Hỗ trợ nhiều phụ huynh: Bố, Mẹ, Người giám hộ)
+app.post('/api/teacher/students/caregivers/add', (req, res) => {
+  const { studentId, name, relation, phone, email, status } = req.body;
+  if (!studentId || !name || !name.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng cung cấp mã học sinh và họ tên phụ huynh.' });
+  }
+
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  const caregivers = student.linkedCaregivers || [];
+  const newCaregiver = {
+    id: `cg-${studentId}-${Date.now()}`,
+    relation: relation || 'Bố / Mẹ',
+    name: name.trim(),
+    phone: phone ? phone.trim() : '',
+    email: email ? email.trim() : '',
+    code: student.parentCode,
+    status: (status === 'locked' ? 'locked' : 'active') as 'active' | 'locked',
+    linkedAt: new Date().toISOString()
+  };
+
+  caregivers.push(newCaregiver);
+  student.linkedCaregivers = caregivers;
+  saveDatabase(db);
+
+  res.json({ success: true, student, caregiver: newCaregiver });
+});
+
+// 3. Cập nhật thông tin phụ huynh / người giám hộ
+app.post('/api/teacher/students/caregivers/update', (req, res) => {
+  const { studentId, caregiverId, name, relation, phone, email, status } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  const caregivers = student.linkedCaregivers || [];
+  const target = caregivers.find(c => c.id === caregiverId);
+  if (!target) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin phụ huynh này.' });
+  }
+
+  if (name && name.trim()) target.name = name.trim();
+  if (relation) target.relation = relation;
+  if (phone !== undefined) target.phone = phone.trim();
+  if (email !== undefined) target.email = email.trim();
+  if (status) target.status = status === 'locked' ? 'locked' : 'active';
+
+  saveDatabase(db);
+  res.json({ success: true, student, caregiver: target });
+});
+
+// 4. Khóa / Mở khóa quyền xem bài của từng phụ huynh
+app.post('/api/teacher/students/caregivers/toggle', (req, res) => {
+  const { studentId, caregiverId, status } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  const caregivers = student.linkedCaregivers || [];
+  const target = caregivers.find(c => c.id === caregiverId);
+  if (!target) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy phụ huynh.' });
+  }
+
+  target.status = status === 'locked' ? 'locked' : 'active';
+  saveDatabase(db);
+  res.json({ success: true, student, caregiver: target });
+});
+
+// 5. Xóa / Hủy liên kết phụ huynh
+app.post('/api/teacher/students/caregivers/delete', (req, res) => {
+  const { studentId, caregiverId } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  student.linkedCaregivers = (student.linkedCaregivers || []).filter(c => c.id !== caregiverId);
+  saveDatabase(db);
+  res.json({ success: true, student });
+});
+
+// 6. Tạo mã mời kết nối gia đình an toàn (Invite code có hạn 7 ngày)
+app.post('/api/teacher/students/invite-codes/generate', (req, res) => {
+  const { studentId } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  // Sinh mã dạng KN-HS001-A79B
+  const randomSuffix = Math.random().toString(36).substring(2, 6).toUpperCase();
+  const code = `KN-${studentId}-${randomSuffix}`;
+  const now = new Date();
+  const expiresAt = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000).toISOString();
+
+  const newInvite: FamilyInviteCode = {
+    code,
+    studentId,
+    createdAt: now.toISOString(),
+    expiresAt,
+    status: 'active',
+    createdBy: 'Cô Nguyễn Thị Hải Duyên'
+  };
+
+  const inviteCodes = student.inviteCodes || [];
+  inviteCodes.unshift(newInvite);
+  student.inviteCodes = inviteCodes;
+  saveDatabase(db);
+
+  res.json({
+    success: true,
+    student,
+    inviteCode: newInvite,
+    invitationMessage: `Kính gửi Quý Phụ huynh em ${student.name},\nCô Nguyễn Thị Hải Duyên gửi mã mời kết nối ứng dụng "Vườn Chữ Nở Hoa" để theo dõi các bài viết và nhận xét của con: ${code} (Hạn dùng 7 ngày). Quý phụ huynh đăng nhập tại Góc Gia Đình nhé!`
+  });
+});
+
+// 7. Thu hồi mã mời kết nối gia đình
+app.post('/api/teacher/students/invite-codes/revoke', (req, res) => {
+  const { studentId, code } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  const inviteCodes = student.inviteCodes || [];
+  const target = inviteCodes.find(i => i.code === code);
+  if (target) {
+    target.status = 'revoked';
+  }
+  student.inviteCodes = inviteCodes;
   saveDatabase(db);
 
   res.json({ success: true, student });
@@ -909,6 +1154,460 @@ app.post('/api/ai/ocr-prompt', async (req, res) => {
       uncertainWords: [],
       confidenceNote: 'Hoa Nhỏ tạm thời chưa đọc rõ ảnh, em hãy tự tay gõ lại đề bài vào ô nhé!'
     });
+  }
+});
+
+// =========================================================================
+// NÂNG CẤP BẢN ĐỒ Ý TƯỞNG CÁ NHÂN HÓA - PHÂN TÍCH ĐỀ & TÁCH LỰA CHỌN
+// =========================================================================
+
+app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
+  const { prompt = '', grade = 3, specialWishes = '' } = req.body;
+  const pLower = prompt.toLowerCase();
+
+  // Intelligent domain categorization for guaranteed grounded fallback
+  const isSelfIntro = pLower.includes('bản thân') || pLower.includes('chính mình') || (pLower.includes('giới thiệu') && (pLower.includes('em') || pLower.includes('mình'))) || (pLower.includes('họ tên') && pLower.includes('sở thích'));
+  const isTree = pLower.includes('cây') || pLower.includes('bóng mát') || pLower.includes('cây bàng') || pLower.includes('cây phượng') || pLower.includes('sân trường');
+  const isGrandparents = pLower.includes('ông') || pLower.includes('bà') || pLower.includes('ông bà') || (pLower.includes('kỷ niệm') && (pLower.includes('người thân') || pLower.includes('ông') || pLower.includes('bà')));
+  const isFriend = (pLower.includes('bạn') || pLower.includes('người bạn') || pLower.includes('bạn thân')) && !isSelfIntro;
+  const isHouse = pLower.includes('nhà') || pLower.includes('ngôi nhà') || pLower.includes('góc nhỏ') || pLower.includes('phòng') || pLower.includes('tổ ấm');
+
+  let defaultSubject = 'Bài viết của em';
+  let defaultUnderstand = `Đề bài muốn con bám sát chủ đề "${prompt.slice(0, 50)}..." để kể, tả và chia sẻ những cảm xúc chân thật nhất của mình.`;
+  let defaultRequirements: string[] = ['Nêu đối tượng hoặc sự việc', 'Miêu tả chi tiết đặc sắc', 'Bộc lộ cảm xúc chân thật'];
+  let defaultQuestions: string[] = [
+    `Khi nghĩ về đề bài "${prompt.slice(0, 35)}...", điều gì hiện lên đầu tiên trong lòng con?`,
+    'Chi tiết nào làm con cảm thấy gắn bó hoặc ấn tượng sâu sắc nhất?',
+    'Con có cảm xúc hoặc mong ước gì khi hoàn thành bài viết này?'
+  ];
+  let defaultBranches = [
+    { id: 'br-1', title: '📍 Mở đầu & Ấn tượng đầu tiên', icon: '📍', color: 'emerald', points: ['Giới thiệu đối tượng theo yêu cầu đề bài', 'Cảm nhận chung đầu tiên của con'] },
+    { id: 'br-2', title: '🌿 Chi tiết đặc sắc 1', icon: '🌿', color: 'purple', points: ['Nét nổi bật nhất con muốn kể hoặc miêu tả', 'Hình ảnh cụ thể, sinh động'] },
+    { id: 'br-3', title: '☀️ Chi tiết đặc sắc 2', icon: '☀️', color: 'amber', points: ['Âm thanh, màu sắc hoặc kỷ niệm gắn bó', 'Điều làm con thấy đáng nhớ'] },
+    { id: 'br-4', title: '📖 Hoạt động hoặc việc làm', icon: '📖', color: 'sky', points: ['Việc con thường làm hoặc trải nghiệm cùng đối tượng', 'Những khoảnh khắc vui tươi'] },
+    { id: 'br-5', title: '💖 Cảm xúc & Lời hứa', icon: '💖', color: 'rose', points: ['Tình cảm chân thành của con', 'Mong ước tốt đẹp mai sau'] }
+  ];
+  let defaultDetailedOutline = {
+    moDoan: ['Giới thiệu trực tiếp đối tượng hoặc sự việc mà đề bài yêu cầu.'],
+    phatTrienDoan: [
+      'Miêu tả hoặc kể lại các nét nổi bật theo trình tự hợp lý.',
+      'Đưa vào chi tiết chân thật từ trải nghiệm của chính con.',
+      'Sử dụng một hình ảnh giàu cảm xúc để câu văn thêm sinh động.'
+    ],
+    ketDoan: ['Bày tỏ cảm xúc chân thành và mong ước của con.']
+  };
+  let defaultVocab = {
+    goodWords: [
+      { word: 'thân thương', meaningAndUsage: 'Gần gũi và đầy ắp tình cảm' },
+      { word: 'rạng rỡ', meaningAndUsage: 'Tươi vui, bừng sáng' },
+      { word: 'gắn bó', meaningAndUsage: 'Tình cảm bền chặt, thân thiết' },
+      { word: 'ấm áp', meaningAndUsage: 'Gợi cảm giác yêu thương, che chở' }
+    ],
+    imageries: [
+      { type: 'So sánh', example: 'Gần gũi như một người bạn thân thiết', explanation: 'Gợi sự thân thương và gắn bó' },
+      { type: 'Nhân hóa', example: 'Biết mỉm cười đón nhận tình yêu thương của em', explanation: 'Làm câu văn sinh động và có hồn' }
+    ],
+    sampleSentences: [
+      { type: 'mo_bai', label: 'Gợi ý mở đoạn', sentence: `Trong lòng em luôn dành trọn tình cảm cho ${prompt.slice(0, 30)}...`, whyItIsGood: 'Nêu ngay cảm xúc chân thật, tự nhiên.' },
+      { type: 'mieu_ta', label: 'Gợi ý phát triển', sentence: 'Từng đường nét, kỷ niệm nơi đây in sâu trong tâm trí em như một bức tranh sinh động.', whyItIsGood: 'Gợi liên tưởng hình ảnh đẹp.' },
+      { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Em luôn trân trọng và lưu giữ những tình cảm quý giá này trong tim.', whyItIsGood: 'Khép lại lắng đọng, ấm áp.' }
+    ],
+    creativeIdeas: ['Gắn với trải nghiệm thật của riêng em', 'Chia sẻ cảm xúc tự nhiên, không gượng ép']
+  };
+
+  // 1. SPECIFIC DOMAIN: GIỚI THIỆU BẢN THÂN
+  if (isSelfIntro) {
+    defaultSubject = 'Giới thiệu về bản thân em';
+    defaultUnderstand = 'Đề bài muốn con giới thiệu về chính mình. Con hãy cho người đọc biết tên của con, điều con thích, ước mơ của con và một điểm đặc biệt khiến con là chính con.';
+    defaultRequirements = [
+      'Nhiệm vụ: Viết đoạn văn giới thiệu',
+      'Đối tượng: Bản thân học sinh',
+      'Nội dung 1: Họ tên và tên gọi thân mật',
+      'Nội dung 2: Sở thích khi rảnh rỗi',
+      'Nội dung 3: Ước mơ tương lai',
+      'Nội dung 4: Một điểm đặc biệt của bản thân'
+    ];
+    defaultQuestions = [
+      'Con tên là gì? Con muốn mọi người gọi mình bằng tên nào?',
+      'Con thích làm gì nhất khi có thời gian rảnh và vì sao con thích hoạt động ấy?',
+      'Sau này con ước mơ trở thành ai hoặc làm được điều gì?',
+      'Con có tài năng, thói quen hoặc đặc điểm nào khiến mình khác biệt và đáng yêu?',
+      'Con muốn gửi lời chào hoặc mong ước gì đến thầy cô, bạn bè khi đọc bài này?'
+    ];
+    defaultBranches = [
+      { id: 'br-1', title: '🙋 Em là ai?', icon: '🙋', color: 'emerald', points: ['Họ và tên của em, tên thân mật ở nhà', 'Em bao nhiêu tuổi và học lớp mấy', 'Ấn tượng đầu tiên về tính cách của em'] },
+      { id: 'br-2', title: '🎨 Sở thích của em', icon: '🎨', color: 'purple', points: ['Hoạt động em say mê làm khi rảnh (đọc sách, vẽ tranh, đá bóng)', 'Lý do em yêu thích hoạt động ấy', 'Cảm giác hào hứng mỗi khi được làm việc mình thích'] },
+      { id: 'br-3', title: '✨ Ước mơ của em', icon: '✨', color: 'amber', points: ['Nghề nghiệp hoặc mong ước mai sau của em', 'Vì sao em ấp ủ ước mơ tươi đẹp ấy', 'Việc em đang cố gắng rèn luyện mỗi ngày'] },
+      { id: 'br-4', title: '⭐ Điểm đặc biệt của em', icon: '⭐', color: 'sky', points: ['Một nét tính cách nổi bật (vui vẻ, hòa đồng, hay cười)', 'Một biệt tài nhỏ hoặc thói quen đáng yêu', 'Điều khiến em tự hào về bản thân'] },
+      { id: 'br-5', title: '💖 Điều em muốn chia sẻ thêm', icon: '💖', color: 'rose', points: ['Mong muốn có thêm nhiều bạn mới', 'Cùng nhau học tập chăm chỉ, tiến bộ', 'Nụ cười và lời chào thân thương'] }
+    ];
+    defaultDetailedOutline = {
+      moDoan: ['Giới thiệu họ tên và một nét chung nhất về bản thân con.'],
+      phatTrienDoan: [
+        'Nói về sở thích của con và giải thích vì sao con yêu thích điều đó.',
+        'Chia sẻ ước mơ tươi đẹp mà con đang ấp ủ cho tương lai.',
+        'Giới thiệu một điểm đặc biệt (tính cách, thói quen hoặc nụ cười) của bản thân.'
+      ],
+      ketDoan: ['Nêu cảm nghĩ hoặc điều con mong muốn mọi người hiểu và nhớ về mình.']
+    };
+    defaultVocab = {
+      goodWords: [
+        { word: 'vui vẻ', meaningAndUsage: 'Luôn tươi cười, mang niềm vui đến mọi người' },
+        { word: 'hòa đồng', meaningAndUsage: 'Dễ gần, thân thiện và chan hòa với bạn bè' },
+        { word: 'chăm chỉ', meaningAndUsage: 'Cần cù, siêng năng trong học tập và việc nhà' },
+        { word: 'tò mò', meaningAndUsage: 'Thích tìm hiểu, khám phá những điều mới lạ' },
+        { word: 'say mê', meaningAndUsage: 'Hết lòng yêu thích và tập trung vào việc mình làm' },
+        { word: 'ước mơ', meaningAndUsage: 'Khát khao tốt đẹp hướng tới tương lai' },
+        { word: 'cố gắng', meaningAndUsage: 'Nỗ lực không ngừng để tiến bộ hơn mỗi ngày' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Nụ cười rạng rỡ như ánh nắng ban mai sưởi ấm mọi người', explanation: 'Gợi nét tươi vui, đáng yêu của tuổi thơ' },
+        { type: 'Nhân hóa', example: 'Mỗi trang sách như người bạn thì thầm kể cho em bao điều kỳ diệu', explanation: 'Biến sở thích đọc sách thành hình ảnh sống động' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý mở đoạn giới thiệu bản thân', sentence: 'Xin chào thầy cô và các bạn, em tên là ... - một bạn nhỏ luôn tràn đầy năng lượng và nụ cười rạng rỡ.', whyItIsGood: 'Mở đầu tự nhiên, thân thiện và tạo thiện cảm ngay.' },
+        { type: 'mieu_ta', label: 'Gợi ý kể sở thích và ước mơ', sentence: 'Mỗi khi rảnh rỗi, em say mê lật mở từng trang sách khoa học và ấp ủ ước mơ sau này trở thành một bác sĩ giỏi chữa bệnh cho mọi người.', whyItIsGood: 'Kết hợp sở thích và ước mơ một cách mạch lạc, chân thật.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Em rất mong sẽ được làm quen và gắn bó thật nhiều kỷ niệm đẹp cùng các bạn dưới mái trường thân yêu này.', whyItIsGood: 'Bộc lộ mong ước gắn bó, ấm áp và chân thành.' }
+      ],
+      creativeIdeas: ['Kể về biệt danh đáng yêu mà người thân hay gọi con ở nhà', 'Kể về một điều con đã kiên trì làm và cảm thấy rất tự hào']
+    };
+  } else if (isTree) {
+    // 2. SPECIFIC DOMAIN: TẢ CÂY BÓNG MÁT
+    defaultSubject = 'Cây bóng mát ở sân trường';
+    defaultUnderstand = 'Đề bài muốn con miêu tả một cây bóng mát quen thuộc ở sân trường – người bạn thầm lặng che mát cho chúng con trong những giờ ra chơi rộn rã tiếng cười.';
+    defaultRequirements = [
+      'Nhiệm vụ: Viết đoạn văn miêu tả cây cối / cảnh vật',
+      'Đối tượng: Cây bóng mát ở sân trường (cây bàng, cây phượng...)',
+      'Nội dung 1: Tên cây và vị trí sừng sững trên sân trường',
+      'Nội dung 2: Gốc, thân xù xì và tán lá xum xuê che rợp',
+      'Nội dung 3: Bóng râm mát rượi và hoạt động giờ ra chơi dưới gốc cây',
+      'Nội dung 4: Tình cảm gắn bó và ý thức chăm sóc cây'
+    ];
+    defaultQuestions = [
+      'Đó là cây bóng mát gì (cây bàng, cây phượng, cây xà cừ...) và đứng ở góc nào của sân trường?',
+      'Thân cây, gốc rễ và tán lá có đặc điểm gì nổi bật khiến con nhớ nhất?',
+      'Bóng râm của cây che mát cho các bạn học sinh vui chơi trong giờ ra chơi như thế nào?',
+      'Kỷ niệm hoặc trò chơi nào dưới gốc cây làm con thấy vui nhất?',
+      'Con có cảm xúc gì và muốn làm gì để cây luôn xanh tươi, tỏa bóng mát?'
+    ];
+    defaultBranches = [
+      { id: 'br-1', title: '🌳 Cây gì & Đứng ở đâu?', icon: '🌳', color: 'emerald', points: ['Tên loài cây bóng mát thân thuộc', 'Vị trí sừng sững giữa sân trường', 'Ấn tượng ban đầu về dáng cây to lớn'] },
+      { id: 'br-2', title: '🪵 Gốc, thân & Cành lá', icon: '🪵', color: 'purple', points: ['Gốc cây to tròn, rễ nổi gồ ghề như con trăn', 'Thân cây khoác chiếc áo nâu xù xì bạc phếch', 'Cành lá vươn rộng như những cánh tay khổng lồ'] },
+      { id: 'br-3', title: '🍃 Tán lá & Bóng râm', icon: '🍃', color: 'amber', points: ['Tán lá xanh um tùm đan cài vào nhau', 'Tạo thành chiếc ô khổng lồ che mát cả một góc sân', 'Tia nắng tinh nghịch nhảy nhót qua kẽ lá'] },
+      { id: 'br-4', title: '🏃 Giờ ra chơi dưới gốc cây', icon: '🏃', color: 'sky', points: ['Các bạn tụ tập đọc sách, chơi nhảy dây, bắn bi', 'Gió mát rượi xua đi cái nóng nực', 'Tiếng cười nói rộn rã hòa cùng tiếng lá reo'] },
+      { id: 'br-5', title: '💖 Tình cảm & Chăm sóc cây', icon: '💖', color: 'rose', points: ['Coi cây như người bạn lớn che chở cho tuổi thơ', 'Không bẻ cành hái lá, cùng tưới nước cho cây', 'Cây chứng kiến từng ngày em lớn khôn'] }
+    ];
+    defaultDetailedOutline = {
+      moDoan: ['Giới thiệu cây bóng mát ở sân trường mà em yêu quý nhất.'],
+      phatTrienDoan: [
+        'Miêu tả thân cây to lớn, vỏ cây nâu xù xì và gốc rễ vững chãi.',
+        'Tả tán lá xum xuê xòe rộng như chiếc ô khổng lồ che mát.',
+        'Kể hoạt động rộn rã của học sinh dưới bóng râm mát rượi trong giờ ra chơi.'
+      ],
+      ketDoan: ['Khẳng định tình cảm gắn bó với cây và ý thức giữ gìn bảo vệ cây xanh.']
+    };
+    defaultVocab = {
+      goodWords: [
+        { word: 'sừng sững', meaningAndUsage: 'Đứng hiên ngang, to lớn và vững chãi' },
+        { word: 'xum xuê', meaningAndUsage: 'Cành lá tươi tốt, rậm rạp và tràn đầy sức sống' },
+        { word: 'râm mát', meaningAndUsage: 'Mát mẻ, che bóng dịu êm' },
+        { word: 'rì rào', meaningAndUsage: 'Âm thanh lá cây khẽ lay động trong gió thoảng' },
+        { word: 'xanh mướt', meaningAndUsage: 'Màu xanh non tơ, mịn màng và tươi tắn' },
+        { word: 'che chở', meaningAndUsage: 'Bảo vệ, đem lại cảm giác an tâm và dịu mát' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Tán cây xòe rộng như một chiếc ô xanh khổng lồ che mát cho chúng em', explanation: 'Gợi hình ảnh tán lá to lớn, che chở' },
+        { type: 'Nhân hóa', example: 'Cây đứng sừng sững, mỉm cười lắng nghe từng tiếng cười nói rộn rã của tuổi học trò', explanation: 'Làm cây xanh trở nên gần gũi như một người bạn lớn' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý mở đoạn tả cây', sentence: 'Sừng sững giữa sân trường thân yêu của em là cây bàng cổ thụ tỏa bóng xanh mát rượi.', whyItIsGood: 'Nêu ngay tên cây và dáng vẻ vững chãi.' },
+        { type: 'mieu_ta', label: 'Gợi ý miêu tả bóng mát', sentence: 'Vào mỗi giờ ra chơi, từng đợt gió nhẹ khẽ lướt qua làm tán lá reo rì rào, xua tan bao mệt mỏi cho chúng em.', whyItIsGood: 'Kết hợp âm thanh, bóng mát và cảm xúc học trò.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Cây không chỉ cho em bóng mát mà còn là nhân chứng lưu giữ bao kỷ niệm ngọt ngào của tuổi thơ.', whyItIsGood: 'Nâng tầm ý nghĩa của cây bóng mát.' }
+      ],
+      creativeIdeas: ['Nhặt một chiếc lá rụng ép vào trang vở làm kỷ niệm', 'Quan sát tia nắng chiếu qua kẽ lá rọi xuống mặt đất như những đồng xu bạc lấp lánh']
+    };
+  } else if (isGrandparents) {
+    // 3. SPECIFIC DOMAIN: KỶ NIỆM VỚI ÔNG BÀ
+    defaultSubject = 'Kỷ niệm đáng nhớ với ông bà';
+    defaultUnderstand = 'Đề bài muốn con kể lại một kỷ niệm ấm áp, đáng nhớ bên người ông hoặc người bà kính yêu của mình.';
+    defaultRequirements = [
+      'Nhiệm vụ: Viết đoạn văn kể lại kỷ niệm',
+      'Đối tượng: Ông bà kính yêu',
+      'Nội dung 1: Giới thiệu người ông/người bà và kỷ niệm',
+      'Nội dung 2: Thời gian, hoàn cảnh diễn ra sự việc',
+      'Nội dung 3: Lời nói, cử chỉ ân cần, ánh mắt hiền hậu của ông bà',
+      'Nội dung 4: Cảm xúc yêu thương và lòng biết ơn của con'
+    ];
+    defaultQuestions = [
+      'Kỷ niệm đáng nhớ đó diễn ra vào lúc nào và ở đâu cùng ông hay bà?',
+      'Điều gì đã xảy ra khiến con nhớ mãi không quên?',
+      'Ánh mắt, nụ cười hoặc cử chỉ chăm sóc nào của ông/bà làm con thấy ấm lòng nhất?',
+      'Con đã nói hoặc làm điều gì để thể hiện tình cảm với ông/bà?',
+      'Kỷ niệm ấy dạy con bài học gì về tình cảm gia đình?'
+    ];
+    defaultBranches = [
+      { id: 'br-1', title: '👵 Giới thiệu ông/bà & Kỷ niệm', icon: '👵', color: 'emerald', points: ['Người em yêu quý nhất là ông hay bà', 'Kỷ niệm khó quên diễn ra vào dịp nào', 'Cảm xúc bồi hồi mỗi khi nhớ lại'] },
+      { id: 'br-2', title: '🏡 Hoàn cảnh & Không gian', icon: '🏡', color: 'purple', points: ['Không gian yên bình bên hiên nhà hay góc vườn', 'Khoảnh khắc giản dị mà đầm ấm', 'Thời tiết và khung cảnh hôm ấy'] },
+      { id: 'br-3', title: '📖 Diễn biến câu chuyện', icon: '📖', color: 'amber', points: ['Ông/bà dạy em làm một việc ý nghĩa hoặc kể chuyện cổ tích', 'Lời căn dặn ân cần, giọng nói trầm ấm', 'Em chăm chú lắng nghe và làm theo'] },
+      { id: 'br-4', title: '💖 Cử chỉ & Nụ cười ân cần', icon: '💖', color: 'sky', points: ['Bàn tay nhăn nheo nhưng ấm áp xoa đầu em', 'Ánh mắt hiền từ bao dung che chở', 'Tình yêu thương vô bờ bến dành cho cháu'] },
+      { id: 'br-5', title: '🌟 Cảm xúc & Lời hứa của con', icon: '🌟', color: 'rose', points: ['Lòng biết ơn và kính yêu sâu sắc', 'Mong ông bà luôn mạnh khỏe, sống lâu', 'Lời hứa ngoan ngoãn, chăm ngoan'] }
+    ];
+    defaultDetailedOutline = {
+      moDoan: ['Giới thiệu người ông/bà kính yêu và kỷ niệm đẹp đẽ nhất trong lòng em.'],
+      phatTrienDoan: [
+        'Kể lại thời điểm và diễn biến câu chuyện đáng nhớ cùng ông/bà.',
+        'Miêu tả cử chỉ ân cần, bàn tay ấm áp và ánh mắt hiền hậu của người thân.',
+        'Bày tỏ cảm xúc xúc động khi được ở bên cạnh ông/bà.'
+      ],
+      ketDoan: ['Khẳng định tình yêu thương vô bờ và mong ước ông bà luôn khỏe mạnh.']
+    };
+    defaultVocab = {
+      goodWords: [
+        { word: 'hiền hậu', meaningAndUsage: 'Dịu dàng, nhân từ và bao dung' },
+        { word: 'ân cần', meaningAndUsage: 'Chăm sóc chu đáo, nhẹ nhàng và chu toàn' },
+        { word: 'ấm áp', meaningAndUsage: 'Chan chứa tình yêu thương che chở' },
+        { word: 'kính yêu', meaningAndUsage: 'Tôn kính và yêu mến tha thiết' },
+        { word: 'nhăn nheo', meaningAndUsage: 'Dấu ấn thời gian in hằn trên bàn tay vất vả' },
+        { word: 'khắc sâu', meaningAndUsage: 'In đậm trong tâm trí, không bao giờ phai mờ' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Bàn tay bà ấm áp như ngọn lửa sưởi ấm tâm hồn em', explanation: 'Gợi sự che chở yêu thương vô bờ' },
+        { type: 'Nhân hóa', example: 'Từng lời dặn dò của ông như hạt mầm gieo vào lòng em bao điều thiện lương', explanation: 'Làm lời khuyên của người lớn thêm sâu sắc' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý mở đoạn kể kỷ niệm', sentence: 'Trong ký ức êm đềm của tuổi thơ, kỷ niệm những buổi chiều ngồi nghe bà kể chuyện cổ tích luôn là điều em nâng niu nhất.', whyItIsGood: 'Gợi mở cảm xúc lắng đọng, thân thương.' },
+        { type: 'mieu_ta', label: 'Gợi ý tả cử chỉ ông bà', sentence: 'Bàn tay bà nhăn nheo khẽ xoa đầu em, giọng bà trầm ấm như làn gió mát lành ru êm giấc ngủ.', whyItIsGood: 'Kết hợp cử chỉ và giọng nói đầy yêu thương.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Em thầm hứa sẽ luôn chăm ngoan, học giỏi để nụ cười hiền hậu của ông bà mãi rạng rỡ trên môi.', whyItIsGood: 'Bộc lộ lòng biết ơn và lời hứa hành động.' }
+      ],
+      creativeIdeas: ['Miêu tả mùi hương thơm thoang thoảng của trầu cau hay mùi thảo mộc quen thuộc bên bà', 'Kể lại một lời khuyên nhỏ của ông giúp con vượt qua khó khăn']
+    };
+  } else if (isFriend) {
+    // 4. SPECIFIC DOMAIN: TÌNH CẢM BẠN THÂN
+    defaultSubject = 'Tình cảm của em đối với người bạn thân';
+    defaultUnderstand = 'Đề bài muốn con bày tỏ tình cảm chân thành, sự gắn bó và trân trọng đối với người bạn thân thiết cùng học, cùng chơi dưới mái trường.';
+    defaultRequirements = [
+      'Nhiệm vụ: Viết đoạn văn nêu tình cảm, cảm xúc',
+      'Đối tượng: Người bạn thân thiết',
+      'Nội dung 1: Giới thiệu tên bạn và thời gian quen biết',
+      'Nội dung 2: Những nét tính cách đáng quý của bạn',
+      'Nội dung 3: Kỷ niệm cùng nhau học tập hoặc giúp đỡ nhau',
+      'Nội dung 4: Lời hứa giữ gìn tình bạn đẹp đẽ'
+    ];
+    defaultQuestions = [
+      'Người bạn thân của con tên là gì và hai bạn đã gắn bó với nhau bao lâu?',
+      'Nét tính cách, nụ cười hoặc thói quen nào của bạn làm con quý mến nhất?',
+      'Một kỷ niệm đẹp đẽ hoặc một lần hai bạn cùng giúp đỡ nhau là gì?',
+      'Khi ở bên cạnh bạn, con cảm thấy vui vẻ và an tâm như thế nào?',
+      'Con muốn gửi lời chúc hoặc lời hứa gì đến tình bạn của hai đứa?'
+    ];
+    defaultBranches = [
+      { id: 'br-1', title: '👫 Giới thiệu người bạn thân', icon: '👫', color: 'emerald', points: ['Tên người bạn và ấn tượng đầu tiên khi gặp', 'Hai bạn ngồi cùng bàn hay cùng xóm', 'Tình bạn nảy nở từ khi nào'] },
+      { id: 'br-2', title: '😊 Nụ cười & Tính cách', icon: '😊', color: 'purple', points: ['Nụ cười tươi tắn và đôi mắt sáng ngời', 'Tính tình hiền lành, trung thực và tốt bụng', 'Luôn sẵn lòng chia sẻ với mọi người'] },
+      { id: 'br-3', title: '🤝 Cùng học, cùng chơi', icon: '🤝', color: 'amber', points: ['Cùng nhau trao đổi những bài toán khó', 'Những giờ ra chơi nô đùa rộn rã tiếng cười', 'Cùng nhau chia sẻ từng mẩu bánh, cuốn truyện'] },
+      { id: 'br-4', title: '💖 Kỷ niệm gắn bó khó quên', icon: '💖', color: 'sky', points: ['Một lần bạn giúp em khi em gặp khó khăn', 'Lời động viên chân thành làm em ấm lòng', 'Bài học quý giá về sự sẻ chia'] },
+      { id: 'br-5', title: '🌟 Tình bạn bền chặt & Lời hứa', icon: '🌟', color: 'rose', points: ['Trân trọng tình bạn trong sáng tuổi học trò', 'Mong hai đứa mãi thân thiết bên nhau', 'Cùng nhau cố gắng chăm ngoan, tiến bộ'] }
+    ];
+    defaultDetailedOutline = {
+      moDoan: ['Giới thiệu người bạn thân thiết nhất của em dưới mái trường.'],
+      phatTrienDoan: [
+        'Nêu những nét tính cách đáng mến và nụ cười ấm áp của bạn.',
+        'Kể lại kỷ niệm gắn bó khi cùng học bài hoặc giúp đỡ lẫn nhau.',
+        'Cảm xúc vui vẻ và sự tin tưởng khi có bạn đồng hành.'
+      ],
+      ketDoan: ['Khẳng định tình bạn bền chặt và mong muốn cùng nhau tiến bộ mãi mãi.']
+    };
+    defaultVocab = {
+      goodWords: [
+        { word: 'chân thành', meaningAndUsage: 'Thật lòng, không dối trá' },
+        { word: 'chan hòa', meaningAndUsage: 'Sống vui vẻ, hòa đồng và gần gũi' },
+        { word: 'gắn bó', meaningAndUsage: 'Thân thiết, luôn ở bên nhau' },
+        { word: 'tốt bụng', meaningAndUsage: 'Hay thương người và sẵn sàng giúp đỡ' },
+        { word: 'đồng hành', meaningAndUsage: 'Cùng bước đi, cùng chia sẻ buồn vui' },
+        { word: 'tin cậy', meaningAndUsage: 'Đáng tin tưởng, luôn giữ lời hứa' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Tình bạn của chúng em trong sáng như dòng suối đầu nguồn', explanation: 'Gợi sự thuần khiết, tươi đẹp của tuổi học trò' },
+        { type: 'Nhân hóa', example: 'Mỗi kỷ niệm cùng bạn như một nốt nhạc vui ca vang trong lòng em', explanation: 'Tạo cảm giác rộn ràng, hạnh phúc' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý mở đoạn tình bạn', sentence: 'Dưới mái trường thân yêu, người bạn thân thiết và gắn bó nhất với em chính là...', whyItIsGood: 'Giới thiệu bạn thẳng thắn, ấm áp.' },
+        { type: 'mieu_ta', label: 'Gợi ý kể tình cảm', sentence: 'Mỗi khi em gặp bài toán khó, bạn luôn kiên nhẫn giảng giải cho em với nụ cười dịu dàng và ánh mắt khích lệ.', whyItIsGood: 'Chi tiết cụ thể thể hiện tấm lòng bạn bè.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Em luôn thầm cảm ơn vì đã có một người bạn tuyệt vời cùng đồng hành trên con đường tuổi thơ.', whyItIsGood: 'Bộc lộ lòng biết ơn sâu sắc.' }
+      ],
+      creativeIdeas: ['Kể về một món quà nhỏ tự làm tặng nhau nhân ngày sinh nhật', 'Kể về lời hẹn cùng nhau thi đỗ điểm cao']
+    };
+  } else if (isHouse) {
+    // 5. SPECIFIC DOMAIN: NGÔI NHÀ ẤM CÚNG
+    defaultSubject = 'Ngôi nhà ấm cúng của gia đình em';
+    defaultUnderstand = 'Đề bài muốn con miêu tả tổ ấm thân yêu của gia đình mình – nơi chan chứa tình yêu thương và lưu giữ bao khoảnh khắc sum họp ấm cúng.';
+    defaultRequirements = [
+      'Nhiệm vụ: Viết đoạn văn miêu tả cảnh vật / tổ ấm',
+      'Đối tượng: Ngôi nhà thân yêu của gia đình',
+      'Nội dung 1: Vị trí và cái nhìn bao quát ngôi nhà',
+      'Nội dung 2: Các gian phòng, góc nhỏ ấm cúng bên trong',
+      'Nội dung 3: Không khí sum họp gia đình mỗi buổi tối',
+      'Nội dung 4: Tình cảm gắn bó và trách nhiệm giữ gìn nhà cửa'
+    ];
+    defaultQuestions = [
+      'Ngôi nhà của con nằm ở đâu và có màu sơn hoặc nét gì quen thuộc nhất?',
+      'Bước vào bên trong, góc nhỏ hoặc gian phòng nào làm con thấy ấm áp nhất?',
+      'Mỗi buổi tối, tiếng cười nói và không khí sum họp gia đình diễn ra ra sao?',
+      'Con thường làm việc gì để giúp bố mẹ giữ gìn ngôi nhà sạch đẹp?',
+      'Con có cảm xúc gì mỗi khi được trở về ngôi nhà sau một ngày học tập?'
+    ];
+    defaultBranches = [
+      { id: 'br-1', title: '🏡 Vị trí & Cảnh bao quát', icon: '🏡', color: 'emerald', points: ['Vị trí ngôi nhà nằm ở con phố hay ngõ nhỏ thân quen', 'Màu sơn tươi sáng, cánh cổng mở rộng chào đón', 'Cảm giác thân thương ngay khi bước đến gần'] },
+      { id: 'br-2', title: '🛋️ Các gian phòng ấm cúng', icon: '🛋️', color: 'purple', points: ['Phòng khách trang nhã, nơi gia đình trò chuyện', 'Góc học tập ngăn nắp bên khung cửa sổ tràn nắng', 'Gian bếp nhỏ thơm thoang thoảng mùi cơm mẹ nấu'] },
+      { id: 'br-3', title: '☀️ Ánh sáng & Không khí', icon: '☀️', color: 'amber', points: ['Ánh nắng sớm dịu dàng rọi qua rèm cửa', 'Không gian thoáng mát, sạch sẽ và tinh tươm', 'Bình yên, tĩnh lặng xua tan mọi ồn ã bên ngoài'] },
+      { id: 'br-4', title: '👨‍👩‍👧 Bữa cơm sum họp gia đình', icon: '👨‍👩‍👧', color: 'sky', points: ['Cả nhà quây quần bên mâm cơm ấm cúng mỗi tối', 'Tiếng cười giòn tan của các thành viên', 'Chia sẻ những chuyện vui buồn trong ngày'] },
+      { id: 'br-5', title: '💖 Tình cảm & Giữ gìn tổ ấm', icon: '💖', color: 'rose', points: ['Ngôi nhà là nơi bình yên và yêu thương nhất', 'Tự giác dọn dẹp phòng, quét nhà giúp bố mẹ', 'Dù đi đâu xa cũng luôn nhớ về tổ ấm'] }
+    ];
+    defaultDetailedOutline = {
+      moDoan: ['Giới thiệu ngôi nhà ấm cúng – tổ ấm thân thương của gia đình em.'],
+      phatTrienDoan: [
+        'Bao quát vẻ ngoài và các gian phòng ngăn nắp, tinh tươm bên trong.',
+        'Miêu tả góc nhỏ em yêu thích nhất và ánh sáng ấm áp chan hòa.',
+        'Kể không khí sum họp, đầm ấm tiếng cười của gia đình mỗi buổi tối.'
+      ],
+      ketDoan: ['Khẳng định tình yêu thương tha thiết với ngôi nhà và lời hứa luôn giữ gìn sạch đẹp.']
+    };
+    defaultVocab = {
+      goodWords: [
+        { word: 'ấm cúng', meaningAndUsage: 'Gợi không gian thân thương, an yên và chan chứa tình yêu thương' },
+        { word: 'ngăn nắp', meaningAndUsage: 'Mọi đồ dùng được xếp đặt gọn gàng, trật tự' },
+        { word: 'sum họp', meaningAndUsage: 'Các thành viên quây quần đoàn tụ bên nhau' },
+        { word: 'yên bình', meaningAndUsage: 'Tĩnh lặng, dễ chịu, không ồn ào vội vã' },
+        { word: 'tinh tươm', meaningAndUsage: 'Sạch sẽ, gọn gàng và chu đáo' },
+        { word: 'rộn rã', meaningAndUsage: 'Tiếng cười nói vui tươi vang vọng' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Ngôi nhà như bến đỗ bình yên che chở cho em sau mỗi ngày đến trường', explanation: 'Gợi cảm giác được bảo bọc, an toàn' },
+        { type: 'Nhân hóa', example: 'Mỗi gian phòng như biết mỉm cười đón từng bước chân em trở về', explanation: 'Tạo sự sống động, thân thuộc' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý mở đoạn tả ngôi nhà', sentence: 'Dù mai này có đi đâu xa, nơi em luôn hướng về với tất cả yêu thương chính là ngôi nhà ấm cúng của gia đình mình.', whyItIsGood: 'Khơi gợi tình cảm sâu sắc, tự nhiên.' },
+        { type: 'mieu_ta', label: 'Gợi ý tả không khí ấm áp', sentence: 'Mỗi buổi tối, khi ánh đèn vàng ấm áp bật lên, cả nhà quây quần bên mâm cơm thơm nức, rộn rã tiếng cười nói.', whyItIsGood: 'Kết hợp ánh sáng, âm thanh và tình cảm gia đình.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Em luôn tự giác lau dọn góc học tập và giữ gìn ngôi nhà sạch đẹp để tổ ấm mãi ngập tràn niềm vui.', whyItIsGood: 'Thể hiện trách nhiệm và tình yêu thương cụ thể.' }
+      ],
+      creativeIdeas: ['Miêu tả mùi hương ấm áp của bữa cơm chiều', 'Kể chi tiết một chậu hoa nhỏ do chính tay em chăm sóc đặt ngoài ban công']
+    };
+  }
+
+  const defaultAnalysisResult: PromptAnalysisData = {
+    originalPrompt: prompt,
+    grade: Number(grade) || 3,
+    coreSubject: defaultSubject,
+    hoaNhoUnderstand: defaultUnderstand,
+    specificRequirements: defaultRequirements,
+    suggestedLength: grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu',
+    socraticQuestions: defaultQuestions,
+    branches: defaultBranches,
+    outline: defaultDetailedOutline,
+    vocabularySuggestions: defaultVocab as any
+  };
+
+  if (!ai) {
+    return res.json(defaultAnalysisResult);
+  }
+
+  try {
+    const systemInstruction = `Bạn là HOA NHỎ - trợ lý học tập sư phạm Tiếng Việt tiểu học (Lớp ${grade}), bám sát Chương trình GDPT 2018 (bộ sách Kết nối tri thức với cuộc sống).
+
+QUY TẮC BẮT BUỘC TUYỆT ĐỐI (TRÁNH LẠC ĐỀ 100%):
+1. NGUỒN DỮ LIỆU DUY NHẤT LÀ ĐỀ BÀI CỦA HỌC SINH: "${prompt}".
+   - Bóc tách ĐÚNG nhiệm vụ, đối tượng và TỪNG nội dung cụ thể có trong đề.
+   - TUYỆT ĐỐI KHÔNG BỊA RA HOẶC CHUYỂN SANG ĐỀ TÀI KHÁC!
+   - Ví dụ:
+     + Nếu đề là giới thiệu bản thân (họ tên, sở thích, ước mơ, điểm đặc biệt) -> TOÀN BỘ câu hỏi, 5 nhánh, dàn ý, từ ngữ PHẢI về bản thân học sinh. TUYỆT ĐỐI KHÔNG tả nhà cửa, góc học tập hay hoạt động ngoài trời!
+     + Nếu đề là tả cây bóng mát -> TOÀN BỘ PHẢI về cây bóng mát ở sân trường.
+     + Nếu đề là tả ngôi nhà -> TOÀN BỘ PHẢI về ngôi nhà.
+     + Nếu đề là kỷ niệm với ông bà -> TOÀN BỘ PHẢI về ông bà và kỷ niệm.
+     + Nếu đề là nêu tình cảm bạn thân -> TOÀN BỘ PHẢI về người bạn.
+2. PHẦN "hoaNhoUnderstand": Viết một đoạn văn ngắn, ấm áp, trích xuất chính xác những yêu cầu của đề: "Đề bài muốn con...".
+3. PHẦN "specificRequirements": Mảng chuỗi liệt kê rõ: Nhiệm vụ, Đối tượng, và các Nội dung chi tiết trong đề.
+4. PHẦN "socraticQuestions": 4-5 câu hỏi Hoa Nhỏ khơi mở suy nghĩ, bám sát các nội dung trong đề để học sinh trả lời bằng trải nghiệm thật của mình.
+5. PHẦN "branches": Đúng 5 nhánh sơ đồ tư duy màu sắc (emerald, purple, amber, sky, rose) tương ứng với từng nội dung trong đề.
+6. PHẦN "outline": Dàn ý 3 phần (moDoan, phatTrienDoan, ketDoan) với các gợi ý cụ thể theo dung lượng ${grade <= 2 ? '3-4 câu' : grade === 3 ? '4-6 câu hoặc 7-9 câu' : '8-12 câu'}.
+7. PHẦN "vocabularySuggestions": 6-8 từ ngữ giàu hình ảnh (goodWords), 2 hình ảnh nghệ thuật tự nhiên (imageries), 3 câu mẫu (sampleSentences: mo_bai, mieu_ta, ket_bai) bám sát đúng chủ đề đề bài.`;
+
+    const userPrompt = `Đề bài học sinh nhập: "${prompt}"
+Lớp: ${grade}
+Yêu cầu bổ sung của học sinh: "${specialWishes}"
+
+Hãy phân tích đề và trả về JSON theo đúng định dạng sau:
+{
+  "coreSubject": "Chủ đề cốt lõi ngắn gọn (Ví dụ: Giới thiệu về bản thân em)",
+  "hoaNhoUnderstand": "Đề bài muốn con...",
+  "specificRequirements": [
+    "Nhiệm vụ: ...",
+    "Đối tượng: ...",
+    "Nội dung 1: ...",
+    "Nội dung 2: ..."
+  ],
+  "suggestedLength": "${grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'}",
+  "socraticQuestions": [
+    "Câu hỏi 1...",
+    "Câu hỏi 2...",
+    "Câu hỏi 3...",
+    "Câu hỏi 4..."
+  ],
+  "branches": [
+    { "id": "br-1", "title": "Nhánh 1", "icon": "🙋", "color": "emerald", "points": ["Ý a", "Ý b"] },
+    { "id": "br-2", "title": "Nhánh 2", "icon": "🎨", "color": "purple", "points": ["Ý a", "Ý b"] },
+    { "id": "br-3", "title": "Nhánh 3", "icon": "✨", "color": "amber", "points": ["Ý a", "Ý b"] },
+    { "id": "br-4", "title": "Nhánh 4", "icon": "⭐", "color": "sky", "points": ["Ý a", "Ý b"] },
+    { "id": "br-5", "title": "Nhánh 5", "icon": "💖", "color": "rose", "points": ["Ý a", "Ý b"] }
+  ],
+  "outline": {
+    "moDoan": ["Gợi ý mở..."],
+    "phatTrienDoan": ["Gợi ý phát triển 1...", "Gợi ý phát triển 2...", "Gợi ý phát triển 3..."],
+    "ketDoan": ["Gợi ý kết..."]
+  },
+  "vocabularySuggestions": {
+    "goodWords": [
+      { "word": "Từ 1", "meaningAndUsage": "Giải thích ngắn gọn" }
+    ],
+    "imageries": [
+      { "type": "So sánh", "example": "Ví dụ so sánh tự nhiên", "explanation": "Tác dụng" },
+      { "type": "Nhân hóa", "example": "Ví dụ nhân hóa tự nhiên", "explanation": "Tác dụng" }
+    ],
+    "sampleSentences": [
+      { "type": "mo_bai", "label": "Gợi ý mở đoạn", "sentence": "...", "whyItIsGood": "..." },
+      { "type": "mieu_ta", "label": "Gợi ý phát triển", "sentence": "...", "whyItIsGood": "..." },
+      { "type": "ket_bai", "label": "Gợi ý câu kết", "sentence": "...", "whyItIsGood": "..." }
+    ],
+    "creativeIdeas": [
+      "Ý tưởng sáng tạo 1",
+      "Ý tưởng sáng tạo 2"
+    ]
+  }
+}`;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: userPrompt,
+      config: {
+        systemInstruction,
+        responseMimeType: 'application/json'
+      }
+    });
+
+    const parsed = JSON.parse(response.text?.trim() || '{}');
+    res.json({
+      originalPrompt: prompt,
+      grade: Number(grade) || 3,
+      coreSubject: parsed.coreSubject || defaultSubject,
+      hoaNhoUnderstand: parsed.hoaNhoUnderstand || defaultUnderstand,
+      specificRequirements: (parsed.specificRequirements && parsed.specificRequirements.length > 0) ? parsed.specificRequirements : defaultRequirements,
+      suggestedLength: parsed.suggestedLength || defaultAnalysisResult.suggestedLength,
+      socraticQuestions: (parsed.socraticQuestions && parsed.socraticQuestions.length > 0) ? parsed.socraticQuestions : defaultQuestions,
+      branches: (parsed.branches && parsed.branches.length > 0) ? parsed.branches : defaultBranches,
+      outline: parsed.outline || defaultDetailedOutline,
+      vocabularySuggestions: parsed.vocabularySuggestions || defaultVocab
+    });
+  } catch (err) {
+    console.error('Error in analyze-prompt-deep:', err);
+    res.json(defaultAnalysisResult);
   }
 });
 

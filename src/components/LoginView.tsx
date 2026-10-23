@@ -67,20 +67,20 @@ export const LoginView: React.FC<LoginViewProps> = ({
       ]
     },
     teacher: {
-      gateTitle: 'CÁNH CỔNG 2 – GÓC CÔ GIÁO',
-      pageTitle: 'ĐĂNG NHẬP GÓC CÔ GIÁO',
+      gateTitle: 'CÁNH CỔNG 2 – GÓC GIÁO VIÊN',
+      pageTitle: 'ĐĂNG NHẬP GÓC GIÁO VIÊN',
       icon: '👩‍🏫',
       accentColor: 'emerald',
       badgeBg: 'bg-emerald-600 text-white',
       cardBorder: 'border-emerald-300',
       headerBg: 'from-emerald-100 via-teal-50 to-emerald-50',
       submitBtnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200',
-      submitText: 'Vào lớp học',
-      usernameLabel: 'Tên đăng nhập của cô:',
+      submitText: 'Vào lớp quản lý',
+      usernameLabel: 'Tên đăng nhập của giáo viên:',
       usernamePlaceholder: 'cogaovietvan hoặc leductho',
       passwordLabel: 'Mật khẩu bảo mật:',
-      passwordPlaceholder: 'Nhập mật khẩu của cô (Gợi ý: 2026)',
-      mascotGreeting: `Kính ${timePeriod.greetingTitle.toLowerCase()} cô giáo! Kính mời cô đăng nhập để theo dõi 35 học sinh, duyệt bài viết và gửi trao những nhận xét ân cần.`,
+      passwordPlaceholder: 'Nhập mật khẩu (Gợi ý: 2026)',
+      mascotGreeting: `Kính ${timePeriod.greetingTitle.toLowerCase()} thầy/cô! Kính mời thầy/cô đăng nhập để quản lý học sinh, duyệt bài viết và gửi trao những nhận xét ân cần.`,
       demoPresets: [
         { label: `${TEACHER_CONFIG.name} (2026)`, u: 'cogaovietvan', p: '2026' },
         { label: 'Tài khoản Lớp 3 Lê Đức Thọ', u: 'leductho', p: '2026' }
@@ -157,7 +157,10 @@ export const LoginView: React.FC<LoginViewProps> = ({
           authUser = {
             role: 'family',
             student: data.student,
-            parentCode: data.student?.parentCode
+            caregiver: data.caregiver,
+            parentName: data.caregiver?.name || (data.student ? `Phụ huynh em ${data.student.name.split(' ').slice(-1)[0]}` : undefined),
+            parentRelation: data.caregiver?.relation || 'Phụ huynh',
+            parentCode: data.caregiver?.code || data.student?.parentCode
           };
         }
 
@@ -186,7 +189,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             return;
           }
         } else {
-          setErrorMsg('Không tìm thấy mã học sinh này. Em thử bấm vào nút gợi ý bên dưới hoặc nhập HS001 nhé!');
+          setErrorMsg('Không tìm thấy mã học sinh này. Em hãy kiểm tra lại mã số (ví dụ: HS001) nhé!');
           return;
         }
       }
@@ -198,7 +201,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
           onLoginSuccess({ role: 'teacher', teacherName: TEACHER_CONFIG.name });
           return;
         } else {
-          setErrorMsg('Mật khẩu cô giáo chưa đúng. (Gợi ý mật khẩu: 2026)');
+          setErrorMsg('Mật khẩu giáo viên chưa đúng. (Gợi ý mật khẩu: 2026)');
           return;
         }
       }
@@ -221,7 +224,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             return;
           }
         } else {
-          setErrorMsg('Không tìm thấy mã kết nối gia đình này. Bố mẹ thử chọn một mã mẫu bên dưới như PH001 nhé!');
+          setErrorMsg('Không tìm thấy mã kết nối gia đình này. Quý phụ huynh vui lòng kiểm tra lại mã kết nối (ví dụ: PH001 hoặc số điện thoại) nhé!');
           return;
         }
       }
@@ -385,7 +388,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
           <div className="mt-6 pt-5 border-t border-stone-100">
             <div className="flex items-center gap-1.5 text-xs font-bold text-stone-500 uppercase tracking-wider mb-2.5">
               <Sparkles className="w-3.5 h-3.5 text-amber-500" />
-              <span>Gợi ý tài khoản nhanh để trải nghiệm:</span>
+              <span>Tài khoản truy cập nhanh:</span>
             </div>
             <div className="flex flex-wrap gap-2">
               {config.demoPresets.map((preset, idx) => (

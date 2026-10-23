@@ -3,7 +3,7 @@
     {
       "id": "HS001",
       "name": "Phạm Đăng Tuệ An",
-      "demoName": "Tuệ An (Học sinh mẫu)",
+      "demoName": "Tuệ An",
       "avatar": "🌸",
       "pin": "2026",
       "parentCode": "PH001",
@@ -21,15 +21,17 @@
           "phone": "0910002345",
           "code": "PH001",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS001-1"
         }
       ],
-      "temporaryPassword": "HoaNho2026"
+      "temporaryPassword": "HoaNho2026",
+      "inviteCodes": []
     },
     {
       "id": "HS002",
       "name": "Trần Bảo An",
-      "demoName": "Bảo An (Học sinh mẫu)",
+      "demoName": "Bảo An",
       "avatar": "🌻",
       "pin": "2016",
       "parentCode": "PH002",
@@ -39,7 +41,7 @@
       "className": "Lớp 3 – Trường TH Lê Đức Thọ",
       "username": "hs002",
       "accountStatus": "active",
-      "lastLogin": "10:15:03 23/10/2026",
+      "lastLogin": "11:38:26 23/10/2026",
       "linkedCaregivers": [
         {
           "relation": "Bố / Mẹ",
@@ -47,14 +49,16 @@
           "phone": "0910004690",
           "code": "PH002",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS002-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS003",
       "name": "Lưu Cát Vy Anh",
-      "demoName": "Vy Anh (Học sinh mẫu)",
+      "demoName": "Vy Anh",
       "avatar": "🌷",
       "pin": "2016",
       "parentCode": "PH003",
@@ -72,14 +76,16 @@
           "phone": "0910007035",
           "code": "PH003",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS003-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS004",
       "name": "Nguyễn Hoàng Phương Anh",
-      "demoName": "Phương Anh (Học sinh mẫu)",
+      "demoName": "Phương Anh",
       "avatar": "🌼",
       "pin": "2016",
       "parentCode": "PH004",
@@ -97,14 +103,16 @@
           "phone": "0910009380",
           "code": "PH004",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS004-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS005",
       "name": "Vũ Hồng Anh",
-      "demoName": "Hồng Anh (Học sinh mẫu)",
+      "demoName": "Hồng Anh",
       "avatar": "🌺",
       "pin": "2016",
       "parentCode": "PH005",
@@ -122,14 +130,16 @@
           "phone": "0910011725",
           "code": "PH005",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS005-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS006",
       "name": "Lê Đặng Khả Ân",
-      "demoName": "Khả Ân (Học sinh mẫu)",
+      "demoName": "Khả Ân",
       "avatar": "🌱",
       "pin": "2016",
       "parentCode": "PH006",
@@ -147,14 +157,16 @@
           "phone": "0910014070",
           "code": "PH006",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS006-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS007",
       "name": "Nguyễn Lê Minh Châu",
-      "demoName": "Minh Châu (Học sinh mẫu)",
+      "demoName": "Minh Châu",
       "avatar": "🦋",
       "pin": "2016",
       "parentCode": "PH007",
@@ -172,14 +184,16 @@
           "phone": "0910016415",
           "code": "PH007",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS007-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS008",
       "name": "Trần Thanh Châu",
-      "demoName": "Thanh Châu (Học sinh mẫu)",
+      "demoName": "Thanh Châu",
       "avatar": "🐝",
       "pin": "2016",
       "parentCode": "PH008",
@@ -197,14 +211,16 @@
           "phone": "0910018760",
           "code": "PH008",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS008-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS009",
       "name": "Phan Chí Dũng",
-      "demoName": "Chí Dũng (Học sinh mẫu)",
+      "demoName": "Chí Dũng",
       "avatar": "🐞",
       "pin": "2016",
       "parentCode": "PH009",
@@ -222,14 +238,16 @@
           "phone": "0910021105",
           "code": "PH009",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS009-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS010",
       "name": "Lê Nhật Anh Duy",
-      "demoName": "Anh Duy (Học sinh mẫu)",
+      "demoName": "Anh Duy",
       "avatar": "🍀",
       "pin": "2016",
       "parentCode": "PH010",
@@ -247,14 +265,16 @@
           "phone": "0910023450",
           "code": "PH010",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS010-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS011",
       "name": "Nguyễn Nhựt Khải Duy",
-      "demoName": "Khải Duy (Học sinh mẫu)",
+      "demoName": "Khải Duy",
       "avatar": "🌿",
       "pin": "2016",
       "parentCode": "PH011",
@@ -272,14 +292,16 @@
           "phone": "0910025795",
           "code": "PH011",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS011-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS012",
       "name": "Lê Hoàng Minh Đức",
-      "demoName": "Minh Đức (Học sinh mẫu)",
+      "demoName": "Minh Đức",
       "avatar": "🍁",
       "pin": "2016",
       "parentCode": "PH012",
@@ -297,14 +319,16 @@
           "phone": "0910028140",
           "code": "PH012",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS012-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS013",
       "name": "Trần Bá Huy",
-      "demoName": "Bá Huy (Học sinh mẫu)",
+      "demoName": "Bá Huy",
       "avatar": "🍃",
       "pin": "2016",
       "parentCode": "PH013",
@@ -322,14 +346,16 @@
           "phone": "0910030485",
           "code": "PH013",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS013-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS014",
       "name": "Trương Gia Huy",
-      "demoName": "Gia Huy (Học sinh mẫu)",
+      "demoName": "Gia Huy",
       "avatar": "🌾",
       "pin": "2016",
       "parentCode": "PH014",
@@ -347,14 +373,16 @@
           "phone": "0910032830",
           "code": "PH014",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS014-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS015",
       "name": "Đặng Minh Khang",
-      "demoName": "Minh Khang (Học sinh mẫu)",
+      "demoName": "Minh Khang",
       "avatar": "🌲",
       "pin": "2016",
       "parentCode": "PH015",
@@ -372,14 +400,16 @@
           "phone": "0910035175",
           "code": "PH015",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS015-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS016",
       "name": "Đinh Phúc Khang",
-      "demoName": "Phúc Khang (Học sinh mẫu)",
+      "demoName": "Phúc Khang",
       "avatar": "🎋",
       "pin": "2016",
       "parentCode": "PH016",
@@ -397,14 +427,16 @@
           "phone": "0910037520",
           "code": "PH016",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS016-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS017",
       "name": "Cao Bạch Gia Khiêm",
-      "demoName": "Gia Khiêm (Học sinh mẫu)",
+      "demoName": "Gia Khiêm",
       "avatar": "🌿",
       "pin": "2016",
       "parentCode": "PH017",
@@ -422,14 +454,16 @@
           "phone": "0910039865",
           "code": "PH017",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS017-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS018",
       "name": "Đinh Minh Khôi",
-      "demoName": "Minh Khôi (Học sinh mẫu)",
+      "demoName": "Minh Khôi",
       "avatar": "🌸",
       "pin": "2016",
       "parentCode": "PH018",
@@ -447,14 +481,16 @@
           "phone": "0910042210",
           "code": "PH018",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS018-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS019",
       "name": "Ngô Minh Khôi",
-      "demoName": "M. Khôi (Học sinh mẫu)",
+      "demoName": "M. Khôi",
       "avatar": "🌻",
       "pin": "2016",
       "parentCode": "PH019",
@@ -472,14 +508,16 @@
           "phone": "0910044555",
           "code": "PH019",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS019-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS020",
       "name": "Nguyễn Ngọc Tuệ Lâm",
-      "demoName": "Tuệ Lâm (Học sinh mẫu)",
+      "demoName": "Tuệ Lâm",
       "avatar": "🌷",
       "pin": "2016",
       "parentCode": "PH020",
@@ -497,14 +535,16 @@
           "phone": "0910046900",
           "code": "PH020",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS020-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS021",
       "name": "Lê Nguyên Long",
-      "demoName": "Nguyên Long (Học sinh mẫu)",
+      "demoName": "Nguyên Long",
       "avatar": "🌼",
       "pin": "2016",
       "parentCode": "PH021",
@@ -522,14 +562,16 @@
           "phone": "0910049245",
           "code": "PH021",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS021-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS022",
       "name": "Nguyễn Ngọc Huyền My",
-      "demoName": "Huyền My (Học sinh mẫu)",
+      "demoName": "Huyền My",
       "avatar": "🌺",
       "pin": "2016",
       "parentCode": "PH022",
@@ -547,14 +589,16 @@
           "phone": "0910051590",
           "code": "PH022",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS022-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS023",
       "name": "Phạm Quỳnh My",
-      "demoName": "Quỳnh My (Học sinh mẫu)",
+      "demoName": "Quỳnh My",
       "avatar": "🌱",
       "pin": "2016",
       "parentCode": "PH023",
@@ -572,14 +616,16 @@
           "phone": "0910053935",
           "code": "PH023",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS023-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS024",
       "name": "Lê Hà Phúc Nguyên",
-      "demoName": "Phúc Nguyên (Học sinh mẫu)",
+      "demoName": "Phúc Nguyên",
       "avatar": "🦋",
       "pin": "2016",
       "parentCode": "PH024",
@@ -597,14 +643,16 @@
           "phone": "0910056280",
           "code": "PH024",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS024-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS025",
       "name": "Nguyễn Phúc Khôi Nguyên",
-      "demoName": "Khôi Nguyên (Học sinh mẫu)",
+      "demoName": "Khôi Nguyên",
       "avatar": "🐝",
       "pin": "2016",
       "parentCode": "PH025",
@@ -622,14 +670,16 @@
           "phone": "0910058625",
           "code": "PH025",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS025-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS026",
       "name": "Đinh Uyên Nhi",
-      "demoName": "Uyên Nhi (Học sinh mẫu)",
+      "demoName": "Uyên Nhi",
       "avatar": "🐞",
       "pin": "2016",
       "parentCode": "PH026",
@@ -647,14 +697,16 @@
           "phone": "0910060970",
           "code": "PH026",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS026-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS027",
       "name": "Trần Ngọc An Nhiên",
-      "demoName": "An Nhiên (Học sinh mẫu)",
+      "demoName": "An Nhiên",
       "avatar": "🍀",
       "pin": "2016",
       "parentCode": "PH027",
@@ -672,14 +724,16 @@
           "phone": "0910063315",
           "code": "PH027",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS027-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS028",
       "name": "Lý Đăng Quang",
-      "demoName": "Đăng Quang (Học sinh mẫu)",
+      "demoName": "Đăng Quang",
       "avatar": "🌿",
       "pin": "2016",
       "parentCode": "PH028",
@@ -697,14 +751,16 @@
           "phone": "0910065660",
           "code": "PH028",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS028-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS029",
       "name": "Mã Minh Quý",
-      "demoName": "Minh Quý (Học sinh mẫu)",
+      "demoName": "Minh Quý",
       "avatar": "🍁",
       "pin": "2016",
       "parentCode": "PH029",
@@ -722,14 +778,16 @@
           "phone": "0910068005",
           "code": "PH029",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS029-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS030",
       "name": "Vũ Ngọc Thiện",
-      "demoName": "Ngọc Thiện (Học sinh mẫu)",
+      "demoName": "Ngọc Thiện",
       "avatar": "🍃",
       "pin": "2016",
       "parentCode": "PH030",
@@ -747,14 +805,16 @@
           "phone": "0910070350",
           "code": "PH030",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS030-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS031",
       "name": "Trần Quốc Thịnh",
-      "demoName": "Quốc Thịnh (Học sinh mẫu)",
+      "demoName": "Quốc Thịnh",
       "avatar": "🌾",
       "pin": "2016",
       "parentCode": "PH031",
@@ -772,14 +832,16 @@
           "phone": "0910072695",
           "code": "PH031",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS031-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS032",
       "name": "Lương Nguyễn Minh Thư",
-      "demoName": "Minh Thư (Học sinh mẫu)",
+      "demoName": "Minh Thư",
       "avatar": "🌲",
       "pin": "2016",
       "parentCode": "PH032",
@@ -797,14 +859,16 @@
           "phone": "0910075040",
           "code": "PH032",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS032-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS033",
       "name": "Mai Anh Minh Triết",
-      "demoName": "Minh Triết (Học sinh mẫu)",
+      "demoName": "Minh Triết",
       "avatar": "🎋",
       "pin": "2016",
       "parentCode": "PH033",
@@ -822,14 +886,16 @@
           "phone": "0910077385",
           "code": "PH033",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS033-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS034",
       "name": "Trần Vinh",
-      "demoName": "Trần Vinh (Học sinh mẫu)",
+      "demoName": "Trần Vinh",
       "avatar": "🌸",
       "pin": "2016",
       "parentCode": "PH034",
@@ -847,14 +913,16 @@
           "phone": "0910079730",
           "code": "PH034",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS034-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     },
     {
       "id": "HS035",
       "name": "Tạ Ngọc Yến Vy",
-      "demoName": "Yến Vy (Học sinh mẫu)",
+      "demoName": "Yến Vy",
       "avatar": "🌻",
       "pin": "2016",
       "parentCode": "PH035",
@@ -872,9 +940,11 @@
           "phone": "0910082075",
           "code": "PH035",
           "status": "active",
-          "linkedAt": "2026-09-05"
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS035-1"
         }
-      ]
+      ],
+      "inviteCodes": []
     }
   ],
   "submissions": [
