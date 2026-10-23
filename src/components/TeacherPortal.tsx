@@ -34,7 +34,11 @@ import {
   Phone,
   Check,
   X,
-  AlertCircle
+  AlertCircle,
+  Trash2,
+  RotateCcw,
+  EyeOff,
+  AlertTriangle
 } from 'lucide-react';
 
 interface TeacherPortalProps {
@@ -78,20 +82,35 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // ---------------- Account Management Section State ----------------
   const [localStudents, setLocalStudents] = useState<Student[]>(students);
   const [accountSearch, setAccountSearch] = useState('');
-  const [accountFilter, setAccountFilter] = useState<'all' | 'active' | 'locked'>('all');
+  const [accountFilter, setAccountFilter] = useState<'all' | 'active' | 'locked' | 'deleted'>('all');
 
-  // Modal 1: Reset password handover slip
+  // Modal 1: Choice & Prompt to Reset Password (Auto vs Manual)
+  const [promptResetStudent, setPromptResetStudent] = useState<Student | null>(null);
+  const [resetMode, setResetMode] = useState<'auto' | 'manual'>('auto');
+  const [customPasswordInput, setCustomPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [showPasswordText, setShowPasswordText] = useState(false);
+  const [resetErrorMsg, setResetErrorMsg] = useState('');
+  const [isResetting, setIsResetting] = useState(false);
+
+  // Modal 1b: Handover Slip after successful password reset
   const [resetModalData, setResetModalData] = useState<{
     student: Student;
     newPassword: string;
+    pin?: string;
     issuedAt: string;
   } | null>(null);
 
-  // Modal 2: Edit student / Change class
+  // Modal 2: Edit student / Change class & username
   const [editingStudent, setEditingStudent] = useState<Student | null>(null);
   const [editName, setEditName] = useState('');
+  const [editDemoName, setEditDemoName] = useState('');
+  const [editUsername, setEditUsername] = useState('');
   const [editClassName, setEditClassName] = useState('');
+  const [editAccountStatus, setEditAccountStatus] = useState<'active' | 'locked'>('active');
   const [editAvatar, setEditAvatar] = useState('🌸');
+  const [editErrorMsg, setEditErrorMsg] = useState('');
+  const [isSavingEdit, setIsSavingEdit] = useState(false);
 
   // Modal 3: Family connection management
   const [familyLinkStudent, setFamilyLinkStudent] = useState<Student | null>(null);
@@ -104,6 +123,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [isAddStudentOpen, setIsAddStudentOpen] = useState(false);
   const [newStudentName, setNewStudentName] = useState('');
   const [newStudentAvatar, setNewStudentAvatar] = useState('🌸');
+
+  // Modal 5: Soft Delete confirmation
+  const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
+  const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
   // Sync students from props
   useEffect(() => {
@@ -211,27 +234,64 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
   // ---------------- Account Management Actions ----------------
 
-  // Action: Reset Password
-  const handleResetPassword = async (st: Student) => {
+  // Action: Open Reset Password Choice Modal
+  const handleOpenResetPassword = (st: Student) => {
     playPop(settings.soundEnabled);
+    setPromptResetStudent(st);
+    setResetMode('auto');
+    setCustomPasswordInput('');
+    setConfirmPasswordInput('');
+    setShowPasswordText(false);
+    setResetErrorMsg('');
+  };
+
+  // Action: Confirm Reset Password (Auto or Manual)
+  const handleConfirmResetPassword = async () => {
+    if (!promptResetStudent) return;
+
+    if (resetMode === 'manual') {
+      const cleanCustom = customPasswordInput.trim();
+      const cleanConfirm = confirmPasswordInput.trim();
+      if (!cleanCustom || cleanCustom.length < 4) {
+        setResetErrorMsg('Mật khẩu mới phải có ít nhất 4 ký tự để đảm bảo an toàn.');
+        return;
+      }
+      if (cleanCustom !== cleanConfirm) {
+        setResetErrorMsg('Mật khẩu xác nhận không trùng khớp. Cô vui lòng kiểm tra lại.');
+        return;
+      }
+    }
+
+    setIsResetting(true);
+    setResetErrorMsg('');
+
     try {
       const res = await fetch('/api/teacher/students/reset-password', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: st.id })
+        body: JSON.stringify({
+          id: promptResetStudent.id,
+          customPassword: resetMode === 'manual' ? customPasswordInput.trim() : undefined
+        })
       });
       const data = await res.json();
       if (data.success) {
+        playChime(settings.soundEnabled);
         setResetModalData({
           student: data.student,
           newPassword: data.newPassword,
+          pin: data.pin || data.student.pin,
           issuedAt: data.issuedAt
         });
-        // Update locally
-        setLocalStudents(prev => prev.map(s => s.id === st.id ? data.student : s));
+        setLocalStudents(prev => prev.map(s => s.id === promptResetStudent.id ? data.student : s));
+        setPromptResetStudent(null);
+      } else {
+        setResetErrorMsg(data.message || 'Không thể cấp lại mật khẩu vào lúc này.');
       }
     } catch (e) {
-      alert('Không thể cấp lại mật khẩu vào lúc này.');
+      setResetErrorMsg('Đã xảy ra lỗi khi kết nối máy chủ.');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -259,32 +319,113 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     playPop(settings.soundEnabled);
     setEditingStudent(st);
     setEditName(st.name);
+    setEditDemoName(st.demoName || `${st.name.split(' ').slice(-1)[0]} (Học sinh mẫu)`);
+    setEditUsername(st.username || st.id.toLowerCase());
     setEditClassName(st.className || `${TEACHER_CONFIG.className} – ${TEACHER_CONFIG.schoolShort}`);
-    setEditAvatar(st.avatar);
+    setEditAccountStatus(st.accountStatus === 'locked' ? 'locked' : 'active');
+    setEditAvatar(st.avatar || '🌸');
+    setEditErrorMsg('');
   };
 
   // Action: Save Edited Student
   const handleSaveEdit = async () => {
     if (!editingStudent) return;
+    if (!editName.trim()) {
+      setEditErrorMsg('Vui lòng nhập họ và tên học sinh.');
+      return;
+    }
+    if (!editUsername.trim()) {
+      setEditErrorMsg('Vui lòng nhập tên đăng nhập cho học sinh.');
+      return;
+    }
+
+    setIsSavingEdit(true);
+    setEditErrorMsg('');
+
     try {
       const res = await fetch('/api/teacher/students/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           id: editingStudent.id,
-          name: editName,
-          className: editClassName,
-          avatar: editAvatar
+          name: editName.trim(),
+          demoName: editDemoName.trim(),
+          username: editUsername.trim().toLowerCase(),
+          className: editClassName.trim(),
+          avatar: editAvatar,
+          accountStatus: editAccountStatus
         })
       });
       const data = await res.json();
       if (data.success) {
+        playChime(settings.soundEnabled);
         setLocalStudents(prev => prev.map(s => s.id === editingStudent.id ? data.student : s));
         setEditingStudent(null);
+        setSuccessMsg(`✓ Đã lưu thay đổi hồ sơ học sinh ${data.student.name} thành công!`);
         if (onRefreshStudents) onRefreshStudents();
+      } else {
+        setEditErrorMsg(data.message || 'Không thể lưu thông tin học sinh.');
       }
     } catch (e) {
-      alert('Không thể lưu thông tin học sinh.');
+      setEditErrorMsg('Đã xảy ra lỗi khi lưu thông tin.');
+    } finally {
+      setIsSavingEdit(false);
+    }
+  };
+
+  // Action: Open Soft Delete Confirmation
+  const handleOpenDelete = (st: Student) => {
+    playPop(settings.soundEnabled);
+    setDeletingStudent(st);
+  };
+
+  // Action: Confirm Soft Delete
+  const handleConfirmDelete = async () => {
+    if (!deletingStudent) return;
+    setIsDeletingStudent(true);
+    try {
+      const res = await fetch('/api/teacher/students/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: deletingStudent.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setLocalStudents(prev => prev.map(s => s.id === deletingStudent.id ? { ...s, accountStatus: 'deleted' } : s));
+        setSuccessMsg(`✓ Đã xóa tài khoản em ${deletingStudent.name}. Toàn bộ bài viết được bảo lưu an toàn.`);
+        setDeletingStudent(null);
+        if (onRefreshStudents) onRefreshStudents();
+      } else {
+        alert(data.message || 'Không thể xóa tài khoản học sinh.');
+      }
+    } catch (e) {
+      alert('Đã xảy ra lỗi khi xóa tài khoản.');
+    } finally {
+      setIsDeletingStudent(false);
+    }
+  };
+
+  // Action: Restore Soft-Deleted Student
+  const handleRestoreStudent = async (st: Student) => {
+    playPop(settings.soundEnabled);
+    try {
+      const res = await fetch('/api/teacher/students/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: st.id })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setLocalStudents(prev => prev.map(s => s.id === st.id ? { ...s, accountStatus: 'active' } : s));
+        setSuccessMsg(`✓ Đã khôi phục tài khoản học sinh ${st.name} thành công!`);
+        if (onRefreshStudents) onRefreshStudents();
+      } else {
+        alert(data.message || 'Không thể khôi phục tài khoản.');
+      }
+    } catch (e) {
+      alert('Đã xảy ra lỗi khi khôi phục tài khoản.');
     }
   };
 
@@ -792,55 +933,64 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
       {activeTab === 'accounts' && (
         <div className="space-y-6 animate-fade-in">
           {/* Header Summary for Accounts */}
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
-            <div className="bg-white p-4 rounded-3xl border-2 border-emerald-200 shadow-xs">
-              <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
-                Sĩ số lớp em
-              </span>
-              <div className="text-2xl sm:text-3xl font-black text-emerald-900 mt-1 font-display">
-                {localStudents.length} / 35
-              </div>
-              <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-                {TEACHER_CONFIG.className} • {TEACHER_CONFIG.schoolShort}
-              </p>
-            </div>
+          {(() => {
+            const totalNonDeleted = localStudents.filter(s => s.accountStatus !== 'deleted').length;
+            const activeStudents = localStudents.filter(s => s.accountStatus !== 'deleted' && s.accountStatus !== 'locked').length;
+            const lockedStudents = localStudents.filter(s => s.accountStatus === 'locked').length;
+            const deletedStudents = localStudents.filter(s => s.accountStatus === 'deleted').length;
 
-            <div className="bg-white p-4 rounded-3xl border-2 border-teal-200 shadow-xs">
-              <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
-                Đang kích hoạt
-              </span>
-              <div className="text-2xl sm:text-3xl font-black text-teal-800 mt-1 font-display">
-                {localStudents.filter(s => s.accountStatus !== 'locked').length} em
-              </div>
-              <p className="text-[11px] text-teal-700 font-semibold mt-0.5">
-                Sẵn sàng đăng nhập và học tập
-              </p>
-            </div>
+            return (
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
+                <div className="bg-white p-4 rounded-3xl border-2 border-emerald-200 shadow-xs">
+                  <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
+                    Sĩ số lớp em
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-emerald-900 mt-1 font-display">
+                    {totalNonDeleted} / {localStudents.length}
+                  </div>
+                  <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
+                    {TEACHER_CONFIG.className} • {TEACHER_CONFIG.schoolShort}
+                  </p>
+                </div>
 
-            <div className="bg-white p-4 rounded-3xl border-2 border-rose-200 shadow-xs">
-              <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
-                Tạm khóa bảo mật
-              </span>
-              <div className="text-2xl sm:text-3xl font-black text-rose-800 mt-1 font-display">
-                {localStudents.filter(s => s.accountStatus === 'locked').length} em
-              </div>
-              <p className="text-[11px] text-rose-700 font-semibold mt-0.5">
-                Có thể mở lại bất cứ lúc nào
-              </p>
-            </div>
+                <div className="bg-white p-4 rounded-3xl border-2 border-teal-200 shadow-xs">
+                  <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
+                    Đang kích hoạt
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-teal-800 mt-1 font-display">
+                    {activeStudents} em
+                  </div>
+                  <p className="text-[11px] text-teal-700 font-semibold mt-0.5">
+                    Sẵn sàng đăng nhập và học tập
+                  </p>
+                </div>
 
-            <div className="bg-white p-4 rounded-3xl border-2 border-purple-200 shadow-xs">
-              <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
-                Mã kết nối gia đình
-              </span>
-              <div className="text-2xl sm:text-3xl font-black text-purple-900 mt-1 font-display">
-                {localStudents.length} mã
+                <div className="bg-white p-4 rounded-3xl border-2 border-rose-200 shadow-xs">
+                  <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
+                    Tạm khóa bảo mật
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-rose-800 mt-1 font-display">
+                    {lockedStudents} em
+                  </div>
+                  <p className="text-[11px] text-rose-700 font-semibold mt-0.5">
+                    Có thể mở lại bất cứ lúc nào
+                  </p>
+                </div>
+
+                <div className="bg-white p-4 rounded-3xl border-2 border-amber-200 shadow-xs">
+                  <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
+                    Đã xóa lưu trữ
+                  </span>
+                  <div className="text-2xl sm:text-3xl font-black text-amber-900 mt-1 font-display">
+                    {deletedStudents} em
+                  </div>
+                  <p className="text-[11px] text-amber-700 font-semibold mt-0.5">
+                    Bài viết vẫn bảo lưu an toàn
+                  </p>
+                </div>
               </div>
-              <p className="text-[11px] text-purple-700 font-semibold mt-0.5">
-                Từ PH001 đến PH035
-              </p>
-            </div>
-          </div>
+            );
+          })()}
 
           {/* Action and Filter Toolbar */}
           <div className="bg-white p-4 rounded-3xl border-2 border-stone-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
@@ -856,7 +1006,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 />
               </div>
 
-              <div className="flex items-center gap-1">
+              <div className="flex items-center gap-1 flex-wrap">
                 <button
                   onClick={() => setAccountFilter('all')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
@@ -871,7 +1021,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     accountFilter === 'active' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                   }`}
                 >
-                  Hoạt động
+                  Đang hoạt động ({localStudents.filter(s => s.accountStatus !== 'deleted' && s.accountStatus !== 'locked').length})
                 </button>
                 <button
                   onClick={() => setAccountFilter('locked')}
@@ -879,7 +1029,15 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     accountFilter === 'locked' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
                   }`}
                 >
-                  Tạm khóa
+                  Tạm khóa ({localStudents.filter(s => s.accountStatus === 'locked').length})
+                </button>
+                <button
+                  onClick={() => setAccountFilter('deleted')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition-colors ${
+                    accountFilter === 'deleted' ? 'bg-stone-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                  }`}
+                >
+                  Đã xóa ({localStudents.filter(s => s.accountStatus === 'deleted').length})
                 </button>
               </div>
             </div>
@@ -921,122 +1079,160 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-stone-100">
-                  {accountStudentsList.map((st, idx) => {
-                    const isLocked = st.accountStatus === 'locked';
-                    const caregiver = st.linkedCaregivers?.[0];
+                  {accountStudentsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={8} className="py-8 text-center text-stone-400 font-medium">
+                        Không tìm thấy học sinh nào trong mục này.
+                      </td>
+                    </tr>
+                  ) : (
+                    accountStudentsList.map((st, idx) => {
+                      const isDeleted = st.accountStatus === 'deleted';
+                      const isLocked = st.accountStatus === 'locked';
+                      const caregiver = st.linkedCaregivers?.[0];
 
-                    return (
-                      <tr key={st.id} className="hover:bg-emerald-50/20 transition-colors">
-                        <td className="py-3 px-3 text-center font-bold text-stone-400">
-                          {idx + 1}
-                        </td>
+                      return (
+                        <tr key={st.id} className={`hover:bg-emerald-50/20 transition-colors ${isDeleted ? 'bg-stone-50/60 opacity-80' : ''}`}>
+                          <td className="py-3 px-3 text-center font-bold text-stone-400">
+                            {idx + 1}
+                          </td>
 
-                        <td className="py-3 px-4">
-                          <div className="flex items-center gap-2">
-                            <span className="w-7 h-7 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-sm">
-                              {st.avatar}
-                            </span>
-                            <div>
-                              <span className="font-extrabold text-stone-900 block">
-                                {st.name}
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <span className="w-7 h-7 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-sm">
+                                {st.avatar}
                               </span>
-                              <span className="text-[11px] text-stone-400 font-medium">
-                                {st.demoName}
+                              <div>
+                                <span className={`font-extrabold block ${isDeleted ? 'line-through text-stone-500' : 'text-stone-900'}`}>
+                                  {st.name}
+                                </span>
+                                <span className="text-[11px] text-stone-400 font-medium">
+                                  {st.demoName}
+                                </span>
+                              </div>
+                            </div>
+                          </td>
+
+                          <td className="py-3 px-3 font-mono font-bold text-emerald-900">
+                            {st.id}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <span className="font-mono font-semibold text-stone-700 block">
+                              {st.username || st.id.toLowerCase()}
+                            </span>
+                            <span className="text-[11px] text-stone-400">
+                              {st.className || 'Lớp 3 – TH Lê Đức Thọ'}
+                            </span>
+                          </td>
+
+                          <td className="py-3 px-3">
+                            {isDeleted ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-stone-100 text-stone-600 border border-stone-300">
+                                <Trash2 className="w-3 h-3 text-stone-400" />
+                                <span>Đã xóa</span>
+                              </span>
+                            ) : isLocked ? (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                                <Lock className="w-3 h-3" />
+                                <span>Tạm khóa</span>
+                              </span>
+                            ) : (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                                <CheckCircle className="w-3 h-3 text-emerald-600" />
+                                <span>Đã kích hoạt</span>
+                              </span>
+                            )}
+                          </td>
+
+                          <td className="py-3 px-3 text-stone-600 text-xs">
+                            {st.lastLogin || 'Chưa đăng nhập'}
+                          </td>
+
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-mono font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+                                {st.parentCode}
+                              </span>
+                              <span className="text-[11px] text-stone-500">
+                                ({caregiver?.relation || 'PH'})
                               </span>
                             </div>
-                          </div>
-                        </td>
+                          </td>
 
-                        <td className="py-3 px-3 font-mono font-bold text-emerald-900">
-                          {st.id}
-                        </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center justify-center gap-1.5 flex-wrap">
+                              {isDeleted ? (
+                                <button
+                                  onClick={() => handleRestoreStudent(st)}
+                                  className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center gap-1.5 transition-colors shadow-2xs"
+                                  title="Khôi phục tài khoản học sinh này"
+                                >
+                                  <RotateCcw className="w-3.5 h-3.5 text-emerald-600" />
+                                  <span>Khôi phục</span>
+                                </button>
+                              ) : (
+                                <>
+                                  {/* Sửa thông tin (Họ tên, username, lớp học...) */}
+                                  <button
+                                    onClick={() => handleOpenEdit(st)}
+                                    className="px-2.5 py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 font-bold text-xs flex items-center gap-1 transition-colors"
+                                    title="Sửa họ tên, tên đăng nhập, đổi lớp mà không xóa lịch sử"
+                                  >
+                                    <Edit3 className="w-3 h-3 text-stone-600" />
+                                    <span>Sửa</span>
+                                  </button>
 
-                        <td className="py-3 px-3">
-                          <span className="font-mono font-semibold text-stone-700 block">
-                            {st.username || st.id.toLowerCase()}
-                          </span>
-                          <span className="text-[11px] text-stone-400">
-                            {st.className || 'Lớp 3 – TH Lê Đức Thọ'}
-                          </span>
-                        </td>
+                                  {/* Cấp lại mật khẩu */}
+                                  <button
+                                    onClick={() => handleOpenResetPassword(st)}
+                                    className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs flex items-center gap-1 transition-colors"
+                                    title="Cấp lại mật khẩu an toàn và in phiếu"
+                                  >
+                                    <Key className="w-3 h-3 text-amber-700" />
+                                    <span>Cấp lại MK</span>
+                                  </button>
 
-                        <td className="py-3 px-3">
-                          {isLocked ? (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
-                              <Lock className="w-3 h-3" />
-                              <span>Tạm khóa</span>
-                            </span>
-                          ) : (
-                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
-                              <CheckCircle className="w-3 h-3 text-emerald-600" />
-                              <span>Đã kích hoạt</span>
-                            </span>
-                          )}
-                        </td>
+                                  {/* Khóa / Mở khóa */}
+                                  <button
+                                    onClick={() => handleToggleLock(st)}
+                                    className={`px-2 py-1 rounded-xl font-bold text-xs border flex items-center gap-1 transition-colors ${
+                                      isLocked
+                                        ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                        : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300'
+                                    }`}
+                                    title={isLocked ? 'Mở lại tài khoản' : 'Tạm khóa tài khoản'}
+                                  >
+                                    {isLocked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
+                                    <span>{isLocked ? 'Mở khóa' : 'Khóa'}</span>
+                                  </button>
 
-                        <td className="py-3 px-3 text-stone-600 text-xs">
-                          {st.lastLogin || 'Chưa đăng nhập'}
-                        </td>
+                                  {/* Xóa tài khoản */}
+                                  <button
+                                    onClick={() => handleOpenDelete(st)}
+                                    className="px-2 py-1 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center gap-1 transition-colors"
+                                    title="Xóa mềm tài khoản học sinh (bài viết được giữ nguyên an toàn)"
+                                  >
+                                    <Trash2 className="w-3 h-3 text-rose-600" />
+                                    <span>Xóa</span>
+                                  </button>
 
-                        <td className="py-3 px-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="font-mono font-bold text-purple-900 bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-                              {st.parentCode}
-                            </span>
-                            <span className="text-[11px] text-stone-500">
-                              ({caregiver?.relation || 'PH'})
-                            </span>
-                          </div>
-                        </td>
-
-                        <td className="py-3 px-4">
-                          <div className="flex items-center justify-center gap-1.5 flex-wrap">
-                            {/* Cấp lại mật khẩu */}
-                            <button
-                              onClick={() => handleResetPassword(st)}
-                              className="px-2.5 py-1 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs flex items-center gap-1 transition-colors"
-                              title="Cấp lại mật khẩu an toàn và in phiếu"
-                            >
-                              <Key className="w-3 h-3 text-amber-700" />
-                              <span>Cấp lại MK</span>
-                            </button>
-
-                            {/* Khóa / Mở khóa */}
-                            <button
-                              onClick={() => handleToggleLock(st)}
-                              className={`px-2.5 py-1 rounded-xl font-bold text-xs border flex items-center gap-1 transition-colors ${
-                                isLocked
-                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
-                                  : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300'
-                              }`}
-                              title={isLocked ? 'Mở lại tài khoản' : 'Tạm khóa tài khoản'}
-                            >
-                              {isLocked ? <Unlock className="w-3 h-3" /> : <Lock className="w-3 h-3" />}
-                              <span>{isLocked ? 'Mở khóa' : 'Khóa'}</span>
-                            </button>
-
-                            {/* Sửa thông tin */}
-                            <button
-                              onClick={() => handleOpenEdit(st)}
-                              className="px-2 py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 border border-stone-300 font-bold text-xs"
-                              title="Sửa họ tên, đổi lớp mà không xóa lịch sử"
-                            >
-                              <Edit3 className="w-3 h-3" />
-                            </button>
-
-                            {/* Liên kết gia đình */}
-                            <button
-                              onClick={() => handleOpenFamilyLink(st)}
-                              className="px-2 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold text-xs"
-                              title="Quản lý mã kết nối gia đình"
-                            >
-                              👨‍👩‍👧
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                                  {/* Liên kết gia đình */}
+                                  <button
+                                    onClick={() => handleOpenFamilyLink(st)}
+                                    className="px-2 py-1 rounded-xl bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 font-bold text-xs"
+                                    title="Quản lý mã kết nối gia đình"
+                                  >
+                                    👨‍👩‍👧
+                                  </button>
+                                </>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
                 </tbody>
               </table>
             </div>
@@ -1044,7 +1240,139 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL 1: PHIẾU BÀN GIAO MẬT KHẨU AN TOÀN ================= */}
+      {/* ================= MODAL 1A: CẤP LẠI MẬT KHẨU (TỰ ĐỘNG HOẶC TỰ ĐẶT) ================= */}
+      {promptResetStudent && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl border-3 border-amber-400 max-w-md w-full p-6 shadow-2xl space-y-4 animate-fade-in relative">
+            <button
+              onClick={() => setPromptResetStudent(null)}
+              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2.5 border-b border-amber-100 pb-3">
+              <span className="text-2xl">🔑</span>
+              <div>
+                <h3 className="text-lg font-black text-amber-950 font-display">
+                  Cấp Lại Mật Khẩu Cho Học Sinh
+                </h3>
+                <p className="text-xs text-stone-500 font-medium">
+                  Em: <strong className="text-stone-900">{promptResetStudent.name}</strong> ({promptResetStudent.id})
+                </p>
+              </div>
+            </div>
+
+            {/* Error Message */}
+            {resetErrorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{resetErrorMsg}</span>
+              </div>
+            )}
+
+            {/* Choice: Auto vs Manual */}
+            <div className="space-y-3">
+              <label className="text-xs font-bold text-stone-700 block">
+                Cô muốn chọn hình thức cấp mật khẩu nào?
+              </label>
+
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setResetMode('auto')}
+                  className={`p-3 rounded-2xl border text-xs font-bold text-left transition-all ${
+                    resetMode === 'auto'
+                      ? 'bg-amber-50 border-amber-400 text-amber-950 ring-2 ring-amber-200'
+                      : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                  }`}
+                >
+                  <span className="block text-sm mb-0.5">🎲 Tự động sinh</span>
+                  <span className="text-[11px] font-normal text-stone-500">Mật khẩu an toàn, dễ nhớ (vd: HoaNho#8261)</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setResetMode('manual')}
+                  className={`p-3 rounded-2xl border text-xs font-bold text-left transition-all ${
+                    resetMode === 'manual'
+                      ? 'bg-amber-50 border-amber-400 text-amber-950 ring-2 ring-amber-200'
+                      : 'bg-stone-50 border-stone-200 text-stone-600 hover:bg-stone-100'
+                  }`}
+                >
+                  <span className="block text-sm mb-0.5">✍️ Cô tự đặt mật khẩu</span>
+                  <span className="text-[11px] font-normal text-stone-500">Nhập mật khẩu riêng theo quy ước của lớp</span>
+                </button>
+              </div>
+
+              {resetMode === 'manual' && (
+                <div className="space-y-2.5 pt-1 animate-fade-in">
+                  <div>
+                    <label className="text-xs font-bold text-stone-700 block mb-1">
+                      Mật khẩu mới:
+                    </label>
+                    <div className="relative">
+                      <input
+                        type={showPasswordText ? 'text' : 'password'}
+                        placeholder="Nhập mật khẩu mới (ít nhất 4 ký tự)..."
+                        value={customPasswordInput}
+                        onChange={e => setCustomPasswordInput(e.target.value)}
+                        className="w-full pl-3 pr-9 py-2 rounded-xl border border-stone-200 font-mono text-xs sm:text-sm focus:border-amber-500 focus:outline-hidden"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowPasswordText(!showPasswordText)}
+                        className="absolute right-2.5 top-2.5 text-stone-400 hover:text-stone-700"
+                        title={showPasswordText ? 'Ẩn mật khẩu' : 'Hiện mật khẩu'}
+                      >
+                        {showPasswordText ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div>
+                    <label className="text-xs font-bold text-stone-700 block mb-1">
+                      Xác nhận lại mật khẩu:
+                    </label>
+                    <input
+                      type={showPasswordText ? 'text' : 'password'}
+                      placeholder="Nhập lại mật khẩu mới..."
+                      value={confirmPasswordInput}
+                      onChange={e => setConfirmPasswordInput(e.target.value)}
+                      className="w-full p-2 rounded-xl border border-stone-200 font-mono text-xs sm:text-sm focus:border-amber-500 focus:outline-hidden"
+                    />
+                  </div>
+                </div>
+              )}
+
+              <p className="text-[11px] text-stone-500 bg-amber-50/60 p-2 rounded-xl border border-amber-200">
+                💡 Sau khi bấm xác nhận, hệ thống sẽ lưu mật khẩu mới và xuất phiếu bàn giao có đầy đủ thông tin để cô gửi phụ huynh hoặc in ấn.
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setPromptResetStudent(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmResetPassword}
+                disabled={isResetting}
+                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white font-extrabold text-xs shadow-xs flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <Key className="w-4 h-4" />
+                <span>{isResetting ? 'Đang cấp lại...' : 'Xác nhận cấp lại'}</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 1B: PHIẾU BÀN GIAO MẬT KHẨU AN TOÀN ================= */}
       {resetModalData && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
           <div className="bg-white rounded-3xl border-3 border-amber-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative">
@@ -1074,19 +1402,22 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
               <div className="bg-white p-3.5 rounded-xl border border-amber-200 text-center space-y-1">
                 <span className="text-xs text-stone-500 font-bold block uppercase tracking-wider">
-                  Mật khẩu mới (Hiển thị 1 lần cho cô)
+                  Mật khẩu mới (Hiển thị cho cô bàn giao)
                 </span>
                 <span className="text-2xl font-black font-mono text-amber-900 tracking-wider">
                   {resetModalData.newPassword}
                 </span>
-                <p className="text-[11px] text-stone-500">
-                  (Hoặc mã PIN 4 số: <strong>{resetModalData.student.pin}</strong>)
-                </p>
+                {resetModalData.pin && (
+                  <p className="text-[11px] text-stone-500">
+                    (Hoặc mã PIN 4 số đăng nhập nhanh: <strong>{resetModalData.pin}</strong>)
+                  </p>
+                )}
               </div>
 
               <div className="text-xs text-stone-600 space-y-1 pt-1">
                 <p>• Tên đăng nhập: <strong>{resetModalData.student.id}</strong> hoặc <strong>{resetModalData.student.username || resetModalData.student.id.toLowerCase()}</strong></p>
-                <p>• Giáo viên bàn giao: <strong>{TEACHER_CONFIG.name}</strong></p>
+                <p>• Lớp: <strong>{resetModalData.student.className || TEACHER_CONFIG.className}</strong></p>
+                <p>• Giáo viên chủ nhiệm: <strong>{TEACHER_CONFIG.name}</strong></p>
                 <p>• Thời gian cấp: {new Date(resetModalData.issuedAt).toLocaleString('vi-VN')}</p>
               </div>
             </div>
@@ -1110,10 +1441,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL 2: SỬA THÔNG TIN & CHUYỂN LỚP ================= */}
+      {/* ================= MODAL 2: CHỈNH SỬA TÀI KHOẢN HỌC SINH ================= */}
       {editingStudent && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-md w-full p-6 shadow-2xl space-y-4 animate-fade-in relative">
+          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
             <button
               onClick={() => setEditingStudent(null)}
               className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
@@ -1123,46 +1454,137 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
             <div>
               <h3 className="text-lg font-black text-emerald-950 font-display">
-                Chỉnh Sửa Hồ Sơ Học Sinh
+                CHỈNH SỬA TÀI KHOẢN HỌC SINH
               </h3>
               <p className="text-xs text-stone-500 font-medium">
-                Mã {editingStudent.id} • Hoàn toàn giữ nguyên bài viết và lịch sử học tập
+                Cập nhật thông tin tài khoản cho em • Giữ nguyên toàn bộ lịch sử học tập
               </p>
             </div>
 
-            <div className="space-y-3">
+            {/* Error banner */}
+            {editErrorMsg && (
+              <div className="p-3 bg-rose-50 border border-rose-300 rounded-xl text-xs text-rose-800 font-semibold flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{editErrorMsg}</span>
+              </div>
+            )}
+
+            <div className="space-y-3.5">
+              {/* Họ và tên thật */}
               <div>
                 <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Họ và tên đầy đủ:
+                  Họ và tên học sinh: <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={editName}
                   onChange={e => setEditName(e.target.value)}
+                  placeholder="Ví dụ: Phạm Tuệ An"
                   className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm font-semibold focus:border-emerald-500 focus:outline-hidden"
                 />
               </div>
 
+              {/* Tên gọi / Demo name */}
               <div>
                 <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Lớp học & Đơn vị:
+                  Tên gọi hiển thị (Chế độ ẩn danh):
+                </label>
+                <input
+                  type="text"
+                  value={editDemoName}
+                  onChange={e => setEditDemoName(e.target.value)}
+                  placeholder="Ví dụ: Tuệ An (Học sinh mẫu)"
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Mã học sinh (Readonly) & Tên đăng nhập (Editable!) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Mã học sinh (Cố định):
+                  </label>
+                  <input
+                    type="text"
+                    value={editingStudent.id}
+                    disabled
+                    className="w-full p-2.5 rounded-xl border border-stone-200 font-mono font-bold text-xs sm:text-sm bg-stone-100 text-stone-500 cursor-not-allowed"
+                  />
+                  <span className="text-[10px] text-stone-400 block mt-0.5">Theo mã số bộ GD</span>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Tên đăng nhập: <span className="text-rose-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={editUsername}
+                    onChange={e => setEditUsername(e.target.value.toLowerCase())}
+                    placeholder="Ví dụ: hs001 hoặc tuean"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 font-mono font-bold text-xs sm:text-sm text-emerald-950 focus:border-emerald-500 focus:outline-hidden"
+                  />
+                  <span className="text-[10px] text-stone-400 block mt-0.5">Dùng để đăng nhập</span>
+                </div>
+              </div>
+
+              {/* Lớp học (Editable with quick pills) */}
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Lớp học & Đơn vị trường: <span className="text-rose-500">*</span>
                 </label>
                 <input
                   type="text"
                   value={editClassName}
                   onChange={e => setEditClassName(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm font-semibold focus:border-emerald-500 focus:outline-hidden"
+                  placeholder="Ví dụ: Lớp 3 – Trường TH Lê Đức Thọ"
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm font-semibold focus:border-emerald-500 focus:outline-hidden mb-1.5"
                 />
+                <div className="flex flex-wrap gap-1.5">
+                  <span className="text-[11px] text-stone-400 self-center">Gợi ý nhanh:</span>
+                  {[
+                    'Lớp 3 – Trường TH Lê Đức Thọ',
+                    'Lớp 3A – Trường TH Lê Đức Thọ',
+                    'Lớp 3B – Trường TH Lê Đức Thọ',
+                    'Lớp 3C – Trường TH Lê Đức Thọ'
+                  ].map(cls => (
+                    <button
+                      key={cls}
+                      type="button"
+                      onClick={() => setEditClassName(cls)}
+                      className="px-2 py-0.5 bg-stone-100 hover:bg-emerald-50 text-[11px] font-semibold text-stone-700 rounded-md border border-stone-200 transition-colors"
+                    >
+                      {cls.split(' – ')[0]}
+                    </button>
+                  ))}
+                </div>
               </div>
 
+              {/* Trạng thái tài khoản */}
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Trạng thái tài khoản:
+                </label>
+                <select
+                  value={editAccountStatus}
+                  onChange={e => setEditAccountStatus(e.target.value as 'active' | 'locked')}
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm font-semibold bg-white"
+                >
+                  <option value="active">🟢 Đang hoạt động (Được đăng nhập)</option>
+                  <option value="locked">🔴 Tạm khóa (Tạm ngừng quyền đăng nhập)</option>
+                </select>
+              </div>
+
+              {/* Biểu tượng mầm hoa (Avatar) */}
               <div>
                 <label className="text-xs font-bold text-stone-700 block mb-1">
                   Biểu tượng mầm hoa (Avatar):
                 </label>
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-2 flex-wrap">
                   {['🌸', '🌻', '🌷', '🌼', '🌺', '🌱', '🦋', '🐝', '🍀', '🌿', '🌾', '🌲'].map(emoji => (
                     <button
                       key={emoji}
+                      type="button"
                       onClick={() => setEditAvatar(emoji)}
                       className={`w-8 h-8 rounded-xl border text-base flex items-center justify-center transition-all ${
                         editAvatar === emoji ? 'border-emerald-500 bg-emerald-100 scale-110 shadow-xs' : 'border-stone-200 bg-stone-50'
@@ -1177,16 +1599,77 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
             <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-100">
               <button
+                type="button"
                 onClick={() => setEditingStudent(null)}
                 className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
               >
                 Hủy
               </button>
               <button
+                type="button"
                 onClick={handleSaveEdit}
-                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs"
+                disabled={isSavingEdit}
+                className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs disabled:opacity-50"
               >
-                Lưu thay đổi
+                {isSavingEdit ? 'Đang lưu...' : 'Lưu thay đổi'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL 5: XÁC NHẬN XÓA TÀI KHOẢN HỌC SINH ================= */}
+      {deletingStudent && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl border-3 border-rose-400 max-w-md w-full p-6 shadow-2xl space-y-4 animate-fade-in relative">
+            <button
+              onClick={() => setDeletingStudent(null)}
+              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-start gap-3">
+              <div className="w-12 h-12 rounded-2xl bg-rose-100 border border-rose-300 flex items-center justify-center text-2xl text-rose-600 shrink-0">
+                <Trash2 className="w-6 h-6 text-rose-600" />
+              </div>
+              <div>
+                <h3 className="text-lg font-black text-rose-950 font-display">
+                  Xác Nhận Xóa Tài Khoản Học Sinh
+                </h3>
+                <p className="text-xs text-stone-500 mt-0.5">
+                  Quy trình xóa mềm an toàn của trường
+                </p>
+              </div>
+            </div>
+
+            <div className="p-3.5 bg-rose-50 border border-rose-200 rounded-2xl space-y-2 text-xs text-rose-950">
+              <p>
+                Cô có chắc chắn muốn xóa tài khoản của học sinh <strong>{deletingStudent.name}</strong> ({deletingStudent.id})?
+              </p>
+              <p className="text-stone-600">
+                • Sau khi xóa, tài khoản sẽ được chuyển vào mục <strong>"Đã xóa"</strong> và học sinh không thể đăng nhập.
+              </p>
+              <p className="text-stone-600 font-semibold text-emerald-800">
+                • <strong>LƯU Ý QUAN TRỌNG:</strong> Toàn bộ bài viết, lời nhận xét và lịch sử học tập của em vẫn được lưu giữ an toàn, cô có thể khôi phục lại bất cứ lúc nào!
+              </p>
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setDeletingStudent(null)}
+                className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDelete}
+                disabled={isDeletingStudent}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-xs shadow-xs disabled:opacity-50"
+              >
+                {isDeletingStudent ? 'Đang xóa...' : 'Xác nhận xóa tài khoản'}
               </button>
             </div>
           </div>

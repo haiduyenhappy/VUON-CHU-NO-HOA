@@ -22,7 +22,7 @@ export interface Student {
   consecutiveDays?: number; // Số ngày liên tiếp luyện viết
   className?: string; // Mặc định: Lớp 3 – Trường TH Lê Đức Thọ
   username?: string; // Tên đăng nhập tiện lợi (vd: hs001 hoặc phamtuean)
-  accountStatus?: 'active' | 'locked'; // Tình trạng tài khoản
+  accountStatus?: 'active' | 'locked' | 'deleted'; // Tình trạng tài khoản: đang hoạt động, tạm khóa, hoặc đã xóa
   lastLogin?: string; // Lần đăng nhập gần nhất
   temporaryPassword?: string; // Mật khẩu mới cấp một lần
   linkedCaregivers?: LinkedCaregiver[]; // Danh sách tài khoản gia đình liên kết

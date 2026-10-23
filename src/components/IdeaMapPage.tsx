@@ -433,8 +433,11 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          taskTitle: promptText.slice(0, 50),
-          gardenType: 'ke_chuyen',
+          taskTitle: promptText,
+          prompt: promptText,
+          grade,
+          genre,
+          specialWishes,
           chatHistory: []
         })
       });
@@ -442,6 +445,19 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       if (outlineData.outline?.length) {
         setActiveOutline(outlineData.outline);
         setInitialOutlineBackup(outlineData.outline);
+      }
+      if (outlineData.detailedOutline) {
+        setDetailedOutline(outlineData.detailedOutline);
+      }
+
+      // Update Socratic question contextually
+      const pLow = promptText.toLowerCase();
+      if (pLow.includes('nhà') || pLow.includes('góc') || pLow.includes('phòng') || pLow.includes('bàn học')) {
+        setSocraticQuestion('Trong ngôi nhà thân yêu, góc nhỏ nào hoặc món đồ nào khiến con cảm thấy ấm áp và yêu quý nhất?');
+      } else if (pLow.includes('bạn') || pLow.includes('thầy') || pLow.includes('cô') || pLow.includes('mẹ') || pLow.includes('bà')) {
+        setSocraticQuestion('Kỷ niệm hoặc cử chỉ đáng yêu nào của người ấy làm con nhớ mãi không quên?');
+      } else {
+        setSocraticQuestion(`Khi nghĩ về "${promptText.slice(0, 35)}...", hình ảnh hoặc kỷ niệm nào hiện lên đầu tiên trong lòng con?`);
       }
 
       // 3. Fetch vocabulary & imagery bank
@@ -1282,11 +1298,17 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         <div className="pt-2 flex justify-center">
           <button
             onClick={handleGenerateIdeaMap}
-            disabled={isUnderstandingLoading}
-            className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-purple-500 to-sky-500 hover:from-pink-600 hover:to-sky-600 text-white font-black text-sm sm:text-base shadow-md transition-all flex items-center gap-2"
+            disabled={isUnderstandingLoading || isLoadingVocab}
+            className="px-8 py-3.5 rounded-2xl bg-gradient-to-r from-pink-500 via-purple-500 to-sky-500 hover:from-pink-600 hover:to-sky-600 text-white font-black text-sm sm:text-base shadow-md transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
           >
-            <Sparkles className="w-5 h-5" />
-            <span>Tạo bản đồ ý tưởng</span>
+            <Sparkles className={`w-5 h-5 ${isUnderstandingLoading || isLoadingVocab ? 'animate-spin text-yellow-300' : ''}`} />
+            <span>
+              {isUnderstandingLoading 
+                ? '🌸 Hoa Nhỏ đang khởi tạo dàn ý...' 
+                : isLoadingVocab 
+                ? '🌼 Đang chọn lọc từ ngữ sinh động...' 
+                : 'Tạo bản đồ ý tưởng'}
+            </span>
           </button>
         </div>
       </div>

@@ -242,10 +242,14 @@ app.get('/api/students', (req, res) => {
 
 // 3. Authenticate with flexible username/password/code support
 app.post('/api/auth', (req, res) => {
-  const { role, code, studentId, username, password } = req.body;
+  const { role, code, studentId, username, identifier, password } = req.body;
   const db = loadDatabase();
-  const rawInput = (username || studentId || code || '').trim();
+  const rawInput = (username || studentId || identifier || code || '').trim();
   const rawPass = (password || code || '').trim();
+
+  if (!rawInput && role !== 'teacher') {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập mã học sinh hoặc tên đăng nhập.' });
+  }
 
   if (role === 'teacher') {
     const validNames = ['cogaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'];
@@ -268,11 +272,14 @@ app.post('/api/auth', (req, res) => {
     const student = db.students.find(s => 
       s.parentCode.toUpperCase() === cleanCode || 
       s.id.toUpperCase() === cleanCode ||
-      s.name.toLowerCase().includes(rawInput.toLowerCase()) ||
+      (rawInput.length >= 2 && s.name.toLowerCase().includes(rawInput.toLowerCase())) ||
       cleanCode === `PH${s.id.replace(/[^0-9]/g, '')}`
     );
 
     if (student) {
+      if (student.accountStatus === 'deleted') {
+        return res.status(403).json({ success: false, message: 'Tài khoản học sinh này đã bị xóa hoặc ngưng sử dụng. Quý phụ huynh vui lòng liên hệ Cô Nguyễn Thị Hải Duyên.' });
+      }
       if (student.accountStatus === 'locked') {
         return res.status(403).json({ success: false, message: 'Tài khoản học sinh này đang tạm khóa. Quý phụ huynh vui lòng liên hệ Cô Nguyễn Thị Hải Duyên.' });
       }
@@ -289,16 +296,28 @@ app.post('/api/auth', (req, res) => {
     const numMatch = cleanInput.replace(/[^0-9]/g, '');
     const paddedId = numMatch ? `HS${numMatch.padStart(3, '0')}` : '';
 
-    const student = db.students.find(s => 
+    // First try exact matches (username, ID, padded ID, exact full name)
+    let student = db.students.find(s => 
       s.id.toLowerCase() === cleanInput ||
-      (paddedId && s.id === paddedId) ||
-      s.name.toLowerCase() === cleanInput ||
-      s.name.toLowerCase().includes(cleanInput) ||
-      s.demoName.toLowerCase().includes(cleanInput)
+      (s.username && s.username.toLowerCase() === cleanInput) ||
+      (paddedId && s.id.toLowerCase() === paddedId.toLowerCase()) ||
+      s.name.toLowerCase() === cleanInput
     );
+
+    // If still not found and input has at least 3 letters, try substring name search
+    if (!student && cleanInput.length >= 3) {
+      student = db.students.find(s => 
+        s.name.toLowerCase().includes(cleanInput) ||
+        s.demoName.toLowerCase().includes(cleanInput)
+      );
+    }
 
     if (!student) {
       return res.status(404).json({ success: false, message: 'Không tìm thấy tên hoặc mã số học sinh này. Em hãy thử nhập HS001 nhé!' });
+    }
+
+    if (student.accountStatus === 'deleted') {
+      return res.status(403).json({ success: false, message: 'Tài khoản này đã bị xóa khỏi danh sách lớp. Em hãy liên hệ Cô Nguyễn Thị Hải Duyên nhé!' });
     }
 
     if (student.accountStatus === 'locked') {
@@ -447,9 +466,9 @@ app.post('/api/teacher/review', (req, res) => {
 // QUẢN LÝ TÀI KHOẢN LỚP EM & GIA ĐÌNH (GÓC CÔ GIÁO)
 // =========================================================================
 
-// Cập nhật thông tin học sinh (Họ tên, lớp học, avatar - giữ nguyên lịch sử)
+// Cập nhật thông tin học sinh (Họ tên, tên gọi, tên đăng nhập, lớp học, avatar, trạng thái)
 app.post('/api/teacher/students/update', (req, res) => {
-  const { id, name, demoName, avatar, className } = req.body;
+  const { id, name, demoName, avatar, className, username, accountStatus } = req.body;
   const db = loadDatabase();
   const student = db.students.find(s => s.id === id);
 
@@ -457,17 +476,70 @@ app.post('/api/teacher/students/update', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
   }
 
-  if (name) student.name = name.trim();
-  if (demoName) student.demoName = demoName.trim();
+  // Validate duplicate username if changed
+  if (username && username.trim()) {
+    const cleanUsername = username.trim().toLowerCase();
+    const duplicate = db.students.find(s => s.id !== id && s.username?.toLowerCase() === cleanUsername);
+    if (duplicate) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Tên đăng nhập "${cleanUsername}" đã được sử dụng bởi học sinh ${duplicate.name} (${duplicate.id}). Vui lòng chọn tên đăng nhập khác.` 
+      });
+    }
+    student.username = cleanUsername;
+  }
+
+  if (name && name.trim()) student.name = name.trim();
+  if (demoName && demoName.trim()) student.demoName = demoName.trim();
   if (avatar) student.avatar = avatar;
-  if (className) student.className = className.trim();
+  if (className && className.trim()) student.className = className.trim();
+  if (accountStatus && ['active', 'locked', 'deleted'].includes(accountStatus)) {
+    student.accountStatus = accountStatus;
+  }
 
   saveDatabase(db);
   res.json({ success: true, student });
 });
 
-// Cấp lại mật khẩu an toàn (Hiển thị 1 lần duy nhất cho cô in phiếu bàn giao)
+// Cấp lại mật khẩu an toàn (Có 2 chế độ: tự động sinh hoặc cô tự đặt mật khẩu)
 app.post('/api/teacher/students/reset-password', (req, res) => {
+  const { id, customPassword, newPassword: explicitPassword } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === id);
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  let finalPassword = '';
+  if (customPassword && typeof customPassword === 'string' && customPassword.trim()) {
+    finalPassword = customPassword.trim();
+  } else if (explicitPassword && typeof explicitPassword === 'string' && explicitPassword.trim()) {
+    finalPassword = explicitPassword.trim();
+  } else {
+    // Sinh mật khẩu an toàn dễ nhớ cho học sinh tiểu học (vd: HoaNho#8261)
+    const randomSuffix = Math.floor(1000 + Math.random() * 9000);
+    finalPassword = `HoaNho#${randomSuffix}`;
+  }
+
+  student.temporaryPassword = finalPassword;
+  const digitsOnly = finalPassword.replace(/[^0-9]/g, '');
+  student.pin = digitsOnly.length >= 4 ? digitsOnly.slice(-4) : (student.pin || '2016');
+  saveDatabase(db);
+
+  res.json({
+    success: true,
+    student,
+    newPassword: finalPassword,
+    pin: student.pin,
+    issuedAt: new Date().toISOString(),
+    teacherName: 'Cô Nguyễn Thị Hải Duyên',
+    school: 'Trường Tiểu học Lê Đức Thọ'
+  });
+});
+
+// Xóa mềm tài khoản học sinh (giữ nguyên toàn bộ bài viết, nhận xét và lịch sử học tập)
+app.post('/api/teacher/students/delete', (req, res) => {
   const { id } = req.body;
   const db = loadDatabase();
   const student = db.students.find(s => s.id === id);
@@ -476,21 +548,33 @@ app.post('/api/teacher/students/reset-password', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
   }
 
-  // Sinh mật khẩu an toàn dễ nhớ cho học sinh tiểu học (vd: HoaNho8261 hoặc 6 số an toàn)
-  const randomSuffix = Math.floor(1000 + Math.random() * 9000);
-  const newPassword = `HoaNho#${randomSuffix}`;
-
-  student.temporaryPassword = newPassword;
-  student.pin = String(randomSuffix);
+  student.accountStatus = 'deleted';
   saveDatabase(db);
 
-  res.json({
-    success: true,
-    student,
-    newPassword,
-    issuedAt: new Date().toISOString(),
-    teacherName: 'Cô Nguyễn Thị Hải Duyên',
-    school: 'Trường Tiểu học Lê Đức Thọ'
+  res.json({ 
+    success: true, 
+    message: `Đã xóa tài khoản học sinh ${student.name} (${student.id}). Dữ liệu bài viết vẫn được lưu giữ an toàn.`, 
+    student 
+  });
+});
+
+// Khôi phục tài khoản học sinh đã xóa
+app.post('/api/teacher/students/restore', (req, res) => {
+  const { id } = req.body;
+  const db = loadDatabase();
+  const student = db.students.find(s => s.id === id);
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  student.accountStatus = 'active';
+  saveDatabase(db);
+
+  res.json({ 
+    success: true, 
+    message: `Đã khôi phục tài khoản học sinh ${student.name} (${student.id}) thành công.`, 
+    student 
   });
 });
 
@@ -708,7 +792,7 @@ Nếu ảnh quá mờ, bị che mất chữ, thiếu nội dung hoặc ánh sán
     parts.push({ text: userPrompt });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts },
       config: {
         systemInstruction,
@@ -801,7 +885,7 @@ app.post('/api/ai/ocr-prompt', async (req, res) => {
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts },
       config: {
         responseMimeType: 'application/json',
@@ -876,7 +960,7 @@ Hãy trả về JSON theo cấu trúc:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -906,63 +990,110 @@ Hãy trả về JSON theo cấu trúc:
 
 // Dynamic Contextual Vocabulary & Imagery Bank ("Từ hay – Hình ảnh – Câu mẫu")
 app.post('/api/ai/vocabulary-imagery', async (req, res) => {
-  const { prompt, genre, grade = 3, studentIdeas } = req.body;
+  const { prompt = '', genre, grade = 3, studentIdeas } = req.body;
+  const pLower = (prompt || '').toLowerCase();
 
-  const defaultBank = {
+  // Smart topic-based default bank fallback
+  let defaultBank = {
     goodWords: [
-      { word: 'thoăn thoắt', meaningAndUsage: 'Tả cử chỉ nhanh nhẹn, khéo léo của bàn tay khi làm việc' },
-      { word: 'ấm áp', meaningAndUsage: 'Gợi cảm giác yêu thương, che chở dịu dàng' },
-      { word: 'vàng ươm', meaningAndUsage: 'Màu sắc vàng tươi tắn, gợi sự no đủ, đẹp mắt' },
-      { word: 'rộn rã', meaningAndUsage: 'Âm thanh vui tươi, náo nức vang lên liên hồi' }
+      { word: 'ấm áp', meaningAndUsage: 'Gợi cảm giác yêu thương, thân thuộc và che chở' },
+      { word: 'gắn bó', meaningAndUsage: 'Tình cảm thân thiết, không rời xa' },
+      { word: 'thân thương', meaningAndUsage: 'Gần gũi và đầy ắp kỷ niệm đẹp' },
+      { word: 'rạng rỡ', meaningAndUsage: 'Tươi vui, tràn đầy sức sống và niềm vui' }
     ],
     imageries: [
-      { type: 'So sánh', example: 'Đôi mắt bà hiền từ như vầng trăng rằm', explanation: 'Giúp người đọc cảm nhận được tình thương bao la của bà' },
-      { type: 'Nhân hóa', example: 'Những hạt nắng sớm nhảy nhót trên cành lá', explanation: 'Làm cho thiên nhiên trở nên sinh động và đáng yêu như một người bạn' }
+      { type: 'So sánh', example: 'Gần gũi và thân thiết như một người bạn tri kỉ', explanation: 'Giúp người đọc cảm nhận rõ sự gắn bó sâu đậm' },
+      { type: 'Nhân hóa', example: 'Mỗi góc nhỏ dường như đều biết mỉm cười đón em trở về', explanation: 'Làm cho sự vật trở nên có tâm hồn, ấm áp như con người' }
     ],
     sampleSentences: [
       {
         type: 'mo_bai',
         label: 'Gợi ý mở đoạn tự nhiên',
-        sentence: 'Trong gia đình em, người luôn dành cho em những cử chỉ dịu dàng nhất chính là bà ngoại.',
-        whyItIsGood: 'Nêu ngay được người em yêu quý và gắn liền với cảm xúc ấm áp.'
+        sentence: `Khi nghĩ về ${prompt.slice(0, 35) || 'điều thân thương này'}, lòng em lại dâng lên bao cảm xúc ấm áp.`,
+        whyItIsGood: 'Nêu trực tiếp đối tượng với cảm xúc chân thật, không sáo rỗng.'
       },
       {
         type: 'mieu_ta',
-        label: 'Gợi ý miêu tả sinh động',
-        sentence: 'Mỗi buổi tối, bàn tay ram ráp của bà xoa lưng ru em vào giấc ngủ êm đềm.',
-        whyItIsGood: 'Có chi tiết thật (bàn tay ram ráp) làm câu văn xúc động lòng người.'
+        label: 'Gợi ý chi tiết sinh động',
+        sentence: 'Mỗi chi tiết nhỏ nơi đây đều lưu giữ biết bao kỷ niệm đẹp đẽ của tuổi thơ em.',
+        whyItIsGood: 'Có liên hệ với kỷ niệm cá nhân giúp câu văn có hồn và cảm xúc sâu lắng.'
       },
       {
         type: 'ket_bai',
         label: 'Gợi ý câu kết ấn tượng',
-        sentence: 'Em thầm hứa sẽ luôn chăm ngoan để nụ cười hiền hậu của bà mãi nở trên môi.',
-        whyItIsGood: 'Bày tỏ lòng hiếu thảo và lời hứa hẹn chân thành của đứa cháu nhỏ.'
+        sentence: 'Dù mai này lớn khôn đi xa, hình ảnh ấy sẽ luôn in đậm trong tâm trí em.',
+        whyItIsGood: 'Thể hiện tình cảm gắn bó lâu dài và lời hứa trân trọng những điều thân thương.'
       }
     ],
     creativeIdeas: [
-      'Em có thể kể về mùi hương quen thuộc (mùi trầu cay, mùi dầu gió ấm nồng)',
-      'Nhớ lại một câu nói dặn dò thân thương của người ấy'
+      'Em có thể kể về một mùi hương quen thuộc gắn liền với nơi ấy',
+      'Nhớ lại một khoảnh khắc yên bình nhất mà em từng trải qua'
     ]
   };
+
+  // Specific fallbacks for house / corner / desk topics
+  if (pLower.includes('nhà') || pLower.includes('góc') || pLower.includes('phòng') || pLower.includes('bàn') || pLower.includes('cửa sổ')) {
+    defaultBank = {
+      goodWords: [
+        { word: 'ấm cúng', meaningAndUsage: 'Gợi không gian gia đình thân thương, an yên và chan chứa tình yêu thương' },
+        { word: 'ngăn nắp', meaningAndUsage: 'Mọi đồ dùng được xếp đặt gọn gàng, trật tự, sạch sẽ' },
+        { word: 'xinh xắn', meaningAndUsage: 'Nhỏ nhắn, đáng yêu và ưa nhìn' },
+        { word: 'yên bình', meaningAndUsage: 'Tĩnh lặng, dễ chịu, không ồn ào vội vã' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Ngôi nhà như một tổ ấm êm đềm che chở cho em qua bao ngày mưa nắng', explanation: 'Gợi cảm giác an toàn và sự chở che thiêng liêng của gia đình' },
+        { type: 'Nhân hóa', example: 'Góc học tập nhỏ dường như luôn kiên nhẫn đợi em trở về mỗi buổi tan trường', explanation: 'Biến góc nhỏ thành một người bạn thầm lặng và gắn bó' }
+      ],
+      sampleSentences: [
+        {
+          type: 'mo_bai',
+          label: 'Gợi ý mở đoạn tả ngôi nhà / góc nhỏ',
+          sentence: 'Trong ngôi nhà thân yêu của em, nơi em gắn bó nhiều nhất chính là góc học tập nhỏ xinh bên khung cửa sổ.',
+          whyItIsGood: 'Giới thiệu ngay góc nhỏ yêu thích và vị trí cụ thể tràn ngập ánh sáng.'
+        },
+        {
+          type: 'mieu_ta',
+          label: 'Gợi ý miêu tả chi tiết',
+          sentence: 'Mỗi buổi chiều, từng tia nắng vàng ấm áp lại rọi qua ô cửa kính, sưởi ấm hàng sách được xếp ngay ngắn.',
+          whyItIsGood: 'Kết hợp ánh sáng thiên nhiên với sự ngăn nắp, tạo cảm giác êm đềm.'
+        },
+        {
+          type: 'ket_bai',
+          label: 'Gợi ý câu kết lắng đọng',
+          sentence: 'Góc nhỏ ấy không chỉ giúp em học tập chăm chỉ mà còn là nơi lưu giữ những ước mơ thơ ấu của em.',
+          whyItIsGood: 'Nâng ý nghĩa của góc nhỏ lên thành nơi nuôi dưỡng ước mơ.'
+        }
+      ],
+      creativeIdeas: [
+        'Kể về âm thanh quen thuộc trong nhà (tiếng đồng hồ tích tắc, tiếng mẹ nấu cơm)',
+        'Chi tiết về một món đồ nhỏ em tự tay trang trí trên bàn'
+      ]
+    };
+  }
 
   if (!ai) {
     return res.json(defaultBank);
   }
 
   try {
-    const userPrompt = `Đề bài: "${prompt}"
-Lớp: ${grade}
-Dạng bài: "${genre}"
-Ý tưởng học sinh đã kể: "${studentIdeas || ''}"
+    const systemInstruction = `Bạn là HOA NHỎ - trợ lý học tập sư phạm Tiếng Việt tiểu học (Lớp ${grade}).
+Mục tiêu: Cung cấp kho từ ngữ, hình ảnh so sánh, nhân hóa và câu mẫu cho học sinh.
+QUY TẮC CỐT LÕI BẮT BUỘC:
+1. BÁM SÁT 100% ĐỀ BÀI CỦA HỌC SINH: "${prompt}".
+   - Nếu đề bài yêu cầu tả ngôi nhà hoặc góc nhỏ yêu thích, TOÀN BỘ từ hay, biện pháp tu từ, câu mẫu PHẢI miêu tả ngôi nhà, căn phòng, góc nhỏ, đồ vật trong nhà; TUYỆT ĐỐI KHÔNG gợi ý về hoạt động ngoài trời hay đề tài không liên quan!
+   - Nếu đề bài là tả người thân, đồ vật, hay kể lại một hoạt động thì từ ngữ và câu mẫu phải phục vụ chính xác đề tài đó.
+2. Lớp ${grade}: Ngôn ngữ trong sáng, gần gũi, giàu sức gợi, không dùng từ quá khó hay lý thuyết sáo rỗng.
+3. Câu mẫu kèm lý giải "vì sao câu này hay" để hướng dẫn em học cách quan sát và dùng từ.`;
 
-Hãy tạo kho từ ngữ và hình ảnh sáng tạo ngữ cảnh hóa chặt chẽ theo chủ đề trên.
-QUY TẮC:
-- Không dùng từ ngữ sáo rỗng chung chung.
-- Từ hay phải kèm giải thích nghĩa và cách vận dụng ngắn gọn.
-- Câu mẫu phải có lý giải "vì sao câu này hay" để học sinh học cách diễn đạt, KHÔNG đưa nguyên cả bài văn hoàn chỉnh.`;
+    const userPrompt = `Đề bài học sinh nhập: "${prompt}"
+Lớp: ${grade}
+Dạng bài em chọn: "${genre}"
+Ý tưởng bổ sung của em: "${studentIdeas || ''}"
+
+Hãy tạo kho từ ngữ và hình ảnh sáng tạo ngữ cảnh hóa CHẶT CHẼ THEO ĐÚNG ĐỀ BÀI TRÊN.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: userPrompt,
       config: {
         responseMimeType: 'application/json',
@@ -1067,7 +1198,7 @@ Hãy trả về JSON:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -1149,7 +1280,7 @@ ${isShortTask ? `
 TUYỆT ĐỐI KHÔNG GHÉP THÀNH ĐOẠN VĂN VIẾT SẴN! MỖI Ý LÀ MỘT GỢI Ý GẠCH ĐẦU DÒNG ĐỂ EM TỰ VIẾT.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: userPrompt,
       config: {
         responseMimeType: 'application/json',
@@ -1242,7 +1373,7 @@ NGUYÊN TẮC:
     ];
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents,
       config: {
         systemInstruction,
@@ -1315,7 +1446,7 @@ Trả về JSON:
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: { parts },
       config: {
         responseMimeType: 'application/json',
@@ -1476,7 +1607,7 @@ Hãy trả về định dạng JSON chính xác:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -1531,7 +1662,7 @@ QUY TẮC CỐT LÕI:
     ];
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents,
       config: {
         systemInstruction,
@@ -1561,7 +1692,7 @@ app.post('/api/ai/ask-idea', async (req, res) => {
       }
     ];
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents,
       config: { systemInstruction, temperature: 0.7 }
     });
@@ -1572,49 +1703,135 @@ app.post('/api/ai/ask-idea', async (req, res) => {
 });
 
 app.post('/api/ai/synthesize-outline', async (req, res) => {
-  const { taskTitle, prompt: rawPrompt, expectedLength, gardenType, chatHistory } = req.body;
-  const isShort23 = (expectedLength && (expectedLength.includes('2–3') || expectedLength.includes('2-3'))) ||
-                    (taskTitle && (taskTitle.includes('2–3 câu') || taskTitle.includes('2-3 câu'))) ||
-                    (rawPrompt && (rawPrompt.includes('2–3 câu') || rawPrompt.includes('2-3 câu')));
+  const { taskTitle, prompt: rawPrompt, expectedLength, gardenType, chatHistory, grade = 3, genre } = req.body;
+  const targetPrompt = (rawPrompt || taskTitle || '').trim();
+  const pLower = targetPrompt.toLowerCase();
 
-  const fallback = isShort23 ? [
-    { id: '1', section: 'Câu 1 (Mở đầu)', content: 'Giới thiệu người bạn và tình cảm yêu quý của em.' },
-    { id: '2', section: 'Câu 2 (Cảm xúc)', content: 'Kể nét đáng yêu hoặc việc bạn làm khiến em xúc động.' },
-    { id: '3', section: 'Câu 3 (Kết lại)', content: 'Bày tỏ tình bạn gắn bó và mong ước thân thiết mãi.' }
+  const isShort23 = (expectedLength && (expectedLength.includes('2–3') || expectedLength.includes('2-3'))) ||
+                    targetPrompt.includes('2–3 câu') || targetPrompt.includes('2-3 câu') || targetPrompt.includes('3–4 câu');
+
+  // Intelligent fallback detailed outline based on prompt topic
+  let defaultDetailed = {
+    moDoan: [
+      `Giới thiệu đối tượng hoặc sự việc mà con muốn viết: ${targetPrompt.slice(0, 45) || 'chủ đề yêu thích'}.`,
+      'Nêu cảm xúc chung hoặc thời gian, không gian gắn bó.'
+    ],
+    phatTrienDoan: [
+      'Miêu tả các nét nổi bật nhất (hình dáng, màu sắc, chi tiết gần gũi).',
+      'Kể một kỷ niệm hoặc việc làm quen thuộc gắn với đối tượng đó.',
+      'Sử dụng một hình ảnh so sánh hoặc từ ngữ gợi tả sinh động.'
+    ],
+    ketDoan: [
+      'Bày tỏ tình cảm yêu quý, gắn bó chân thành của con.',
+      'Mong ước hoặc lời hứa giữ gìn, trân trọng.'
+    ]
+  };
+
+  if (pLower.includes('nhà') || pLower.includes('góc') || pLower.includes('phòng') || pLower.includes('bàn học') || pLower.includes('cửa sổ')) {
+    defaultDetailed = {
+      moDoan: [
+        'Giới thiệu ngôi nhà thân yêu hoặc góc nhỏ mà em yêu thích nhất.',
+        'Vị trí của góc nhỏ (ở cạnh cửa sổ, trong căn phòng ấm cúng...).'
+      ],
+      phatTrienDoan: [
+        'Khung cảnh và ánh sáng chiếu vào góc nhỏ (nắng sớm dịu dàng, không khí thoáng mát).',
+        'Cách sắp xếp đồ đạc gọn gàng, ngăn nắp (bàn ghế, giá sách, đèn học).',
+        'Chi tiết hoặc món đồ mà em yêu quý nhất ở nơi này.',
+        'Những hoạt động quen thuộc em thường làm ở góc nhỏ (ngồi học, đọc truyện, vẽ tranh).'
+      ],
+      ketDoan: [
+        'Cảm xúc yên bình, ấm áp và gắn bó của em với góc nhỏ này.',
+        'Lời hứa luôn giữ gìn góc nhỏ sạch đẹp và ngăn nắp.'
+      ]
+    };
+  }
+
+  const defaultOutline = isShort23 ? [
+    { id: '1', section: 'Câu 1 (Mở đầu)', content: defaultDetailed.moDoan[0] || 'Giới thiệu điều em yêu quý.' },
+    { id: '2', section: 'Câu 2 (Chi tiết/Cảm xúc)', content: defaultDetailed.phatTrienDoan[0] || 'Kể nét nổi bật và cảm xúc của em.' },
+    { id: '3', section: 'Câu 3 (Kết lại)', content: defaultDetailed.ketDoan[0] || 'Bày tỏ tình cảm gắn bó của em.' }
   ] : [
-    { id: '1', section: 'Mở đoạn', content: 'Giới thiệu điều em muốn viết.' },
-    { id: '2', section: 'Thân đoạn', content: 'Kể hoặc tả chi tiết nổi bật nhất.' },
-    { id: '3', section: 'Kết đoạn', content: 'Cảm xúc và mong ước của em.' }
+    { id: '1', section: 'Mở đoạn', content: defaultDetailed.moDoan.join(' ') },
+    { id: '2', section: 'Phát triển đoạn', content: defaultDetailed.phatTrienDoan.join(' ') },
+    { id: '3', section: 'Kết đoạn', content: defaultDetailed.ketDoan.join(' ') }
   ];
 
-  if (!ai) return res.json({ outline: fallback });
+  if (!ai) {
+    return res.json({ outline: defaultOutline, detailedOutline: defaultDetailed });
+  }
+
   try {
-    const prompt = isShort23 
-      ? `Đề bài: "${taskTitle || rawPrompt}". Đề chỉ yêu cầu viết 2–3 CÂU (KHÔNG tạo dàn ý bài văn dài 3 phần). Hãy tạo dàn ý ngắn gọn đúng 3 ý tương ứng 3 câu ngắn (id, section, content): Câu 1 (Mở đầu/Giới thiệu), Câu 2 (Cảm xúc/Hành động chính), Câu 3 (Cảm nghĩ kết lại).`
-      : `Từ cuộc trò chuyện về đề "${taskTitle || rawPrompt}", hãy tổng hợp thành dàn ý 3 mục JSON (id, section, content) bằng chính ý tưởng của học sinh.`;
+    const systemInstruction = `Bạn là HOA NHỎ - trợ lý học tập sư phạm Tiếng Việt dành cho học sinh Lớp ${grade}.
+Nhiệm vụ: Tạo DÀN Ý 3 PHẦN (Mở đoạn, Phát triển đoạn, Kết đoạn) bám sát 100% đề bài học sinh đưa ra.
+QUY TẮC CỐT LÕI:
+1. TUYỆT ĐỐI BÁM SÁT ĐỀ BÀI: "${targetPrompt}".
+   - Nếu học sinh nhập đề bài về tả ngôi nhà hoặc góc nhỏ yêu thích: Dàn ý PHẢI tập trung vào ngôi nhà, căn phòng, góc bàn học, cách bài trí, đồ vật và cảm giác ấm cúng gia đình. TUYỆT ĐỐI KHÔNG lạc sang hoạt động ngoài trời hay sự việc không liên quan.
+2. Cung cấp cả 'outline' (3 phần chính) và 'detailedOutline' (gồm moDoan: mảng các câu gợi ý, phatTrienDoan: mảng các gợi ý chi tiết, ketDoan: mảng các gợi ý cảm xúc).
+3. Mỗi ý là một gợi ý ngắn gọn, kích thích tư duy, KHÔNG viết thành bài văn sẵn.`;
+
+    const userPrompt = `Đề bài: "${targetPrompt}"
+Lớp: ${grade}
+Dạng bài: "${genre || 'Tự do'}"
+Độ dài mong muốn: ${isShort23 ? '2-3 câu ngắn' : 'Đoạn văn hoàn chỉnh 5-8 câu'}
+
+Hãy trả về JSON theo định dạng:
+{
+  "outline": [
+    { "id": "1", "section": "Mở đoạn", "content": "Gợi ý mở đoạn" },
+    { "id": "2", "section": "Phát triển đoạn", "content": "Gợi ý phát triển đoạn" },
+    { "id": "3", "section": "Kết đoạn", "content": "Gợi ý kết đoạn" }
+  ],
+  "detailedOutline": {
+    "moDoan": ["Gạch đầu dòng 1", "Gạch đầu dòng 2"],
+    "phatTrienDoan": ["Gạch đầu dòng 1", "Gạch đầu dòng 2", "Gạch đầu dòng 3", "Gạch đầu dòng 4"],
+    "ketDoan": ["Gạch đầu dòng 1", "Gạch đầu dòng 2"]
+  }
+}`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
-      contents: prompt,
+      model: 'gemini-2.5-flash',
+      contents: userPrompt,
       config: {
+        systemInstruction,
         responseMimeType: 'application/json',
         responseSchema: {
-          type: Type.ARRAY,
-          items: {
-            type: Type.OBJECT,
-            properties: {
-              id: { type: Type.STRING },
-              section: { type: Type.STRING },
-              content: { type: Type.STRING }
+          type: Type.OBJECT,
+          properties: {
+            outline: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  id: { type: Type.STRING },
+                  section: { type: Type.STRING },
+                  content: { type: Type.STRING }
+                },
+                required: ['id', 'section', 'content']
+              }
             },
-            required: ['id', 'section', 'content']
-          }
+            detailedOutline: {
+              type: Type.OBJECT,
+              properties: {
+                moDoan: { type: Type.ARRAY, items: { type: Type.STRING } },
+                phatTrienDoan: { type: Type.ARRAY, items: { type: Type.STRING } },
+                ketDoan: { type: Type.ARRAY, items: { type: Type.STRING } }
+              },
+              required: ['moDoan', 'phatTrienDoan', 'ketDoan']
+            }
+          },
+          required: ['outline', 'detailedOutline']
         }
       }
     });
-    res.json({ outline: JSON.parse(response.text?.trim() || '[]') || fallback });
+
+    const parsed = JSON.parse(response.text?.trim() || '{}');
+    res.json({
+      outline: parsed.outline || defaultOutline,
+      detailedOutline: parsed.detailedOutline || defaultDetailed
+    });
   } catch (e) {
-    res.json({ outline: fallback });
+    console.error('Error synthesizing outline:', e);
+    res.json({ outline: defaultOutline, detailedOutline: defaultDetailed });
   }
 });
 
@@ -1629,7 +1846,7 @@ app.post('/api/ai/feedback', async (req, res) => {
   if (!ai || !studentText) return res.json(fallback);
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-3.8-flash',
+      model: 'gemini-2.5-flash',
       contents: `Đề: "${taskTitle}". Bài học sinh: "${studentText}". Nhận xét 3 phần: flowerPraise, leafReminder, smallChallenge, suggestedStars`,
       config: {
         responseMimeType: 'application/json',

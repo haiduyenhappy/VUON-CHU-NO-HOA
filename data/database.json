@@ -5,22 +5,51 @@
       "name": "Phạm Đăng Tuệ An",
       "demoName": "Tuệ An (Học sinh mẫu)",
       "avatar": "🌸",
-      "pin": "2016",
+      "pin": "2026",
       "parentCode": "PH001",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 24
+      "starsEarned": 24,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs001",
+      "accountStatus": "active",
+      "lastLogin": "10:13:55 23/10/2026",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em An",
+          "phone": "0910002345",
+          "code": "PH001",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ],
+      "temporaryPassword": "HoaNho2026"
     },
     {
       "id": "HS002",
-      "name": "Trần Lưu Bảo An",
+      "name": "Trần Bảo An",
       "demoName": "Bảo An (Học sinh mẫu)",
       "avatar": "🌻",
       "pin": "2016",
       "parentCode": "PH002",
       "treeLevel": 4,
       "flowersEarned": 12,
-      "starsEarned": 35
+      "starsEarned": 35,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs002",
+      "accountStatus": "active",
+      "lastLogin": "10:15:03 23/10/2026",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em An",
+          "phone": "0910004690",
+          "code": "PH002",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS003",
@@ -31,7 +60,21 @@
       "parentCode": "PH003",
       "treeLevel": 2,
       "flowersEarned": 5,
-      "starsEarned": 15
+      "starsEarned": 15,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs003",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Anh",
+          "phone": "0910007035",
+          "code": "PH003",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS004",
@@ -42,7 +85,21 @@
       "parentCode": "PH004",
       "treeLevel": 3,
       "flowersEarned": 9,
-      "starsEarned": 26
+      "starsEarned": 26,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs004",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Anh",
+          "phone": "0910009380",
+          "code": "PH004",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS005",
@@ -53,7 +110,21 @@
       "parentCode": "PH005",
       "treeLevel": 4,
       "flowersEarned": 11,
-      "starsEarned": 32
+      "starsEarned": 32,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs005",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Anh",
+          "phone": "0910011725",
+          "code": "PH005",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS006",
@@ -64,7 +135,21 @@
       "parentCode": "PH006",
       "treeLevel": 2,
       "flowersEarned": 6,
-      "starsEarned": 18
+      "starsEarned": 18,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs006",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Ân",
+          "phone": "0910014070",
+          "code": "PH006",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS007",
@@ -75,7 +160,21 @@
       "parentCode": "PH007",
       "treeLevel": 3,
       "flowersEarned": 10,
-      "starsEarned": 29
+      "starsEarned": 29,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs007",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Châu",
+          "phone": "0910016415",
+          "code": "PH007",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS008",
@@ -86,7 +185,21 @@
       "parentCode": "PH008",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 22
+      "starsEarned": 22,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs008",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Châu",
+          "phone": "0910018760",
+          "code": "PH008",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS009",
@@ -97,7 +210,21 @@
       "parentCode": "PH009",
       "treeLevel": 2,
       "flowersEarned": 4,
-      "starsEarned": 12
+      "starsEarned": 12,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs009",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Dũng",
+          "phone": "0910021105",
+          "code": "PH009",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS010",
@@ -108,7 +235,21 @@
       "parentCode": "PH010",
       "treeLevel": 3,
       "flowersEarned": 7,
-      "starsEarned": 20
+      "starsEarned": 20,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs010",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Duy",
+          "phone": "0910023450",
+          "code": "PH010",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS011",
@@ -119,7 +260,21 @@
       "parentCode": "PH011",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 25
+      "starsEarned": 25,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs011",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Duy",
+          "phone": "0910025795",
+          "code": "PH011",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS012",
@@ -130,7 +285,21 @@
       "parentCode": "PH012",
       "treeLevel": 4,
       "flowersEarned": 13,
-      "starsEarned": 38
+      "starsEarned": 38,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs012",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Đức",
+          "phone": "0910028140",
+          "code": "PH012",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS013",
@@ -141,7 +310,21 @@
       "parentCode": "PH013",
       "treeLevel": 2,
       "flowersEarned": 5,
-      "starsEarned": 14
+      "starsEarned": 14,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs013",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Huy",
+          "phone": "0910030485",
+          "code": "PH013",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS014",
@@ -152,7 +335,21 @@
       "parentCode": "PH014",
       "treeLevel": 3,
       "flowersEarned": 7,
-      "starsEarned": 21
+      "starsEarned": 21,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs014",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Huy",
+          "phone": "0910032830",
+          "code": "PH014",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS015",
@@ -163,7 +360,21 @@
       "parentCode": "PH015",
       "treeLevel": 3,
       "flowersEarned": 9,
-      "starsEarned": 27
+      "starsEarned": 27,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs015",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Khang",
+          "phone": "0910035175",
+          "code": "PH015",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS016",
@@ -174,7 +385,21 @@
       "parentCode": "PH016",
       "treeLevel": 2,
       "flowersEarned": 6,
-      "starsEarned": 17
+      "starsEarned": 17,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs016",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Khang",
+          "phone": "0910037520",
+          "code": "PH016",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS017",
@@ -185,7 +410,21 @@
       "parentCode": "PH017",
       "treeLevel": 4,
       "flowersEarned": 14,
-      "starsEarned": 40
+      "starsEarned": 40,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs017",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Khiêm",
+          "phone": "0910039865",
+          "code": "PH017",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS018",
@@ -196,7 +435,21 @@
       "parentCode": "PH018",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 23
+      "starsEarned": 23,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs018",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Khôi",
+          "phone": "0910042210",
+          "code": "PH018",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS019",
@@ -207,7 +460,21 @@
       "parentCode": "PH019",
       "treeLevel": 3,
       "flowersEarned": 9,
-      "starsEarned": 25
+      "starsEarned": 25,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs019",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Khôi",
+          "phone": "0910044555",
+          "code": "PH019",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS020",
@@ -218,7 +485,21 @@
       "parentCode": "PH020",
       "treeLevel": 5,
       "flowersEarned": 16,
-      "starsEarned": 48
+      "starsEarned": 48,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs020",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Lâm",
+          "phone": "0910046900",
+          "code": "PH020",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS021",
@@ -229,7 +510,21 @@
       "parentCode": "PH021",
       "treeLevel": 2,
       "flowersEarned": 5,
-      "starsEarned": 16
+      "starsEarned": 16,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs021",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Long",
+          "phone": "0910049245",
+          "code": "PH021",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS022",
@@ -240,7 +535,21 @@
       "parentCode": "PH022",
       "treeLevel": 4,
       "flowersEarned": 12,
-      "starsEarned": 36
+      "starsEarned": 36,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs022",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em My",
+          "phone": "0910051590",
+          "code": "PH022",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS023",
@@ -251,7 +560,21 @@
       "parentCode": "PH023",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 24
+      "starsEarned": 24,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs023",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em My",
+          "phone": "0910053935",
+          "code": "PH023",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS024",
@@ -262,7 +585,21 @@
       "parentCode": "PH024",
       "treeLevel": 3,
       "flowersEarned": 7,
-      "starsEarned": 20
+      "starsEarned": 20,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs024",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Nguyên",
+          "phone": "0910056280",
+          "code": "PH024",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS025",
@@ -273,7 +610,21 @@
       "parentCode": "PH025",
       "treeLevel": 4,
       "flowersEarned": 11,
-      "starsEarned": 33
+      "starsEarned": 33,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs025",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Nguyên",
+          "phone": "0910058625",
+          "code": "PH025",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS026",
@@ -284,7 +635,21 @@
       "parentCode": "PH026",
       "treeLevel": 3,
       "flowersEarned": 9,
-      "starsEarned": 26
+      "starsEarned": 26,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs026",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Nhi",
+          "phone": "0910060970",
+          "code": "PH026",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS027",
@@ -295,7 +660,21 @@
       "parentCode": "PH027",
       "treeLevel": 4,
       "flowersEarned": 13,
-      "starsEarned": 39
+      "starsEarned": 39,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs027",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Nhiên",
+          "phone": "0910063315",
+          "code": "PH027",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS028",
@@ -306,7 +685,21 @@
       "parentCode": "PH028",
       "treeLevel": 2,
       "flowersEarned": 6,
-      "starsEarned": 18
+      "starsEarned": 18,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs028",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Quang",
+          "phone": "0910065660",
+          "code": "PH028",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS029",
@@ -317,7 +710,21 @@
       "parentCode": "PH029",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 24
+      "starsEarned": 24,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs029",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Quý",
+          "phone": "0910068005",
+          "code": "PH029",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS030",
@@ -328,7 +735,21 @@
       "parentCode": "PH030",
       "treeLevel": 3,
       "flowersEarned": 7,
-      "starsEarned": 21
+      "starsEarned": 21,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs030",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Thiện",
+          "phone": "0910070350",
+          "code": "PH030",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS031",
@@ -339,7 +760,21 @@
       "parentCode": "PH031",
       "treeLevel": 3,
       "flowersEarned": 8,
-      "starsEarned": 25
+      "starsEarned": 25,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs031",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Thịnh",
+          "phone": "0910072695",
+          "code": "PH031",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS032",
@@ -350,7 +785,21 @@
       "parentCode": "PH032",
       "treeLevel": 4,
       "flowersEarned": 12,
-      "starsEarned": 35
+      "starsEarned": 35,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs032",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Thư",
+          "phone": "0910075040",
+          "code": "PH032",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS033",
@@ -361,7 +810,21 @@
       "parentCode": "PH033",
       "treeLevel": 4,
       "flowersEarned": 11,
-      "starsEarned": 34
+      "starsEarned": 34,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs033",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Triết",
+          "phone": "0910077385",
+          "code": "PH033",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS034",
@@ -372,7 +835,21 @@
       "parentCode": "PH034",
       "treeLevel": 2,
       "flowersEarned": 5,
-      "starsEarned": 15
+      "starsEarned": 15,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs034",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Vinh",
+          "phone": "0910079730",
+          "code": "PH034",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     },
     {
       "id": "HS035",
@@ -383,7 +860,21 @@
       "parentCode": "PH035",
       "treeLevel": 4,
       "flowersEarned": 13,
-      "starsEarned": 37
+      "starsEarned": 37,
+      "className": "Lớp 3 – Trường TH Lê Đức Thọ",
+      "username": "hs035",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Vy",
+          "phone": "0910082075",
+          "code": "PH035",
+          "status": "active",
+          "linkedAt": "2026-09-05"
+        }
+      ]
     }
   ],
   "submissions": [
