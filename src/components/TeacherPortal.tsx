@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Student, Submission, AppSettings, LinkedCaregiver } from '../types';
+import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment } from '../types';
 import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { playPop, playChime } from '../utils/audio';
 import { getTeacherGreeting } from '../utils/timeGreeting';
@@ -39,24 +39,62 @@ import {
   RotateCcw,
   EyeOff,
   AlertTriangle,
-  Plus
+  Plus,
+  Layers,
+  Calendar,
+  User,
+  Shield
 } from 'lucide-react';
 
 interface TeacherPortalProps {
+  currentUser?: AuthUser | null;
   students: Student[];
   settings: AppSettings;
   onBackToGarden: () => void;
   onRefreshStudents?: () => void;
+  onGoToAdminSystem?: () => void;
 }
 
 export const TeacherPortal: React.FC<TeacherPortalProps> = ({
+  currentUser,
   students,
   settings,
   onBackToGarden,
-  onRefreshStudents
+  onRefreshStudents,
+  onGoToAdminSystem
 }) => {
   // Navigation tabs within Teacher Portal
-  const [activeTab, setActiveTab] = useState<'reviews' | 'accounts'>('reviews');
+  const [activeTab, setActiveTab] = useState<'reviews' | 'accounts' | 'classes' | 'assignments' | 'profile'>('reviews');
+
+  // Multi-Class Management State
+  const [assignedClasses, setAssignedClasses] = useState<Classroom[]>([]);
+  const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const [isCreateClassOpen, setIsCreateClassOpen] = useState(false);
+  const [newClassName, setNewClassName] = useState('');
+  const [newClassGrade, setNewClassGrade] = useState<number>(3);
+  const [newClassYear, setNewClassYear] = useState('2025-2026');
+  const [isCreatingClass, setIsCreatingClass] = useState(false);
+  const [classActionMsg, setClassActionMsg] = useState('');
+
+  // Assignments Management State
+  const [assignments, setAssignments] = useState<ClassAssignment[]>([]);
+  const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
+  const [newAssignTitle, setNewAssignTitle] = useState('');
+  const [newAssignGrade, setNewAssignGrade] = useState<number>(3);
+  const [newAssignGenre, setNewAssignGenre] = useState<string>('Tả đồ vật');
+  const [newAssignPrompt, setNewAssignPrompt] = useState('');
+  const [newAssignIsExam, setNewAssignIsExam] = useState(false);
+  const [newAssignDueDate, setNewAssignDueDate] = useState('');
+  const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
+  const [assignmentActionMsg, setAssignmentActionMsg] = useState('');
+
+  // Teacher Profile & Password Change State
+  const [teacherProfilePhone, setTeacherProfilePhone] = useState(currentUser?.teacherProfile?.phone || '');
+  const [teacherProfileEmail, setTeacherProfileEmail] = useState(currentUser?.teacherProfile?.email || '');
+  const [teacherOldPassword, setTeacherOldPassword] = useState('');
+  const [teacherNewPassword, setTeacherNewPassword] = useState('');
+  const [teacherProfileMsg, setTeacherProfileMsg] = useState('');
+  const [isSavingProfile, setIsSavingProfile] = useState(false);
 
   // Review section state
   const [searchTerm, setSearchTerm] = useState('');
@@ -67,7 +105,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [filterVolume, setFilterVolume] = useState<'all' | '1' | '2'>('all');
   const [isLoadingSubmissions, setIsLoadingSubmissions] = useState(false);
 
-  // Teacher qualitative feedback form state (Formative assessment - Không chấm điểm số)
+  // Teacher feedback form state
   const [teacherComment, setTeacherComment] = useState('');
   const [praiseIdea, setPraiseIdea] = useState('');
   const [wordSentenceSuggestions, setWordSentenceSuggestions] = useState('');
@@ -79,6 +117,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [feedbackStatus, setFeedbackStatus] = useState<'draft' | 'published'>('published');
   const [isSavingFeedback, setIsSavingFeedback] = useState(false);
   const [successMsg, setSuccessMsg] = useState('');
+
+  // Dual Assessment Mode: Regular practice vs Periodic test with 1-10 integer score
+  const [isPeriodicExamReview, setIsPeriodicExamReview] = useState(false);
+  const [examScore, setExamScore] = useState<number | ''>('');
 
   // ---------------- Account Management Section State ----------------
   const [localStudents, setLocalStudents] = useState<Student[]>(students);
@@ -135,6 +177,147 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
   const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
+  // Fetch classes assigned to this teacher
+  const fetchClasses = async () => {
+    try {
+      const token = currentUser?.token || (currentUser?.teacherRole === 'SUPER_ADMIN' ? 'admin' : undefined);
+      const res = await fetch(`/api/teacher/classes?teacherId=${currentUser?.teacherId || 'GV001'}`, {
+        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      });
+      const data = await res.json();
+      if (data.classes && Array.isArray(data.classes)) {
+        setAssignedClasses(data.classes);
+      }
+    } catch (e) {
+      console.warn('Error fetching classes:', e);
+    }
+  };
+
+  // Fetch class assignments
+  const fetchAssignments = async () => {
+    try {
+      const res = await fetch(`/api/teacher/assignments?classId=${selectedClassId !== 'all' ? selectedClassId : ''}`);
+      const data = await res.json();
+      if (data.assignments && Array.isArray(data.assignments)) {
+        setAssignments(data.assignments);
+      }
+    } catch (e) {
+      console.warn('Error fetching assignments:', e);
+    }
+  };
+
+  useEffect(() => {
+    fetchClasses();
+    fetchAssignments();
+  }, [currentUser, selectedClassId]);
+
+  // Handler: Create Class
+  const handleCreateClass = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newClassName.trim()) return;
+    setIsCreatingClass(true);
+    setClassActionMsg('');
+    try {
+      const res = await fetch('/api/teacher/classes/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newClassName.trim(),
+          grade: Number(newClassGrade),
+          schoolYear: newClassYear.trim() || '2025-2026',
+          teacherId: currentUser?.teacherId || 'GV001'
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setClassActionMsg('✓ Đã tạo lớp học mới thành công!');
+        setNewClassName('');
+        setIsCreateClassOpen(false);
+        fetchClasses();
+      } else {
+        setClassActionMsg(data.message || 'Không thể tạo lớp học.');
+      }
+    } catch (err) {
+      setClassActionMsg('Lỗi kết nối khi tạo lớp học.');
+    } finally {
+      setIsCreatingClass(false);
+    }
+  };
+
+  // Handler: Create Assignment
+  const handleCreateAssignment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newAssignTitle.trim() || !newAssignPrompt.trim()) return;
+    setIsCreatingAssignment(true);
+    setAssignmentActionMsg('');
+    try {
+      const res = await fetch('/api/teacher/assignments/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newAssignTitle.trim(),
+          grade: Number(newAssignGrade),
+          genre: newAssignGenre,
+          prompt: newAssignPrompt.trim(),
+          isExam: newAssignIsExam,
+          dueDate: newAssignDueDate || undefined,
+          classId: selectedClassId !== 'all' ? selectedClassId : (assignedClasses[0]?.id || 'L3A'),
+          teacherId: currentUser?.teacherId || 'GV001',
+          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setAssignmentActionMsg('✓ Đã giao bài tập thành công cho học sinh!');
+        setNewAssignTitle('');
+        setNewAssignPrompt('');
+        setIsCreateAssignmentOpen(false);
+        fetchAssignments();
+      } else {
+        setAssignmentActionMsg(data.message || 'Không thể giao bài tập.');
+      }
+    } catch (err) {
+      setAssignmentActionMsg('Lỗi kết nối máy chủ khi giao bài.');
+    } finally {
+      setIsCreatingAssignment(false);
+    }
+  };
+
+  // Handler: Update Teacher Profile & Password
+  const handleSaveProfile = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsSavingProfile(true);
+    setTeacherProfileMsg('');
+    try {
+      const res = await fetch('/api/teacher/profile/update', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          teacherId: currentUser?.teacherId || 'GV001',
+          phone: teacherProfilePhone.trim(),
+          email: teacherProfileEmail.trim(),
+          oldPassword: teacherOldPassword.trim() || undefined,
+          newPassword: teacherNewPassword.trim() || undefined
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setTeacherProfileMsg('✓ Đã cập nhật hồ sơ cá nhân thành công!');
+        setTeacherOldPassword('');
+        setTeacherNewPassword('');
+      } else {
+        setTeacherProfileMsg(data.message || 'Không thể cập nhật hồ sơ.');
+      }
+    } catch (err) {
+      setTeacherProfileMsg('Lỗi kết nối khi cập nhật hồ sơ.');
+    } finally {
+      setIsSavingProfile(false);
+    }
+  };
+
   // Sync students from props
   useEffect(() => {
     setLocalStudents(students);
@@ -158,8 +341,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     fetchSubmissions();
   }, []);
 
-  // Filter students for review view
+  // Filter students for review view and account list
   const filteredStudents = localStudents.filter(s => {
+    if (selectedClassId !== 'all' && s.classId && s.classId !== selectedClassId) {
+      return false;
+    }
     const displayName = settings.demoPrivacyMode ? s.demoName : s.name;
     return displayName.toLowerCase().includes(searchTerm.toLowerCase()) ||
            s.id.toLowerCase().includes(searchTerm.toLowerCase());
@@ -167,6 +353,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
   // Filter submissions
   const filteredSubmissions = submissions.filter(sub => {
+    if (selectedClassId !== 'all' && sub.classId && sub.classId !== selectedClassId) return false;
     if (selectedStudent && sub.studentId !== selectedStudent.id) return false;
     if (filterStatus === 'submitted') return sub.status === 'submitted';
     if (filterStatus === 'reviewed') return sub.status === 'reviewed' && sub.teacherFeedback?.status === 'published';
@@ -194,6 +381,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setConfirmedStars(sub.teacherFeedback?.confirmedStars || sub.aiFeedback?.suggestedStars || 5);
     setFlowerSticker(sub.teacherFeedback?.flowerSticker || '🌸 Bông hoa chăm ngoan');
     setFeedbackStatus(sub.teacherFeedback?.status || 'published');
+    setExamScore(sub.score !== undefined ? sub.score : (sub.teacherFeedback?.score !== undefined ? sub.teacherFeedback.score : ''));
+    setIsPeriodicExamReview(Boolean(sub.isExam || sub.teacherFeedback?.isExamGraded));
     setSuccessMsg('');
   };
 
@@ -217,8 +406,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           confirmedStars,
           flowerSticker,
           editedAiNotes,
+          score: isPeriodicExamReview && examScore !== '' ? Math.round(Number(examScore)) : undefined,
           status: targetStatus,
-          teacherName: TEACHER_CONFIG.name
+          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name
         })
       });
 
@@ -701,49 +891,128 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
-                Góc Cô Giáo
+                {currentUser?.teacherRole === 'SUPER_ADMIN' ? '👑 Ban Quản Trị / Góc Giáo Viên' : '👩‍🏫 Góc Giáo Viên'}
               </span>
               <span className="text-xs text-stone-600 font-bold">
-                {TEACHER_CONFIG.className} – {TEACHER_CONFIG.school}
+                {currentUser?.teacherName || TEACHER_CONFIG.name} – {TEACHER_CONFIG.school}
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-emerald-950 font-display">
-              {TEACHER_CONFIG.tagline}
+              {currentUser?.teacherRole === 'SUPER_ADMIN' ? 'Không Gian Quản Lý Lớp Học & Đánh Giá Bài Làm' : TEACHER_CONFIG.tagline}
             </h2>
           </div>
         </div>
 
-        {/* Tab Switcher Buttons */}
-        <div className="flex items-center gap-2 bg-white/80 p-1.5 rounded-2xl border border-emerald-300 shadow-xs">
-          <button
-            onClick={() => {
-              playPop(settings.soundEnabled);
-              setActiveTab('reviews');
-            }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-              activeTab === 'reviews'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-            }`}
-          >
-            <BookOpen className="w-4 h-4" />
-            <span>Sổ Chấm Bài ({completedCount})</span>
-          </button>
+        {/* Right side controls: Class selector & Admin shortcut & Tabs */}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Class selector */}
+          {assignedClasses.length > 0 && (
+            <div className="flex items-center gap-1.5 bg-white/90 px-3 py-1.5 rounded-xl border border-emerald-300">
+              <span className="text-xs font-bold text-stone-600">Lớp:</span>
+              <select
+                value={selectedClassId}
+                onChange={e => setSelectedClassId(e.target.value)}
+                className="text-xs font-bold bg-transparent border-0 text-emerald-950 focus:outline-hidden cursor-pointer"
+              >
+                <option value="all">Tất cả lớp ({assignedClasses.length})</option>
+                {assignedClasses.map(c => (
+                  <option key={c.id} value={c.id}>{c.name} (Khối {c.grade})</option>
+                ))}
+              </select>
+            </div>
+          )}
 
-          <button
-            onClick={() => {
-              playPop(settings.soundEnabled);
-              setActiveTab('accounts');
-            }}
-            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs sm:text-sm font-extrabold transition-all ${
-              activeTab === 'accounts'
-                ? 'bg-emerald-600 text-white shadow-xs'
-                : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
-            }`}
-          >
-            <Users className="w-4 h-4" />
-            <span>TÀI KHOẢN LỚP EM ({localStudents.length})</span>
-          </button>
+          {/* Super Admin Switcher Button */}
+          {currentUser?.teacherRole === 'SUPER_ADMIN' && onGoToAdminSystem && (
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                onGoToAdminSystem();
+              }}
+              className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl text-xs sm:text-sm font-black bg-gradient-to-r from-amber-500 to-amber-600 hover:from-amber-600 hover:to-amber-700 text-white shadow-md transition-all hover:scale-102 cursor-pointer"
+              title="Mở Trang Quản Trị Hệ Thống Toàn Trường"
+            >
+              <span>👑 Quản Trị Hệ Thống</span>
+            </button>
+          )}
+
+          {/* Tab Switcher Buttons */}
+          <div className="flex items-center gap-1 bg-white/80 p-1 rounded-2xl border border-emerald-300 shadow-xs flex-wrap">
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setActiveTab('reviews');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                activeTab === 'reviews'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>Sổ Chấm Bài ({completedCount})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setActiveTab('assignments');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                activeTab === 'assignments'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+            >
+              <FileText className="w-3.5 h-3.5" />
+              <span>Giao Bài Tập ({assignments.length})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setActiveTab('classes');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                activeTab === 'classes'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+            >
+              <Layers className="w-3.5 h-3.5" />
+              <span>Lớp Của Tôi ({assignedClasses.length})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setActiveTab('accounts');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                activeTab === 'accounts'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Tài Khoản HS ({localStudents.length})</span>
+            </button>
+
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setActiveTab('profile');
+              }}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold transition-all ${
+                activeTab === 'profile'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'text-stone-600 hover:text-stone-900 hover:bg-stone-100'
+              }`}
+            >
+              <User className="w-3.5 h-3.5" />
+              <span>Hồ Sơ Của Tôi</span>
+            </button>
+          </div>
         </div>
       </div>
 
@@ -988,19 +1257,72 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
               {/* Formative Teacher Assessment Form */}
               {selectedSubmission && (
                 <div className="bg-white rounded-3xl border-3 border-emerald-400 p-5 sm:p-6 shadow-xl space-y-4 animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-emerald-100 pb-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100 pb-3">
                     <div className="flex items-center gap-2">
                       <span className="text-2xl">👩‍🏫</span>
                       <div>
                         <h3 className="text-base sm:text-lg font-black text-emerald-950 font-display">
-                          Phiếu Nhận Xét Định Tính – {TEACHER_CONFIG.name}
+                          {isPeriodicExamReview ? 'Phiếu Đánh Giá Định Kỳ (Kèm Điểm Số Thang Điểm 10)' : 'Phiếu Nhận Xét Định Tính – ' + (currentUser?.teacherName || TEACHER_CONFIG.name)}
                         </h3>
                         <p className="text-xs text-stone-500 font-semibold">
-                          Bài của em {localStudents.find(s => s.id === selectedSubmission.studentId)?.name} • Đánh giá theo định hướng GDPT 2018 (Không chấm điểm số)
+                          Bài của em {localStudents.find(s => s.id === selectedSubmission.studentId)?.name} • {isPeriodicExamReview ? 'Đánh giá định kỳ theo Thông tư 27 GDPT 2018' : 'Đánh giá thường xuyên định hướng phát triển năng lực'}
                         </p>
                       </div>
                     </div>
+
+                    {/* Dual Mode Switcher Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const next = !isPeriodicExamReview;
+                        setIsPeriodicExamReview(next);
+                        if (!next) setExamScore('');
+                        else if (examScore === '') setExamScore(9);
+                      }}
+                      className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                        isPeriodicExamReview
+                          ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-200'
+                          : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
+                      }`}
+                      title="Chuyển đổi giữa nhận xét thường xuyên (không chấm điểm) và đánh giá định kỳ (thang điểm 10)"
+                    >
+                      {isPeriodicExamReview ? '📝 Chế độ: Kiểm tra định kỳ (Có điểm 1-10)' : '🌸 Chế độ: Luyện tập thường xuyên'}
+                    </button>
                   </div>
+
+                  {/* Integer Score Field (1-10) for Periodic Exam */}
+                  {isPeriodicExamReview && (
+                    <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-300 space-y-2 animate-fade-in">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                          <Star className="w-4 h-4 text-amber-600 fill-amber-500" />
+                          <span>Điểm số định kỳ (Số nguyên từ 1 đến 10 theo Thông tư 27 GDPT 2018):</span>
+                        </span>
+                        <span className="text-xs font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                          {examScore !== '' ? `Điểm: ${examScore} / 10` : 'Chưa nhập điểm'}
+                        </span>
+                      </div>
+                      <div className="flex flex-wrap gap-1.5 items-center pt-1">
+                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(val => (
+                          <button
+                            key={val}
+                            type="button"
+                            onClick={() => setExamScore(val)}
+                            className={`w-9 h-9 rounded-xl font-black text-sm transition-all cursor-pointer ${
+                              examScore === val
+                                ? 'bg-amber-500 text-white shadow-md scale-110 ring-2 ring-amber-300'
+                                : 'bg-white hover:bg-amber-100 text-stone-800 border border-amber-200 shadow-2xs'
+                            }`}
+                          >
+                            {val}
+                          </button>
+                        ))}
+                      </div>
+                      <p className="text-[11px] text-amber-800 font-medium">
+                        ℹ️ Điểm số định kỳ là số nguyên từ 1 đến 10, kết hợp cùng nhận xét chi tiết 4 tiêu chí bên dưới để gửi đến gia đình và học sinh.
+                      </p>
+                    </div>
+                  )}
 
                   {successMsg && (
                     <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-pulse">
@@ -1414,6 +1736,495 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= TAB 3: GIAO BÀI TẬP ================= */}
+      {activeTab === 'assignments' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg sm:text-xl font-black text-emerald-950 font-display flex items-center gap-2">
+                <span>📝</span>
+                <span>Danh Sách Đề Bài & Nhiệm Vụ Đã Giao</span>
+              </h3>
+              <p className="text-xs text-stone-600 font-medium mt-0.5">
+                Giao bài tập luyện tập thường xuyên hoặc bài kiểm tra định kỳ theo Chương trình GDPT 2018 (Khối 1–5).
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setIsCreateAssignmentOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Giao bài tập mới</span>
+            </button>
+          </div>
+
+          {assignmentActionMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-fade-in">
+              {assignmentActionMsg}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {assignments.map((item) => (
+              <div
+                key={item.id}
+                className="bg-white p-5 rounded-3xl border-2 border-stone-200 hover:border-emerald-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
+              >
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      Khối {item.grade}
+                    </span>
+                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${
+                      item.isExam 
+                        ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                        : 'bg-sky-100 text-sky-800 border border-sky-200'
+                    }`}>
+                      {item.isExam ? '⭐ Kiểm tra định kỳ (Thang điểm 10)' : '🌸 Luyện tập thường xuyên'}
+                    </span>
+                  </div>
+
+                  <h4 className="text-base font-extrabold text-stone-900 leading-snug">
+                    {item.title}
+                  </h4>
+
+                  <p className="text-xs text-stone-600 line-clamp-3 bg-stone-50 p-2.5 rounded-xl border border-stone-100 italic">
+                    "{item.prompt}"
+                  </p>
+                </div>
+
+                <div className="pt-3 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500 font-medium">
+                  <span>Thể loại: <strong className="text-stone-700">{item.genre}</strong></span>
+                  {item.dueDate && <span>Hạn: <strong className="text-rose-600">{new Date(item.dueDate).toLocaleDateString('vi-VN')}</strong></span>}
+                </div>
+              </div>
+            ))}
+
+            {assignments.length === 0 && (
+              <div className="col-span-full bg-white p-8 rounded-3xl border-2 border-dashed border-stone-200 text-center text-stone-500">
+                Chưa có bài tập nào được giao. Cô hãy bấm nút "Giao bài tập mới" ở góc trên để tạo đề bài nhé!
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= TAB 4: LỚP HỌC CỦA TÔI ================= */}
+      {activeTab === 'classes' && (
+        <div className="space-y-6 animate-fade-in">
+          <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <h3 className="text-lg sm:text-xl font-black text-emerald-950 font-display flex items-center gap-2">
+                <span>🏫</span>
+                <span>Các Lớp Học Được Phân Công Quản Lý</span>
+              </h3>
+              <p className="text-xs text-stone-600 font-medium mt-0.5">
+                Giáo viên chỉ quản lý học sinh và dữ liệu thuộc các lớp được phân công ({currentUser?.teacherRole === 'SUPER_ADMIN' ? 'Ban Quản Trị Hệ Thống' : 'Theo phân quyền'}).
+              </p>
+            </div>
+
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setIsCreateClassOpen(true);
+              }}
+              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5 cursor-pointer"
+            >
+              <Plus className="w-4 h-4" />
+              <span>Tạo lớp học mới</span>
+            </button>
+          </div>
+
+          {classActionMsg && (
+            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-fade-in">
+              {classActionMsg}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {assignedClasses.map((cls) => {
+              const classStudents = localStudents.filter(s => s.classId === cls.id || (!s.classId && cls.id === 'L3A'));
+              return (
+                <div
+                  key={cls.id}
+                  className={`bg-white p-5 rounded-3xl border-2 transition-all shadow-xs ${
+                    selectedClassId === cls.id ? 'border-emerald-500 ring-2 ring-emerald-200' : 'border-stone-200 hover:border-emerald-300'
+                  }`}
+                >
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                      Khối {cls.grade}
+                    </span>
+                    <span className="text-xs text-stone-500 font-bold font-mono">
+                      Mã: {cls.id}
+                    </span>
+                  </div>
+
+                  <h4 className="text-xl font-black text-emerald-950 mt-2 font-display">
+                    {cls.name}
+                  </h4>
+                  <p className="text-xs text-stone-500 font-medium mt-0.5">
+                    Năm học: {cls.schoolYear} • Trường Tiểu học Lê Đức Thọ
+                  </p>
+
+                  <div className="bg-stone-50 p-3 rounded-2xl border border-stone-100 my-3 flex items-center justify-between text-xs">
+                    <span className="font-bold text-stone-600">Sĩ số học sinh:</span>
+                    <span className="font-black text-emerald-700 text-sm">
+                      {classStudents.length} em
+                    </span>
+                  </div>
+
+                  <div className="flex items-center justify-between gap-2 pt-2 border-t border-stone-100">
+                    <button
+                      onClick={() => {
+                        setSelectedClassId(cls.id);
+                        setActiveTab('accounts');
+                      }}
+                      className="text-xs font-bold text-emerald-700 hover:underline flex items-center gap-1"
+                    >
+                      <Users className="w-3.5 h-3.5" />
+                      <span>Xem học sinh</span>
+                    </button>
+                    <button
+                      onClick={() => {
+                        setSelectedClassId(cls.id);
+                        setActiveTab('reviews');
+                      }}
+                      className="px-3 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs font-bold transition-colors"
+                    >
+                      Xem bài nộp
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* ================= TAB 5: HỒ SƠ CỦA TÔI & ĐỔI MẬT KHẨU ================= */}
+      {activeTab === 'profile' && (
+        <div className="max-w-2xl mx-auto space-y-6 animate-fade-in">
+          <div className="bg-white p-6 rounded-3xl border-2 border-emerald-300 shadow-lg space-y-5">
+            <div className="flex items-center gap-3 border-b border-stone-100 pb-4">
+              <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 border-2 border-emerald-300 flex items-center justify-center text-3xl shadow-xs">
+                👩‍🏫
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-xl font-black text-emerald-950 font-display">
+                    {currentUser?.teacherProfile?.name || currentUser?.teacherName || TEACHER_CONFIG.name}
+                  </h3>
+                  <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
+                    currentUser?.teacherRole === 'SUPER_ADMIN' 
+                      ? 'bg-amber-100 text-amber-900 border border-amber-300' 
+                      : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                  }`}>
+                    {currentUser?.teacherRole === 'SUPER_ADMIN' ? '👑 SUPER_ADMIN' : '👩‍🏫 GIÁO VIÊN'}
+                  </span>
+                </div>
+                <p className="text-xs text-stone-500 font-medium mt-0.5">
+                  Mã GV: <strong className="text-stone-800">{currentUser?.teacherId || 'GV001'}</strong> • Tên đăng nhập: <strong className="text-stone-800">{currentUser?.teacherProfile?.username || 'haiduyen'}</strong>
+                </p>
+              </div>
+            </div>
+
+            {teacherProfileMsg && (
+              <div className={`p-3 rounded-2xl text-xs sm:text-sm font-bold ${
+                teacherProfileMsg.startsWith('✓') ? 'bg-emerald-100 text-emerald-900 border border-emerald-300' : 'bg-rose-100 text-rose-900 border border-rose-300'
+              }`}>
+                {teacherProfileMsg}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveProfile} className="space-y-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Số điện thoại liên hệ:
+                  </label>
+                  <input
+                    type="text"
+                    value={teacherProfilePhone}
+                    onChange={e => setTeacherProfilePhone(e.target.value)}
+                    placeholder="0912 345 678"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Email trao đổi:
+                  </label>
+                  <input
+                    type="email"
+                    value={teacherProfileEmail}
+                    onChange={e => setTeacherProfileEmail(e.target.value)}
+                    placeholder="giaovien@leductho.edu.vn"
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 border-t border-stone-100 space-y-3">
+                <span className="text-xs font-black text-stone-800 uppercase tracking-wider block">
+                  Đổi Mật Khẩu Đăng Nhập
+                </span>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Mật khẩu hiện tại (để xác nhận):
+                  </label>
+                  <input
+                    type="password"
+                    value={teacherOldPassword}
+                    onChange={e => setTeacherOldPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu hiện tại..."
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Mật khẩu mới (ít nhất 4 ký tự):
+                  </label>
+                  <input
+                    type="password"
+                    value={teacherNewPassword}
+                    onChange={e => setTeacherNewPassword(e.target.value)}
+                    placeholder="Nhập mật khẩu mới..."
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex justify-end">
+                <button
+                  type="submit"
+                  disabled={isSavingProfile}
+                  className="px-6 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-black text-xs sm:text-sm shadow-md transition-all hover:scale-102 cursor-pointer"
+                >
+                  {isSavingProfile ? 'Đang lưu...' : 'Lưu Thay Đổi Hồ Sơ'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: TẠO LỚP HỌC MỚI ================= */}
+      {isCreateClassOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-md w-full p-6 shadow-2xl space-y-4 animate-fade-in relative">
+            <button
+              onClick={() => setIsCreateClassOpen(false)}
+              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-black text-emerald-950 font-display flex items-center gap-2">
+              <span>🏫</span>
+              <span>Tạo Lớp Học Mới</span>
+            </h3>
+
+            <form onSubmit={handleCreateClass} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Tên lớp học (ví dụ: Lớp 3C, Lớp 5A...):
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newClassName}
+                  onChange={e => setNewClassName(e.target.value)}
+                  placeholder="Lớp 3C"
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Khối lớp tiểu học (1–5 theo GDPT 2018):
+                </label>
+                <div className="grid grid-cols-5 gap-1.5">
+                  {[1, 2, 3, 4, 5].map(g => (
+                    <button
+                      key={g}
+                      type="button"
+                      onClick={() => setNewClassGrade(g)}
+                      className={`p-2 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        newClassGrade === g 
+                          ? 'bg-emerald-600 text-white shadow-xs' 
+                          : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                      }`}
+                    >
+                      Lớp {g}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Năm học:
+                </label>
+                <input
+                  type="text"
+                  value={newClassYear}
+                  onChange={e => setNewClassYear(e.target.value)}
+                  placeholder="2025-2026"
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateClassOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingClass}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
+                >
+                  {isCreatingClass ? 'Đang tạo...' : 'Tạo lớp học'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: GIAO BÀI TẬP MỚI ================= */}
+      {isCreateAssignmentOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setIsCreateAssignmentOpen(false)}
+              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <h3 className="text-lg font-black text-emerald-950 font-display flex items-center gap-2">
+              <span>📝</span>
+              <span>Giao Bài Tập Tiếng Việt Mới</span>
+            </h3>
+
+            <form onSubmit={handleCreateAssignment} className="space-y-4">
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Tiêu đề bài tập:
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newAssignTitle}
+                  onChange={e => setNewAssignTitle(e.target.value)}
+                  placeholder="Ví dụ: Tả chiếc bút mực thân yêu của em"
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Khối lớp:
+                  </label>
+                  <select
+                    value={newAssignGrade}
+                    onChange={e => setNewAssignGrade(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
+                  >
+                    {[1, 2, 3, 4, 5].map(g => (
+                      <option key={g} value={g}>Lớp {g}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Thể loại bài viết:
+                  </label>
+                  <select
+                    value={newAssignGenre}
+                    onChange={e => setNewAssignGenre(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
+                  >
+                    <option value="Tả đồ vật">Tả đồ vật</option>
+                    <option value="Tả con vật">Tả con vật</option>
+                    <option value="Tả cây cối">Tả cây cối</option>
+                    <option value="Tả người">Tả người</option>
+                    <option value="Tả cảnh vật">Tả cảnh vật</option>
+                    <option value="Kể chuyện">Kể chuyện</option>
+                    <option value="Cảm nghĩ">Bày tỏ cảm xúc</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Đề bài & Yêu cầu chi tiết:
+                </label>
+                <textarea
+                  rows={3}
+                  required
+                  value={newAssignPrompt}
+                  onChange={e => setNewAssignPrompt(e.target.value)}
+                  placeholder="Viết một đoạn văn từ 5 đến 7 câu tả một đồ dùng học tập gắn bó với em hàng ngày..."
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
+
+              {/* Mode Selection */}
+              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={newAssignIsExam}
+                    onChange={e => setNewAssignIsExam(e.target.checked)}
+                    className="w-4 h-4 text-emerald-600 rounded-sm"
+                  />
+                  <span className="text-xs font-black text-stone-800">
+                    Đánh dấu đây là bài kiểm tra định kỳ (Có thang điểm số 1–10)
+                  </span>
+                </label>
+                <p className="text-[11px] text-stone-500 pl-6">
+                  {newAssignIsExam 
+                    ? 'Bài kiểm tra định kỳ sẽ cho phép chấm điểm số nguyên từ 1 đến 10 kèm nhận xét chi tiết theo Thông tư 27.' 
+                    : 'Mặc định là bài luyện tập thường xuyên, chỉ nhận xét định tính khích lệ học sinh.'}
+                </p>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+                <button
+                  type="button"
+                  onClick={() => setIsCreateAssignmentOpen(false)}
+                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={isCreatingAssignment}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
+                >
+                  {isCreatingAssignment ? 'Đang giao...' : 'Giao bài tập'}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

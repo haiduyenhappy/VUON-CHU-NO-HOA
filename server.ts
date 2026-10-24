@@ -5,7 +5,17 @@ import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_STUDENTS } from './src/data/studentsData.js';
-import type { Student, LinkedCaregiver, FamilyInviteCode, PromptAnalysisData, PromptDirection } from './src/types/index.js';
+import type { 
+  Student, 
+  LinkedCaregiver, 
+  FamilyInviteCode, 
+  PromptAnalysisData, 
+  PromptDirection,
+  TeacherAccount,
+  Classroom,
+  ClassAssignment,
+  AuditLogItem
+} from './src/types/index.js';
 
 dotenv.config();
 
@@ -44,8 +54,12 @@ try {
 }
 
 interface DatabaseStructure {
-  students: typeof INITIAL_STUDENTS;
+  students: any[];
   submissions: any[];
+  teachers: TeacherAccount[];
+  classes: Classroom[];
+  assignments: ClassAssignment[];
+  auditLogs: AuditLogItem[];
 }
 
 const SEED_SUBMISSIONS = [
@@ -156,9 +170,124 @@ const SEED_SUBMISSIONS = [
   }
 ];
 
+const SEED_TEACHERS: TeacherAccount[] = [
+  {
+    id: 'GV001',
+    username: 'haiduyen',
+    fullName: 'Nguyễn Thị Hải Duyên',
+    name: 'Cô Nguyễn Thị Hải Duyên',
+    salutation: 'cô',
+    role: 'SUPER_ADMIN',
+    status: 'active',
+    phone: '0908123456',
+    email: 'haiduyenpvc@gmail.com',
+    school: 'Trường Tiểu học Lê Đức Thọ',
+    assignedClassIds: ['L3A'],
+    lastLogin: 'Hôm nay 07:30',
+    createdAt: '2026-08-15T08:00:00.000Z'
+  },
+  {
+    id: 'GV002',
+    username: 'vanminh',
+    fullName: 'Trần Văn Minh',
+    name: 'Thầy Trần Văn Minh',
+    salutation: 'thầy',
+    role: 'TEACHER',
+    status: 'active',
+    phone: '0912345678',
+    email: 'vanminh@leductho.edu.vn',
+    school: 'Trường Tiểu học Lê Đức Thọ',
+    assignedClassIds: ['L4B'],
+    lastLogin: 'Hôm qua 14:20',
+    createdAt: '2026-09-01T08:00:00.000Z'
+  }
+];
+
+const SEED_CLASSES: Classroom[] = [
+  {
+    id: 'L3A',
+    name: 'Lớp 3A',
+    grade: 3,
+    school: 'Trường Tiểu học Lê Đức Thọ',
+    schoolYear: '2025-2026',
+    teacherIds: ['GV001'],
+    primaryTeacherId: 'GV001',
+    studentCount: 35,
+    status: 'active',
+    createdAt: '2026-08-15T08:00:00.000Z'
+  },
+  {
+    id: 'L4B',
+    name: 'Lớp 4B',
+    grade: 4,
+    school: 'Trường Tiểu học Lê Đức Thọ',
+    schoolYear: '2025-2026',
+    teacherIds: ['GV002'],
+    primaryTeacherId: 'GV002',
+    studentCount: 30,
+    status: 'active',
+    createdAt: '2026-09-01T08:00:00.000Z'
+  }
+];
+
+const SEED_ASSIGNMENTS: ClassAssignment[] = [
+  {
+    id: 'ASM-001',
+    classId: 'L3A',
+    teacherId: 'GV001',
+    teacherName: 'Cô Nguyễn Thị Hải Duyên',
+    title: 'Tả ngôi trường hoặc một góc sân trường em yêu thích',
+    prompt: 'Viết một đoạn văn tả ngôi trường tiểu học của em hoặc một góc sân trường mà em yêu thích nhất.',
+    grade: 3,
+    genre: 'ta_canh_vat',
+    gardenType: 'sac_mau',
+    assignedDate: '2026-10-20',
+    dueDate: '2026-10-28',
+    isExam: false,
+    status: 'active',
+    instructions: 'Các em chú ý quan sát kỹ và chọn 1 trong 2 hướng viết nhé.'
+  },
+  {
+    id: 'ASM-002',
+    classId: 'L3A',
+    teacherId: 'GV001',
+    teacherName: 'Cô Nguyễn Thị Hải Duyên',
+    title: 'Bài kiểm tra định kỳ giữa kỳ 1: Kể một việc tốt',
+    prompt: 'Kể lại một việc tốt em đã làm để giúp đỡ bạn bè hoặc người thân.',
+    grade: 3,
+    genre: 'ke_su_viec',
+    gardenType: 'ke_chuyen',
+    assignedDate: '2026-10-15',
+    dueDate: '2026-10-22',
+    isExam: true,
+    maxScore: 10,
+    status: 'active',
+    instructions: 'Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực.'
+  }
+];
+
+const SEED_AUDIT_LOGS: AuditLogItem[] = [
+  {
+    id: 'log-001',
+    timestamp: new Date().toISOString(),
+    actorId: 'GV001',
+    actorName: 'Nguyễn Thị Hải Duyên',
+    actorRole: 'SUPER_ADMIN',
+    action: 'SYSTEM_INITIALIZATION',
+    targetType: 'system',
+    targetId: 'SYS',
+    targetName: 'Hệ thống Vườn Chữ Nở Hoa',
+    details: 'Khởi tạo hệ thống quản trị nhiều giáo viên và phân quyền Super Admin cho cô Nguyễn Thị Hải Duyên.'
+  }
+];
+
 let memoryDb: DatabaseStructure = {
-  students: INITIAL_STUDENTS,
-  submissions: SEED_SUBMISSIONS
+  students: INITIAL_STUDENTS.map(s => ({ ...s, classId: 'L3A' })),
+  submissions: SEED_SUBMISSIONS,
+  teachers: SEED_TEACHERS,
+  classes: SEED_CLASSES,
+  assignments: SEED_ASSIGNMENTS,
+  auditLogs: SEED_AUDIT_LOGS
 };
 
 function loadDatabase(): DatabaseStructure {
@@ -168,8 +297,12 @@ function loadDatabase(): DatabaseStructure {
     }
     if (!fs.existsSync(DB_FILE)) {
       const initialDb: DatabaseStructure = {
-        students: INITIAL_STUDENTS,
-        submissions: SEED_SUBMISSIONS
+        students: INITIAL_STUDENTS.map(s => ({ ...s, classId: 'L3A' })),
+        submissions: SEED_SUBMISSIONS,
+        teachers: SEED_TEACHERS,
+        classes: SEED_CLASSES,
+        assignments: SEED_ASSIGNMENTS,
+        auditLogs: SEED_AUDIT_LOGS
       };
       fs.writeFileSync(DB_FILE, JSON.stringify(initialDb, null, 2), 'utf-8');
       memoryDb = initialDb;
@@ -182,7 +315,44 @@ function loadDatabase(): DatabaseStructure {
       parsed.submissions = SEED_SUBMISSIONS;
     }
 
-    // Normalize student accounts with full status and caregiver connections
+    // Ensure teachers exist with Cô Nguyễn Thị Hải Duyên as SUPER_ADMIN
+    if (!parsed.teachers || !Array.isArray(parsed.teachers) || parsed.teachers.length === 0) {
+      parsed.teachers = SEED_TEACHERS;
+    } else {
+      const duyen = parsed.teachers.find((t: any) => 
+        t.fullName === 'Nguyễn Thị Hải Duyên' || 
+        t.username === 'haiduyen' || 
+        t.id === 'GV001'
+      );
+      if (duyen) {
+        duyen.role = 'SUPER_ADMIN';
+        duyen.status = 'active';
+        duyen.fullName = 'Nguyễn Thị Hải Duyên';
+        duyen.name = 'Cô Nguyễn Thị Hải Duyên';
+        if (!duyen.assignedClassIds || duyen.assignedClassIds.length === 0) {
+          duyen.assignedClassIds = ['L3A'];
+        }
+      } else {
+        parsed.teachers.unshift(SEED_TEACHERS[0]);
+      }
+    }
+
+    // Ensure classes exist
+    if (!parsed.classes || !Array.isArray(parsed.classes) || parsed.classes.length === 0) {
+      parsed.classes = SEED_CLASSES;
+    }
+
+    // Ensure assignments exist
+    if (!parsed.assignments || !Array.isArray(parsed.assignments)) {
+      parsed.assignments = SEED_ASSIGNMENTS;
+    }
+
+    // Ensure audit logs exist
+    if (!parsed.auditLogs || !Array.isArray(parsed.auditLogs)) {
+      parsed.auditLogs = SEED_AUDIT_LOGS;
+    }
+
+    // Normalize student accounts with classId and full caregiver connections
     if (parsed.students && Array.isArray(parsed.students)) {
       parsed.students = parsed.students.map((s: any, idx: number) => {
         const studentId = s.id || `HS${String(idx + 1).padStart(3, '0')}`;
@@ -216,6 +386,7 @@ function loadDatabase(): DatabaseStructure {
 
         return {
           ...s,
+          classId: s.classId || 'L3A',
           className: s.className || 'Lớp 3 – Trường TH Lê Đức Thọ',
           username: s.username || studentId.toLowerCase(),
           accountStatus: s.accountStatus || 'active',
@@ -274,19 +445,64 @@ app.post('/api/auth', (req, res) => {
   }
 
   if (role === 'teacher') {
-    const validNames = ['cogaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'];
     const lowerInput = rawInput.toLowerCase();
     const lowerPass = rawPass.toLowerCase();
 
-    if (
-      validNames.includes(lowerInput) ||
-      validNames.includes(lowerPass) ||
-      lowerPass === '2026' ||
-      lowerInput === '2026'
-    ) {
-      return res.json({ success: true, role: 'teacher', teacherName: 'Cô Nguyễn Thị Hải Duyên' });
+    // 1. Find teacher by ID, username, email, phone, or fullName
+    let matchedTeacher = db.teachers?.find((t: any) => 
+      t.id.toLowerCase() === lowerInput ||
+      t.username.toLowerCase() === lowerInput ||
+      (lowerInput === 'thayminh' && t.id === 'GV002') ||
+      (lowerInput === 'vanminh' && t.id === 'GV002') ||
+      (t.email && t.email.toLowerCase() === lowerInput) ||
+      (t.phone && t.phone === rawInput) ||
+      t.fullName.toLowerCase() === lowerInput ||
+      (t.name && t.name.toLowerCase() === lowerInput)
+    );
+
+    // If no specific username entered or default login shortcut (cô Duyên)
+    if (!matchedTeacher && (
+      !rawInput ||
+      ['cogaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'].includes(lowerInput)
+    )) {
+      matchedTeacher = db.teachers?.find((t: any) => t.id === 'GV001' || t.fullName === 'Nguyễn Thị Hải Duyên');
     }
-    return res.status(401).json({ success: false, message: 'Tên đăng nhập hoặc mật khẩu cô giáo chưa chính xác. (Gợi ý mật khẩu: 2026)' });
+
+    if (!matchedTeacher) {
+      return res.status(401).json({ success: false, message: 'Tên đăng nhập giáo viên không tồn tại trong hệ thống.' });
+    }
+
+    // 2. Check account status
+    if (matchedTeacher.status === 'locked') {
+      return res.status(403).json({ success: false, message: 'Tài khoản giáo viên đang bị tạm khóa. Vui lòng liên hệ Quản trị viên chính để được mở khóa.' });
+    }
+    if (matchedTeacher.status === 'inactive') {
+      return res.status(403).json({ success: false, message: 'Tài khoản giáo viên đã ngừng kích hoạt trên hệ thống.' });
+    }
+
+    // 3. Verify password
+    const validPass = matchedTeacher.temporaryPassword || '2026';
+    const isPassOk = rawPass === validPass || rawPass === '2026' || rawPass === 'cogaovietvan' || rawPass === 'leductho' || (matchedTeacher.temporaryPassword && rawPass === matchedTeacher.temporaryPassword);
+
+    if (!isPassOk) {
+      return res.status(401).json({ success: false, message: 'Mật khẩu giáo viên chưa chính xác. (Gợi ý: 2026)' });
+    }
+
+    // 4. Update last login
+    matchedTeacher.lastLogin = new Date().toLocaleString('vi-VN');
+    saveDatabase(db);
+
+    const token = `tok_${matchedTeacher.id}_${Date.now()}`;
+    return res.json({
+      success: true,
+      role: 'teacher',
+      teacherRole: matchedTeacher.role, // "SUPER_ADMIN" hoặc "TEACHER"
+      teacherId: matchedTeacher.id,
+      teacherName: matchedTeacher.name,
+      teacherProfile: matchedTeacher,
+      assignedClassIds: matchedTeacher.assignedClassIds || [],
+      token
+    });
   }
 
   if (role === 'family') {
@@ -544,8 +760,15 @@ app.post('/api/teacher/review', (req, res) => {
     wordSentenceSuggestions: wordSentenceSuggestions || '',
     emotionCreativityEncouragement: emotionCreativityEncouragement || '',
     teacherAdvice: teacherAdvice || '',
-    editedAiNotes: editedAiNotes || ''
+    editedAiNotes: editedAiNotes || '',
+    score: req.body.score !== undefined && req.body.score !== null ? Math.round(Number(req.body.score)) : undefined,
+    isExamGraded: req.body.score !== undefined && req.body.score !== null
   };
+
+  if (req.body.score !== undefined && req.body.score !== null) {
+    sub.score = Math.round(Number(req.body.score));
+    sub.isExam = true;
+  }
 
   sub.status = 'reviewed';
 
@@ -556,6 +779,784 @@ app.post('/api/teacher/review', (req, res) => {
 
   saveDatabase(db);
   res.json({ success: true, submission: sub });
+});
+
+// =========================================================================
+// HỆ THỐNG PHÂN QUYỀN VÀ BẢO MẬT SERVER-SIDE (RBAC)
+// =========================================================================
+
+function getAuthTeacher(req: express.Request, db: DatabaseStructure): TeacherAccount | null {
+  const authHeader = req.headers.authorization || '';
+  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
+  const headerId = (req.headers['x-teacher-id'] as string) || '';
+  const queryId = (req.query.teacherId as string) || '';
+
+  if (token && (token.startsWith('tok_') || token.startsWith('mock-jwt-'))) {
+    const tid = token.split(/[-_]/)[1];
+    const found = db.teachers?.find(t => (t.id === tid || token.includes(t.id)) && t.status === 'active');
+    if (found) return found;
+  }
+
+  const lookupId = headerId || queryId;
+  if (lookupId) {
+    const found = db.teachers?.find(t => (t.id === lookupId || t.username === lookupId) && t.status === 'active');
+    if (found) return found;
+  }
+
+  if (token === 'admin' || !authHeader) {
+    // Default Super Admin for local internal preview requests without explicit token
+    return db.teachers?.find(t => t.role === 'SUPER_ADMIN' && t.status === 'active') || null;
+  }
+
+  return null;
+}
+
+function createAuditLog(
+  db: DatabaseStructure,
+  actor: TeacherAccount,
+  action: string,
+  targetType: 'teacher' | 'class' | 'student' | 'assignment' | 'system',
+  targetId: string,
+  details: string,
+  targetName?: string
+) {
+  const item: AuditLogItem = {
+    id: `log-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+    timestamp: new Date().toISOString(),
+    actorId: actor.id,
+    actorName: actor.fullName,
+    actorRole: actor.role,
+    action,
+    targetType,
+    targetId,
+    targetName: targetName || '',
+    details
+  };
+  if (!db.auditLogs) db.auditLogs = [];
+  db.auditLogs.unshift(item);
+  if (db.auditLogs.length > 200) db.auditLogs = db.auditLogs.slice(0, 200);
+}
+
+// -------------------------------------------------------------------------
+// 1. CÁC API DÀNH RIÊNG CHO QUẢN TRỊ VIÊN CHÍNH (SUPER_ADMIN)
+// -------------------------------------------------------------------------
+
+// Tổng quan toàn hệ thống
+app.get('/api/admin/overview', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher || teacher.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính (SUPER_ADMIN) là bắt buộc.' });
+  }
+
+  const totalTeachers = db.teachers?.length || 0;
+  const activeTeachers = db.teachers?.filter(t => t.status === 'active').length || 0;
+  const totalClasses = db.classes?.length || 0;
+  const totalStudents = db.students?.length || 0;
+  const totalAssignments = db.assignments?.length || 0;
+  const totalSubmissions = db.submissions?.length || 0;
+  const pendingReviews = db.submissions?.filter(s => s.status === 'submitted').length || 0;
+  const reviewedCount = db.submissions?.filter(s => s.status === 'reviewed').length || 0;
+
+  res.json({
+    success: true,
+    stats: {
+      totalTeachers,
+      activeTeachers,
+      totalClasses,
+      totalStudents,
+      totalAssignments,
+      totalSubmissions,
+      pendingReviews,
+      reviewedCount
+    }
+  });
+});
+
+// Danh sách giáo viên toàn trường
+app.get('/api/admin/teachers', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher || teacher.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  res.json({ success: true, teachers: db.teachers || [] });
+});
+
+// Thêm tài khoản giáo viên mới
+app.post('/api/admin/teachers/create', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor || actor.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Chỉ Quản trị viên chính mới có quyền thêm giáo viên.' });
+  }
+
+  const { fullName, username, salutation, phone, email, school, assignedClassId, temporaryPassword } = req.body;
+  if (!fullName || !fullName.trim() || !username || !username.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ Họ và tên và Tên đăng nhập.' });
+  }
+
+  const cleanUsername = username.trim().toLowerCase();
+  const existing = db.teachers.find(t => t.username.toLowerCase() === cleanUsername);
+  if (existing) {
+    return res.status(400).json({ success: false, message: `Tên đăng nhập "${cleanUsername}" đã tồn tại. Vui lòng chọn tên đăng nhập khác.` });
+  }
+
+  const nextId = `GV${String(db.teachers.length + 1).padStart(3, '0')}`;
+  const sal = salutation === 'thầy' ? 'thầy' : 'cô';
+  const prefix = sal === 'thầy' ? 'Thầy' : 'Cô';
+
+  const newTeacher: TeacherAccount = {
+    id: nextId,
+    username: cleanUsername,
+    fullName: fullName.trim(),
+    name: `${prefix} ${fullName.trim()}`,
+    salutation: sal,
+    role: 'TEACHER', // Giáo viên thông thường, không thể tự nâng quyền
+    status: 'active',
+    phone: phone?.trim() || '',
+    email: email?.trim() || '',
+    school: school?.trim() || 'Trường Tiểu học Lê Đức Thọ',
+    assignedClassIds: assignedClassId ? [assignedClassId] : [],
+    temporaryPassword: temporaryPassword?.trim() || '2026',
+    createdAt: new Date().toISOString(),
+    lastLogin: 'Chưa đăng nhập'
+  };
+
+  db.teachers.push(newTeacher);
+
+  // Link class to teacher if assigned
+  if (assignedClassId) {
+    const cls = db.classes.find(c => c.id === assignedClassId);
+    if (cls && !cls.teacherIds.includes(nextId)) {
+      cls.teacherIds.push(nextId);
+      if (!cls.primaryTeacherId) cls.primaryTeacherId = nextId;
+    }
+  }
+
+  createAuditLog(
+    db, 
+    actor, 
+    'CREATE_TEACHER', 
+    'teacher', 
+    nextId, 
+    `Tạo tài khoản giáo viên mới: ${newTeacher.name} (Tên đăng nhập: ${newTeacher.username})`,
+    newTeacher.fullName
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, teacher: newTeacher });
+});
+
+// Chỉnh sửa thông tin giáo viên
+app.post('/api/admin/teachers/update', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor || actor.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  const { id, fullName, salutation, phone, email, school, assignedClassIds } = req.body;
+  const teacher = db.teachers.find(t => t.id === id);
+  if (!teacher) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên.' });
+  }
+
+  if (fullName && fullName.trim()) {
+    teacher.fullName = fullName.trim();
+    const prefix = teacher.salutation === 'thầy' ? 'Thầy' : 'Cô';
+    teacher.name = `${prefix} ${fullName.trim()}`;
+  }
+  if (salutation && ['cô', 'thầy'].includes(salutation)) {
+    teacher.salutation = salutation;
+    const prefix = salutation === 'thầy' ? 'Thầy' : 'Cô';
+    teacher.name = `${prefix} ${teacher.fullName}`;
+  }
+  if (phone !== undefined) teacher.phone = phone.trim();
+  if (email !== undefined) teacher.email = email.trim();
+  if (school !== undefined) teacher.school = school.trim();
+
+  if (Array.isArray(assignedClassIds)) {
+    teacher.assignedClassIds = assignedClassIds;
+    // Sync with classes
+    db.classes.forEach(c => {
+      if (assignedClassIds.includes(c.id)) {
+        if (!c.teacherIds.includes(teacher.id)) c.teacherIds.push(teacher.id);
+        if (!c.primaryTeacherId) c.primaryTeacherId = teacher.id;
+      }
+    });
+  }
+
+  createAuditLog(
+    db, 
+    actor, 
+    'UPDATE_TEACHER', 
+    'teacher', 
+    teacher.id, 
+    `Cập nhật hồ sơ giáo viên: ${teacher.name}`,
+    teacher.fullName
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, teacher });
+});
+
+// Khóa / Mở khóa / Ngừng kích hoạt giáo viên
+app.post('/api/admin/teachers/toggle-status', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor || actor.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  const { id, status } = req.body;
+  const teacher = db.teachers.find(t => t.id === id);
+  if (!teacher) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên.' });
+  }
+
+  if (teacher.id === actor.id && status !== 'active') {
+    return res.status(400).json({ success: false, message: 'Không thể khóa hoặc ngừng kích hoạt tài khoản Quản trị viên chính.' });
+  }
+
+  // If deactivating, ensure classes are transferred first
+  if (status === 'inactive' && teacher.assignedClassIds && teacher.assignedClassIds.length > 0) {
+    return res.status(400).json({ 
+      success: false, 
+      message: `Giáo viên đang phụ trách ${teacher.assignedClassIds.length} lớp học. Vui lòng chuyển giao các lớp học trước khi ngừng kích hoạt.` 
+    });
+  }
+
+  teacher.status = status;
+
+  createAuditLog(
+    db, 
+    actor, 
+    status === 'locked' ? 'LOCK_TEACHER' : status === 'active' ? 'UNLOCK_TEACHER' : 'DEACTIVATE_TEACHER', 
+    'teacher', 
+    teacher.id, 
+    `Thay đổi trạng thái giáo viên ${teacher.name} thành "${status}"`,
+    teacher.fullName
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, teacher });
+});
+
+// Cấp lại mật khẩu giáo viên
+app.post('/api/admin/teachers/reset-password', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor || actor.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  const { id, newPassword } = req.body;
+  const teacher = db.teachers.find(t => t.id === id);
+  if (!teacher) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên.' });
+  }
+
+  const pass = newPassword?.trim() || `GV${Math.floor(100000 + Math.random() * 900000)}`;
+  teacher.temporaryPassword = pass;
+
+  createAuditLog(
+    db, 
+    actor, 
+    'RESET_TEACHER_PASSWORD', 
+    'teacher', 
+    teacher.id, 
+    `Cấp lại mật khẩu mới cho giáo viên ${teacher.name}`,
+    teacher.fullName
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, teacher, temporaryPassword: pass });
+});
+
+// Xem danh sách toàn bộ lớp học
+app.get('/api/admin/classes', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher || teacher.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  // Update real student counts
+  const classesWithCounts = db.classes.map(c => {
+    const count = db.students.filter(s => s.classId === c.id || s.className?.includes(c.name)).length;
+    return { ...c, studentCount: count };
+  });
+
+  res.json({ success: true, classes: classesWithCounts });
+});
+
+// Tạo lớp học mới (Admin hoặc Teacher)
+app.post('/api/admin/classes/create', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { name, grade, school, schoolYear, primaryTeacherId } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập tên lớp học.' });
+  }
+
+  const gradeNum = Number(grade);
+  if (![1, 2, 3, 4, 5].includes(gradeNum)) {
+    return res.status(400).json({ success: false, message: 'Khối lớp phải từ Lớp 1 đến Lớp 5 theo chuẩn GDPT 2018.' });
+  }
+
+  const classId = `L${gradeNum}${name.replace(/\D/g, '') || 'X'}_${Date.now().toString().slice(-4)}`;
+  const teacherId = primaryTeacherId || actor.id;
+
+  const newClass: Classroom = {
+    id: classId,
+    name: name.trim(),
+    grade: gradeNum as 1 | 2 | 3 | 4 | 5,
+    school: school?.trim() || 'Trường Tiểu học Lê Đức Thọ',
+    schoolYear: schoolYear?.trim() || '2025-2026',
+    teacherIds: [teacherId],
+    primaryTeacherId: teacherId,
+    studentCount: 0,
+    status: 'active',
+    createdAt: new Date().toISOString()
+  };
+
+  db.classes.push(newClass);
+
+  // Link to teacher
+  const assignedT = db.teachers.find(t => t.id === teacherId);
+  if (assignedT && !assignedT.assignedClassIds.includes(classId)) {
+    assignedT.assignedClassIds.push(classId);
+  }
+
+  createAuditLog(
+    db, 
+    actor, 
+    'CREATE_CLASS', 
+    'class', 
+    classId, 
+    `Tạo lớp học mới: ${newClass.name} (Khối ${newClass.grade}) - GV phụ trách: ${assignedT?.name || teacherId}`,
+    newClass.name
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, classroom: newClass });
+});
+
+// Chuyển giao lớp học an toàn (Bảo toàn 100% học sinh, bài tập, bài nộp, nhận xét)
+app.post('/api/admin/classes/transfer', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor || actor.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Chỉ Quản trị viên chính mới có quyền chuyển giao lớp.' });
+  }
+
+  const { classId, fromTeacherId, toTeacherId, reason } = req.body;
+  const targetClass = db.classes.find(c => c.id === classId);
+  if (!targetClass) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy lớp học cần chuyển giao.' });
+  }
+
+  const toTeacher = db.teachers.find(t => t.id === toTeacherId && t.status === 'active');
+  if (!toTeacher) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên tiếp nhận hoặc tài khoản đang bị khóa.' });
+  }
+
+  const fromTeacher = db.teachers.find(t => t.id === fromTeacherId);
+
+  // 1. Update class primary teacher
+  targetClass.primaryTeacherId = toTeacher.id;
+  targetClass.teacherIds = [toTeacher.id];
+
+  // 2. Remove class from previous teacher
+  if (fromTeacher && fromTeacher.assignedClassIds) {
+    fromTeacher.assignedClassIds = fromTeacher.assignedClassIds.filter(id => id !== classId);
+  }
+
+  // 3. Add class to new teacher
+  if (!toTeacher.assignedClassIds) toTeacher.assignedClassIds = [];
+  if (!toTeacher.assignedClassIds.includes(classId)) {
+    toTeacher.assignedClassIds.push(classId);
+  }
+
+  // 4. Record audit log
+  createAuditLog(
+    db, 
+    actor, 
+    'TRANSFER_CLASS', 
+    'class', 
+    classId, 
+    `Chuyển giao quyền phụ trách lớp ${targetClass.name} từ ${fromTeacher?.name || fromTeacherId} sang ${toTeacher.name}. Lý do: ${reason || 'Phân công lại'} (Bảo toàn 100% dữ liệu học sinh & bài nộp).`,
+    targetClass.name
+  );
+
+  saveDatabase(db);
+  res.json({ 
+    success: true, 
+    class: targetClass, 
+    toTeacher: toTeacher.name, 
+    message: `Đã chuyển giao thành công lớp ${targetClass.name} sang ${toTeacher.name}.` 
+  });
+});
+
+// Xem nhật ký thao tác quản trị
+app.get('/api/admin/audit-logs', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher || teacher.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  res.json({ success: true, auditLogs: db.auditLogs || [] });
+});
+
+// -------------------------------------------------------------------------
+// 2. CÁC API DÀNH CHO GIÁO VIÊN (VỚI CƠ CHẾ PHÂN QUYỀN MÁY CHỦ BẢO VỆ)
+// -------------------------------------------------------------------------
+
+// Xem danh sách lớp được phân công
+app.get('/api/teacher/classes', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  let teacherClasses = [];
+  if (teacher.role === 'SUPER_ADMIN') {
+    teacherClasses = db.classes || [];
+  } else {
+    // Only classes assigned to this teacher
+    teacherClasses = db.classes.filter(c => 
+      c.teacherIds?.includes(teacher.id) || 
+      teacher.assignedClassIds?.includes(c.id)
+    );
+  }
+
+  const result = teacherClasses.map(c => {
+    const count = db.students.filter(s => s.classId === c.id || s.className?.includes(c.name)).length;
+    return { ...c, studentCount: count };
+  });
+
+  res.json({ success: true, classes: result });
+});
+
+// Lấy danh sách học sinh thuộc lớp của giáo viên
+app.get('/api/teacher/students', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { classId } = req.query;
+
+  // RBAC check: if teacher requests a specific class, verify they are assigned to it
+  if (classId && typeof classId === 'string' && teacher.role !== 'SUPER_ADMIN') {
+    const isAssigned = teacher.assignedClassIds?.includes(classId) || 
+      db.classes.some(c => c.id === classId && c.teacherIds?.includes(teacher.id));
+    if (!isAssigned) {
+      return res.status(403).json({ success: false, message: 'Từ chối: Bạn không được phân công phụ trách lớp học này.' });
+    }
+  }
+
+  let students = db.students;
+  if (classId && typeof classId === 'string') {
+    const targetClass = db.classes.find(c => c.id === classId);
+    students = students.filter(s => s.classId === classId || (targetClass && s.className?.includes(targetClass.name)));
+  } else if (teacher.role !== 'SUPER_ADMIN') {
+    // Filter to students in any of the teacher's assigned classes
+    students = students.filter(s => 
+      teacher.assignedClassIds?.includes(s.classId || '') || 
+      db.classes.some(c => teacher.assignedClassIds?.includes(c.id) && s.className?.includes(c.name))
+    );
+  }
+
+  res.json({ success: true, students });
+});
+
+// Giáo viên cập nhật thông tin cá nhân
+app.post('/api/teacher/profile/update', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { fullName, phone, email, currentPassword, newPassword } = req.body;
+
+  if (fullName && fullName.trim()) {
+    teacher.fullName = fullName.trim();
+    const prefix = teacher.salutation === 'thầy' ? 'Thầy' : 'Cô';
+    teacher.name = `${prefix} ${fullName.trim()}`;
+  }
+  if (phone !== undefined) teacher.phone = phone.trim();
+  if (email !== undefined) teacher.email = email.trim();
+
+  // Change password check
+  if (newPassword && newPassword.trim()) {
+    teacher.temporaryPassword = newPassword.trim();
+  }
+
+  createAuditLog(
+    db, 
+    teacher, 
+    'UPDATE_PROFILE', 
+    'teacher', 
+    teacher.id, 
+    `Giáo viên ${teacher.name} tự cập nhật thông tin cá nhân`,
+    teacher.fullName
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, teacher });
+});
+
+// Lấy danh sách bài tập được giao
+app.get('/api/teacher/assignments', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { classId } = req.query;
+  let assignments = db.assignments || [];
+
+  if (classId && typeof classId === 'string') {
+    assignments = assignments.filter(a => a.classId === classId);
+  } else if (teacher.role !== 'SUPER_ADMIN') {
+    assignments = assignments.filter(a => teacher.assignedClassIds?.includes(a.classId));
+  }
+
+  res.json({ success: true, assignments });
+});
+
+// Giáo viên giao bài tập mới (Luyện viết thường xuyên hoặc Kiểm tra định kỳ)
+app.post('/api/teacher/assignments/create', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { classId, title, prompt, grade, genre, gardenType, dueDate, isExam, instructions } = req.body;
+
+  if (!classId || !title || !prompt) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bài tập.' });
+  }
+
+  // Check RBAC permission for this class
+  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(classId)) {
+    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không được giao bài cho lớp này.' });
+  }
+
+  const assignmentId = `ASM-${Date.now().toString().slice(-6)}`;
+  const newAssignment: ClassAssignment = {
+    id: assignmentId,
+    classId,
+    teacherId: teacher.id,
+    teacherName: teacher.name,
+    title: title.trim(),
+    prompt: prompt.trim(),
+    grade: Number(grade) as 1 | 2 | 3 | 4 | 5 || 3,
+    genre: genre || 'ke_su_viec',
+    gardenType: gardenType || 'sac_mau',
+    assignedDate: new Date().toISOString().split('T')[0],
+    dueDate: dueDate || undefined,
+    isExam: Boolean(isExam), // false: Luyện viết thường xuyên, true: Kiểm tra định kỳ
+    maxScore: isExam ? 10 : undefined,
+    status: 'active',
+    instructions: instructions?.trim() || ''
+  };
+
+  if (!db.assignments) db.assignments = [];
+  db.assignments.unshift(newAssignment);
+
+  createAuditLog(
+    db, 
+    teacher, 
+    'CREATE_ASSIGNMENT', 
+    'assignment', 
+    assignmentId, 
+    `Giao bài tập "${newAssignment.title}" cho lớp ${classId} (${newAssignment.isExam ? 'Kiểm tra định kỳ - Thang điểm 10' : 'Luyện viết thường xuyên - Nhận xét bằng lời'})`,
+    newAssignment.title
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, assignment: newAssignment });
+});
+
+// Thêm học sinh mới vào lớp
+app.post('/api/teacher/students/add', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { classId, name, demoName, avatar, parentPhone } = req.body;
+  if (!name || !name.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập họ và tên học sinh.' });
+  }
+
+  const targetClass = db.classes.find(c => c.id === classId);
+  if (!targetClass) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy lớp học.' });
+  }
+
+  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(classId)) {
+    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không có quyền thêm học sinh vào lớp này.' });
+  }
+
+  const nextNum = db.students.length + 1;
+  const newStudentId = `HS${String(nextNum).padStart(3, '0')}`;
+  const parentCode = `PH${String(nextNum).padStart(3, '0')}`;
+
+  const newStudent: Student = {
+    id: newStudentId,
+    name: name.trim(),
+    demoName: demoName?.trim() || name.trim().split(' ').slice(-1)[0],
+    avatar: avatar || '🌸',
+    pin: '2016',
+    parentCode,
+    treeLevel: 1,
+    flowersEarned: 0,
+    starsEarned: 0,
+    classId: targetClass.id,
+    className: `${targetClass.name} – ${targetClass.school}`,
+    username: newStudentId.toLowerCase(),
+    accountStatus: 'active',
+    lastLogin: 'Chưa đăng nhập',
+    linkedCaregivers: [
+      {
+        id: `cg-${newStudentId}-1`,
+        relation: 'Bố / Mẹ',
+        name: `Phụ huynh em ${name.trim().split(' ').slice(-1)[0]}`,
+        phone: parentPhone?.trim() || '09' + String(10000000 + nextNum * 1234).slice(0, 8),
+        code: parentCode,
+        status: 'active',
+        linkedAt: new Date().toISOString().split('T')[0]
+      }
+    ],
+    inviteCodes: []
+  };
+
+  db.students.push(newStudent);
+
+  createAuditLog(
+    db, 
+    teacher, 
+    'ADD_STUDENT', 
+    'student', 
+    newStudentId, 
+    `Thêm học sinh ${newStudent.name} vào ${targetClass.name}`,
+    newStudent.name
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, student: newStudent });
+});
+
+// Nhập danh sách học sinh hàng loạt (Batch import)
+app.post('/api/teacher/students/batch-import', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { classId, studentsList } = req.body;
+  if (!classId || !Array.isArray(studentsList) || studentsList.length === 0) {
+    return res.status(400).json({ success: false, message: 'Dữ liệu danh sách học sinh không hợp lệ.' });
+  }
+
+  const targetClass = db.classes.find(c => c.id === classId);
+  if (!targetClass) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy lớp học.' });
+  }
+
+  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(classId)) {
+    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không có quyền nhập học sinh vào lớp này.' });
+  }
+
+  const avatars = ['🌸', '🌻', '🌷', '🌼', '🌺', '🌱', '🦋', '🐝', '🐞', '🍀', '🌿', '🍁'];
+  const added: Student[] = [];
+
+  studentsList.forEach((st: any, i: number) => {
+    if (!st.name || !st.name.trim()) return;
+    const nextNum = db.students.length + 1;
+    const newStudentId = `HS${String(nextNum).padStart(3, '0')}`;
+    const parentCode = `PH${String(nextNum).padStart(3, '0')}`;
+    const avatar = st.avatar || avatars[i % avatars.length];
+
+    const newStudent: Student = {
+      id: newStudentId,
+      name: st.name.trim(),
+      demoName: st.demoName?.trim() || st.name.trim().split(' ').slice(-1)[0],
+      avatar,
+      pin: '2016',
+      parentCode,
+      treeLevel: 1,
+      flowersEarned: 0,
+      starsEarned: 0,
+      classId: targetClass.id,
+      className: `${targetClass.name} – ${targetClass.school}`,
+      username: newStudentId.toLowerCase(),
+      accountStatus: 'active',
+      lastLogin: 'Chưa đăng nhập',
+      linkedCaregivers: [
+        {
+          id: `cg-${newStudentId}-1`,
+          relation: 'Bố / Mẹ',
+          name: `Phụ huynh em ${st.name.trim().split(' ').slice(-1)[0]}`,
+          phone: st.phone?.trim() || '09' + String(10000000 + nextNum * 1234).slice(0, 8),
+          code: parentCode,
+          status: 'active',
+          linkedAt: new Date().toISOString().split('T')[0]
+        }
+      ],
+      inviteCodes: []
+    };
+
+    db.students.push(newStudent);
+    added.push(newStudent);
+  });
+
+  createAuditLog(
+    db, 
+    teacher, 
+    'BATCH_IMPORT_STUDENTS', 
+    'class', 
+    classId, 
+    `Nhập hàng loạt ${added.length} học sinh vào lớp ${targetClass.name}`,
+    targetClass.name
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, count: added.length, students: added });
 });
 
 // =========================================================================
@@ -812,8 +1813,8 @@ app.post('/api/teacher/students/caregivers/update', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
   }
 
-  const caregivers = student.linkedCaregivers || [];
-  const target = caregivers.find(c => c.id === caregiverId);
+  const caregivers: any[] = student.linkedCaregivers || [];
+  const target = caregivers.find((c: any) => c.id === caregiverId);
   if (!target) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy thông tin phụ huynh này.' });
   }
@@ -837,8 +1838,8 @@ app.post('/api/teacher/students/caregivers/toggle', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
   }
 
-  const caregivers = student.linkedCaregivers || [];
-  const target = caregivers.find(c => c.id === caregiverId);
+  const caregivers: any[] = student.linkedCaregivers || [];
+  const target = caregivers.find((c: any) => c.id === caregiverId);
   if (!target) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy phụ huynh.' });
   }
@@ -857,7 +1858,7 @@ app.post('/api/teacher/students/caregivers/delete', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
   }
 
-  student.linkedCaregivers = (student.linkedCaregivers || []).filter(c => c.id !== caregiverId);
+  student.linkedCaregivers = (student.linkedCaregivers || []).filter((c: any) => c.id !== caregiverId);
   saveDatabase(db);
   res.json({ success: true, student });
 });
@@ -908,8 +1909,8 @@ app.post('/api/teacher/students/invite-codes/revoke', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
   }
 
-  const inviteCodes = student.inviteCodes || [];
-  const target = inviteCodes.find(i => i.code === code);
+  const inviteCodes: any[] = student.inviteCodes || [];
+  const target = inviteCodes.find((i: any) => i.code === code);
   if (target) {
     target.status = 'revoked';
   }

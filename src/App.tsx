@@ -12,6 +12,7 @@ import { GardenScene } from './components/GardenScene';
 import { LoginView } from './components/LoginView';
 import { StudentPortal } from './components/StudentPortal';
 import { TeacherPortal } from './components/TeacherPortal';
+import { AdminSystemPortal } from './components/AdminSystemPortal';
 import { FamilyPortal } from './components/FamilyPortal';
 import { ReadingGarden } from './components/ReadingGarden';
 import { ProgressGardenModal } from './components/ProgressGardenModal';
@@ -136,7 +137,11 @@ export default function App() {
       setActiveStudent(user.student);
       setCurrentView('student');
     } else if (user.role === 'teacher') {
-      setCurrentView('teacher');
+      if (user.teacherRole === 'SUPER_ADMIN') {
+        setCurrentView('admin_system');
+      } else {
+        setCurrentView('teacher');
+      }
     } else if (user.role === 'family') {
       if (user.student) {
         setActiveStudent(user.student);
@@ -175,7 +180,20 @@ export default function App() {
 
     if (view === 'teacher') {
       if (currentUser?.role === 'teacher') {
-        setCurrentView('teacher');
+        if (currentUser.teacherRole === 'SUPER_ADMIN') {
+          setCurrentView('admin_system');
+        } else {
+          setCurrentView('teacher');
+        }
+      } else {
+        setCurrentView('login-teacher');
+      }
+      return;
+    }
+
+    if (view === 'admin_system') {
+      if (currentUser?.role === 'teacher' && currentUser.teacherRole === 'SUPER_ADMIN') {
+        setCurrentView('admin_system');
       } else {
         setCurrentView('login-teacher');
       }
@@ -385,14 +403,35 @@ export default function App() {
           )
         )}
 
+        {/* TRANG QUẢN TRỊ HỆ THỐNG (CHỈ DÀNH CHO SUPER_ADMIN) */}
+        {currentView === 'admin_system' && (
+          currentUser?.role === 'teacher' && currentUser.teacherRole === 'SUPER_ADMIN' ? (
+            <AdminSystemPortal
+              currentUser={currentUser}
+              onBackToHome={() => setCurrentView('home')}
+              onGoToTeacherClass={() => setCurrentView('teacher')}
+            />
+          ) : (
+            <LoginView
+              role="teacher"
+              students={students}
+              settings={settings}
+              onLoginSuccess={handleLoginSuccess}
+              onBackToHome={() => setCurrentView('home')}
+            />
+          )
+        )}
+
         {/* GÓC CÔ GIÁO (Bảo mật giáo viên, Sổ chấm bài & Quản lý Tài khoản Lớp em) */}
         {currentView === 'teacher' && (
           currentUser?.role === 'teacher' ? (
             <TeacherPortal
+              currentUser={currentUser}
               students={students}
               settings={settings}
               onBackToGarden={() => setCurrentView('home')}
               onRefreshStudents={loadStudents}
+              onGoToAdminSystem={() => setCurrentView('admin_system')}
             />
           ) : (
             <LoginView

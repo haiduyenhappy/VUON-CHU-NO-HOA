@@ -12,6 +12,7 @@ export type AppView =
   | 'idea_map' 
   | 'essay_feedback'
   | 'progress_journey'
+  | 'admin_system'
   | 'login-student'
   | 'login-teacher'
   | 'login-family';
@@ -166,8 +167,12 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 )}
                 {currentUser.role === 'teacher' && (
-                  <span className="truncate">
-                    👩‍🏫 GV: {currentUser.teacherName || TEACHER_CONFIG.name}
+                  <span className="truncate flex items-center gap-1">
+                    {currentUser.teacherRole === 'SUPER_ADMIN' ? (
+                      <span className="text-amber-700 font-black">👑 Quản trị: {currentUser.teacherName || TEACHER_CONFIG.name}</span>
+                    ) : (
+                      <span>👩‍🏫 GV: {currentUser.teacherName || TEACHER_CONFIG.name}</span>
+                    )}
                   </span>
                 )}
                 {currentUser.role === 'family' && (
@@ -177,6 +182,15 @@ export const Navbar: React.FC<NavbarProps> = ({
                   </span>
                 )}
               </div>
+              {currentUser.teacherRole === 'SUPER_ADMIN' && (
+                <button
+                  onClick={() => onNavigate(currentRole === 'admin_system' ? 'teacher' : 'admin_system')}
+                  className="hidden sm:flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-colors cursor-pointer shadow-xs"
+                  title="Chuyển đổi giữa Trang Quản trị hệ thống và Lớp học của tôi"
+                >
+                  {currentRole === 'admin_system' ? '👩‍🏫 Về lớp tôi' : '👑 Quản trị HT'}
+                </button>
+              )}
               <button
                 onClick={onLogout}
                 className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-bold bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 transition-colors whitespace-nowrap cursor-pointer"

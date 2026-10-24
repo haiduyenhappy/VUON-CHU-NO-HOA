@@ -82,8 +82,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
       passwordPlaceholder: 'Nhập mật khẩu (Gợi ý: 2026)',
       mascotGreeting: `Kính ${timePeriod.greetingTitle.toLowerCase()} thầy/cô! Kính mời thầy/cô đăng nhập để quản lý học sinh, duyệt bài viết và gửi trao những nhận xét ân cần.`,
       demoPresets: [
-        { label: `${TEACHER_CONFIG.name} (2026)`, u: 'cogaovietvan', p: '2026' },
-        { label: 'Tài khoản Lớp 3 Lê Đức Thọ', u: 'leductho', p: '2026' }
+        { label: '👑 Admin (Cô Duyên)', u: 'haiduyen', p: '2026' },
+        { label: 'Cô Duyên (cogaovietvan)', u: 'cogaovietvan', p: '2026' },
+        { label: 'Thầy Minh (thayminh)', u: 'thayminh', p: '2026' }
       ]
     },
     family: {
@@ -146,7 +147,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
         if (role === 'teacher') {
           authUser = {
             role: 'teacher',
-            teacherName: data.teacherName || TEACHER_CONFIG.name
+            teacherId: data.teacherId || 'GV001',
+            teacherRole: data.teacherRole || 'SUPER_ADMIN',
+            teacherName: data.teacherName || TEACHER_CONFIG.name,
+            assignedClassIds: data.assignedClassIds || ['L3A'],
+            teacherProfile: data.teacherProfile,
+            token: data.token
           };
         } else if (role === 'student') {
           authUser = {
@@ -196,9 +202,17 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       if (role === 'teacher') {
         const normalized = (p || u).toLowerCase();
-        if (normalized === '2026' || normalized === 'cogaovietvan' || normalized === 'leductho' || normalized === 'coha' || p === '2026') {
+        const isMinh = normalized.includes('thayminh') || u.toLowerCase() === 'thayminh';
+        const isDuyen = normalized.includes('haiduyen') || normalized.includes('cogaovietvan') || normalized.includes('leductho') || normalized === '2026' || p === '2026';
+        if (isMinh || isDuyen) {
           playChime(settings.soundEnabled);
-          onLoginSuccess({ role: 'teacher', teacherName: TEACHER_CONFIG.name });
+          onLoginSuccess({
+            role: 'teacher',
+            teacherId: isMinh ? 'GV002' : 'GV001',
+            teacherRole: isMinh ? 'TEACHER' : 'SUPER_ADMIN',
+            teacherName: isMinh ? 'Trần Văn Minh' : TEACHER_CONFIG.name,
+            assignedClassIds: isMinh ? ['L4B'] : ['L3A']
+          });
           return;
         } else {
           setErrorMsg('Mật khẩu giáo viên chưa đúng. (Gợi ý mật khẩu: 2026)');

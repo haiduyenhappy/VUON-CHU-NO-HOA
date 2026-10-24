@@ -33,6 +33,7 @@ export interface Student {
   learningTimeMinutes?: number; // Thời gian học tập thực tế
   consecutiveDays?: number; // Số ngày liên tiếp luyện viết
   className?: string; // Mặc định: Lớp 3 – Trường TH Lê Đức Thọ
+  classId?: string; // ID lớp học (ví dụ: L3A)
   username?: string; // Tên đăng nhập tiện lợi (vd: hs001 hoặc phamtuean)
   accountStatus?: 'active' | 'locked' | 'deleted'; // Tình trạng tài khoản: đang hoạt động, tạm khóa, hoặc đã xóa
   lastLogin?: string; // Lần đăng nhập gần nhất
@@ -114,6 +115,72 @@ export interface TeacherFeedback {
   wordSentenceSuggestions?: string; // Góp ý dùng từ, đặt câu
   emotionCreativityEncouragement?: string; // Khích lệ cảm xúc & sáng tạo
   teacherAdvice?: string; // Lời dặn dò của cô
+  score?: number; // Điểm số bài kiểm tra định kỳ (1–10)
+  isExamGraded?: boolean;
+}
+
+export type TeacherRole = 'SUPER_ADMIN' | 'TEACHER';
+export type TeacherStatus = 'active' | 'locked' | 'inactive';
+
+export interface TeacherAccount {
+  id: string; // Mã giáo viên, ví dụ: GV001
+  username: string; // Tên đăng nhập
+  fullName: string; // Họ tên đầy đủ: Nguyễn Thị Hải Duyên
+  name: string; // Tên hiển thị: Cô Nguyễn Thị Hải Duyên
+  salutation: 'cô' | 'thầy';
+  role: TeacherRole; // SUPER_ADMIN hoặc TEACHER
+  status: TeacherStatus; // active | locked | inactive
+  phone?: string;
+  email?: string;
+  school: string; // Trường TH Lê Đức Thọ
+  assignedClassIds: string[]; // Danh sách mã lớp phụ trách
+  lastLogin?: string;
+  createdAt: string;
+  temporaryPassword?: string;
+}
+
+export interface Classroom {
+  id: string; // L3A
+  name: string; // Lớp 3A
+  grade: 1 | 2 | 3 | 4 | 5;
+  school: string;
+  schoolYear: string;
+  teacherIds: string[]; // Danh sách giáo viên phụ trách
+  primaryTeacherId: string; // Giáo viên chủ nhiệm chính
+  studentCount?: number;
+  status: 'active' | 'archived';
+  createdAt: string;
+}
+
+export interface ClassAssignment {
+  id: string; // ASM-001
+  classId: string;
+  teacherId: string;
+  teacherName: string;
+  title: string;
+  prompt: string;
+  grade: 1 | 2 | 3 | 4 | 5;
+  genre: EssayGenre;
+  gardenType: GardenType;
+  assignedDate: string;
+  dueDate?: string;
+  isExam: boolean; // false: Luyện viết thường xuyên (nhận xét bằng lời); true: Kiểm tra định kỳ (chấm điểm thang 10)
+  maxScore?: number; // 10
+  status: 'active' | 'closed';
+  instructions?: string;
+}
+
+export interface AuditLogItem {
+  id: string;
+  timestamp: string;
+  actorId: string;
+  actorName: string;
+  actorRole: TeacherRole;
+  action: string;
+  targetType: 'teacher' | 'class' | 'student' | 'assignment' | 'system';
+  targetId: string;
+  targetName?: string;
+  details: string;
 }
 
 export interface AuthUser {
@@ -126,6 +193,11 @@ export interface AuthUser {
   parentCode?: string;
   caregiver?: LinkedCaregiver;
   token?: string;
+  // Multi-teacher & RBAC fields
+  teacherId?: string;
+  teacherRole?: TeacherRole;
+  assignedClassIds?: string[];
+  teacherProfile?: TeacherAccount;
 }
 
 export interface SubmissionDraft {
@@ -152,6 +224,10 @@ export interface FiveContentProgress {
 export interface Submission {
   id: string;
   studentId: string;
+  classId?: string;
+  assignmentId?: string;
+  isExam?: boolean; // Bài kiểm tra định kỳ có chấm điểm
+  score?: number; // Điểm số từ 1 đến 10 (chỉ dùng cho bài kiểm tra định kỳ)
   taskId: string;
   taskTitle: string;
   gardenType: GardenType;
