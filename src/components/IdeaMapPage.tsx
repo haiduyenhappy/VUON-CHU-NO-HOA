@@ -13,6 +13,7 @@ import {
   TextbookExercise,
   TextbookOcrResult,
   PromptChoice,
+  PromptDirection,
   MindMapBranch,
   PromptAnalysisData 
 } from '../types';
@@ -49,6 +50,7 @@ import {
   Target,
   Share2
 } from 'lucide-react';
+import { TopicSelectionModal } from './TopicSelectionModal';
 
 interface IdeaMapPageProps {
   student: Student;
@@ -63,7 +65,9 @@ interface IdeaMapPageProps {
   }) => void;
   onBackToGarden?: () => void;
   initialPrompt?: string;
+  initialGrade?: number;
   initialGenre?: EssayGenre;
+  isAssignedTask?: boolean;
 }
 
 export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
@@ -72,7 +76,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   onProceedToWrite,
   onBackToGarden,
   initialPrompt = '',
-  initialGenre = 'khac'
+  initialGrade,
+  initialGenre = 'khac',
+  isAssignedTask = false
 }) => {
   // 1. Prompt input & image OCR
   const [promptText, setPromptText] = useState(
@@ -102,6 +108,15 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const [coreSubject, setCoreSubject] = useState<string>('');
   const [genre, setGenre] = useState<EssayGenre>(initialGenre || 'khac');
 
+  // Direction handling states (Xử lý đề bài có 2 hướng viết hợp lệ)
+  const [hasMultipleDirections, setHasMultipleDirections] = useState<boolean>(false);
+  const [detectedDirections, setDetectedDirections] = useState<PromptDirection[]>([]);
+  const [selectedDirectionId, setSelectedDirectionId] = useState<string | null>(null);
+  const [selectedDirectionTitle, setSelectedDirectionTitle] = useState<string>('');
+  const [mainObject, setMainObject] = useState<string>('');
+  const [writingScope, setWritingScope] = useState<string>('');
+  const promptVersionRef = useRef<number>(0);
+
   // Keep prompt in sync if initialPrompt changes
   useEffect(() => {
     if (initialPrompt) {
@@ -109,8 +124,29 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   }, [initialPrompt]);
 
-  // Grade selection (Lớp 1 đến Lớp 12, mặc định Lớp 3)
-  const [grade, setGrade] = useState<number>(3);
+  // Helper to extract grade from student's profile (e.g. "Lớp 3A" -> 3)
+  const defaultGradeFromProfile = (): number => {
+    if (initialGrade && initialGrade >= 1 && initialGrade <= 5) return initialGrade;
+    if (student?.className) {
+      const match = student.className.match(/(\d+)/);
+      if (match) {
+        const g = parseInt(match[1], 10);
+        if (g >= 1 && g <= 5) return g;
+      }
+    }
+    return 3;
+  };
+
+  // Grade selection (Giới hạn đúng 5 khối: Lớp 1 đến Lớp 5)
+  const [grade, setGrade] = useState<number>(defaultGradeFromProfile);
+  const [isTopicModalOpen, setIsTopicModalOpen] = useState(false);
+
+  useEffect(() => {
+    if (initialGrade && initialGrade >= 1 && initialGrade <= 5) {
+      setGrade(initialGrade);
+    }
+  }, [initialGrade]);
+
   const [specialWishes, setSpecialWishes] = useState<string>('Có từ láy, có hình ảnh so sánh, kể thật từ trải nghiệm của em');
 
   // AI Understanding state ("HOA NHỎ CÙNG CON HIỂU ĐỀ")
@@ -414,6 +450,17 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                       confirmedText.includes('2–3 câu') ||
                       confirmedText.includes('2-3 câu');
 
+    // Invalidate stale data immediately
+    promptVersionRef.current++;
+    setMindMapBranches([]);
+    setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
+    setActiveOutline([]);
+    setVocabBank(null);
+    setUnderstanding(null);
+    setSelectedDirectionId(null);
+    setDetectedDirections([]);
+    setHasMultipleDirections(false);
+
     if (isShort23) {
       setSpecialWishes('Viết 2–3 câu theo đúng yêu cầu đề bài; lời văn tự nhiên, chân thật.');
       setDetailedOutline({
@@ -441,19 +488,21 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   };
 
   // Generate / Update Idea Map ("Tạo bản đồ ý tưởng")
-  const handleGenerateIdeaMap = async () => {
+  const handleGenerateIdeaMap = async (forceDirectionId?: string) => {
     if (!promptText.trim()) return;
 
     playChime(settings.soundEnabled);
     setIsUnderstandingLoading(true);
     setIsLoadingVocab(true);
 
+    const dirIdToSend = forceDirectionId !== undefined ? forceDirectionId : selectedDirectionId;
+    const currentVersion = ++promptVersionRef.current;
+
     // XÓA SẠCH DỮ LIỆU CŨ CỦA ĐỀ TRƯỚC - KHÔNG ĐỂ DỮ LIỆU CŨ LƯU LẠI
     setMindMapBranches([]);
     setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
     setActiveOutline([]);
     setVocabBank(null);
-    setUnderstanding(null);
 
     try {
       // Gọi bộ phân tích đề sâu trực tiếp từ đề bài học sinh nhập
@@ -463,50 +512,85 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         body: JSON.stringify({
           prompt: promptText.trim(),
           grade,
-          specialWishes
+          specialWishes,
+          selectedDirectionId: dirIdToSend
         })
       });
 
       if (resDeep.ok) {
         const deepData: PromptAnalysisData = await resDeep.json();
+
+        // Kiểm tra tránh race condition nếu học sinh đã sửa đề mới hơn
+        if (currentVersion !== promptVersionRef.current) return;
+
         setLastAnalyzedPrompt(promptText.trim());
+        setHasMultipleDirections(deepData.hasMultipleDirections || false);
+        setDetectedDirections(deepData.detectedDirections || []);
+        setSelectedDirectionId(deepData.selectedDirectionId || null);
+        setSelectedDirectionTitle(deepData.selectedDirectionTitle || '');
+        setMainObject(deepData.mainObject || '');
+        setWritingScope(deepData.writingScope || '');
 
         if (deepData.coreSubject) {
           setCoreSubject(deepData.coreSubject);
         }
-        if (deepData.branches && deepData.branches.length > 0) {
-          setMindMapBranches(deepData.branches);
-        }
-        if (deepData.outline) {
-          setDetailedOutline(deepData.outline);
-          const newActive: OutlineItem[] = [
-            { id: '1', section: 'Mở đoạn', content: deepData.outline.moDoan[0] || 'Giới thiệu đối tượng theo đề bài' },
-            { id: '2', section: 'Phát triển đoạn', content: deepData.outline.phatTrienDoan.slice(0, 2).join(' ') || 'Miêu tả và chia sẻ các nội dung chi tiết' },
-            { id: '3', section: 'Kết đoạn', content: deepData.outline.ketDoan[0] || 'Bộc lộ cảm nghĩ và mong ước' }
-          ];
-          setActiveOutline(newActive);
-          setInitialOutlineBackup(newActive);
-        }
-        if (deepData.vocabularySuggestions) {
-          setVocabBank(deepData.vocabularySuggestions);
-        }
-        if (deepData.socraticQuestions && deepData.socraticQuestions.length > 0) {
-          setSocraticQuestion(deepData.socraticQuestions[0]);
-        }
 
-        // Cập nhật CÙNG HOA NHỎ HIỂU ĐỀ
-        setUnderstanding({
-          target: deepData.coreSubject || promptText,
-          genreEvaluation: deepData.hoaNhoUnderstand || `Đề bài muốn con bám sát chủ đề "${deepData.coreSubject || promptText}" để viết đoạn văn thật sinh động.`,
-          contentRequirements: deepData.specificRequirements || deepData.branches?.map(b => b.title) || [
+        // TRƯỜNG HỢP ĐỀ CÓ 2 HƯỚNG VÀ CHƯA CHỌN:
+        // Hướng dẫn học sinh chọn hướng trước, KHÔNG tự ý tạo dàn ý
+        if (deepData.hasMultipleDirections && !deepData.selectedDirectionId) {
+          setMindMapBranches([]);
+          setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
+          setActiveOutline([]);
+          setVocabBank(null);
+
+          setUnderstanding({
+            target: promptText.trim(),
+            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!',
+            contentRequirements: deepData.specificRequirements || [
+              'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
+            ],
+            suggestedSentenceCount: deepData.suggestedLength || (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'),
+            specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
+            advice: 'Chọn cách viết con cảm thấy gần gũi và có nhiều kỷ niệm nhất!'
+          });
+        } else {
+          // Đã chọn hướng hoặc đề đơn lẻ 1 hướng
+          if (deepData.branches && deepData.branches.length > 0) {
+            setMindMapBranches(deepData.branches);
+          }
+          if (deepData.outline) {
+            setDetailedOutline(deepData.outline);
+            const newActive: OutlineItem[] = [
+              { id: '1', section: 'Mở đoạn', content: deepData.outline.moDoan[0] || 'Giới thiệu đối tượng theo đề bài' },
+              { id: '2', section: 'Phát triển đoạn', content: deepData.outline.phatTrienDoan.slice(0, 2).join(' ') || 'Miêu tả và chia sẻ các nội dung chi tiết' },
+              { id: '3', section: 'Kết đoạn', content: deepData.outline.ketDoan[0] || 'Bộc lộ cảm nghĩ và mong ước' }
+            ];
+            setActiveOutline(newActive);
+            setInitialOutlineBackup(newActive);
+          }
+          if (deepData.vocabularySuggestions) {
+            setVocabBank(deepData.vocabularySuggestions);
+          }
+          if (deepData.socraticQuestions && deepData.socraticQuestions.length > 0) {
+            setSocraticQuestion(deepData.socraticQuestions[0]);
+          }
+
+          // Cập nhật CÙNG HOA NHỎ HIỂU ĐỀ
+          const reqs = deepData.specificRequirements || deepData.branches?.map(b => b.title) || [
             'Nêu đối tượng hoặc sự việc trong đề',
             'Kể và miêu tả các chi tiết cụ thể',
             'Bộc lộ cảm xúc chân thật của con'
-          ],
-          suggestedSentenceCount: deepData.suggestedLength || (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'),
-          specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
-          advice: 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!'
-        });
+          ];
+
+          setUnderstanding({
+            target: deepData.mainObject || deepData.coreSubject || promptText,
+            genreEvaluation: deepData.hoaNhoUnderstand || `Đề bài muốn con bám sát chủ đề "${deepData.coreSubject || promptText}" để viết đoạn văn thật sinh động.`,
+            contentRequirements: reqs,
+            suggestedSentenceCount: deepData.suggestedLength || (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'),
+            specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
+            advice: 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!'
+          });
+        }
       } else {
         // Fallback nhẹ nếu endpoint gặp sự cố
         const resUnderstand = await fetch('/api/ai/understand-prompt', {
@@ -523,6 +607,20 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       setIsUnderstandingLoading(false);
       setIsLoadingVocab(false);
     }
+  };
+
+  // Chọn hướng viết khi đề bài có 2 cách viết
+  const handleSelectDirection = (directionId: string) => {
+    playSparkle(settings.soundEnabled);
+    setSelectedDirectionId(directionId);
+    handleGenerateIdeaMap(directionId);
+  };
+
+  // Đổi sang hướng viết khác
+  const handleResetDirection = () => {
+    playPop(settings.soundEnabled);
+    setSelectedDirectionId(null);
+    handleGenerateIdeaMap('');
   };
 
   // Branch CRUD operations
@@ -768,16 +866,29 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
       {/* SECTION 1: NHẬP ĐỀ BÀI (Văn bản + Tối đa 5 ảnh đề bài với OCR kiểm tra) */}
       <div className="bg-white rounded-3xl border-2 border-pink-200 p-5 sm:p-6 shadow-sm space-y-4">
-        <div className="flex items-center justify-between border-b border-pink-100 pb-3">
+        <div className="flex flex-wrap items-center justify-between gap-2 border-b border-pink-100 pb-3">
           <div className="flex items-center gap-2">
             <span className="text-xl">✏️</span>
             <h3 className="text-lg font-bold text-stone-900 font-display">
               1. Đề bài của con
             </h3>
           </div>
-          <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-            Có thể nhập chữ hoặc tải ảnh chụp đề (Tối đa 5 ảnh)
-          </span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setIsTopicModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-extrabold text-xs shadow-xs transition-all cursor-pointer hover:scale-102"
+              title="Mở kho đề bài SGK Lớp 1–5 và đề mở rộng"
+            >
+              <BookOpen className="w-3.5 h-3.5" />
+              <span>📚 Chọn đề bài khác</span>
+            </button>
+            <span className="text-xs font-semibold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200 hidden sm:inline">
+              Có thể nhập chữ hoặc tải ảnh chụp đề (Tối đa 5 ảnh)
+            </span>
+          </div>
         </div>
 
         {/* Text input area */}
@@ -789,8 +900,22 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             rows={3}
             value={promptText}
             onChange={(e) => {
-              setPromptText(e.target.value);
+              const val = e.target.value;
+              setPromptText(val);
               setHasCheckedPrompt(true);
+              // Xóa sạch kết quả phân tích cũ ngay lập tức để không bị lẫn lộn giữa các đề
+              promptVersionRef.current++;
+              setMindMapBranches([]);
+              setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
+              setActiveOutline([]);
+              setVocabBank(null);
+              setUnderstanding(null);
+              setSelectedDirectionId(null);
+              setDetectedDirections([]);
+              setHasMultipleDirections(false);
+              setSelectedDirectionTitle('');
+              setMainObject('');
+              setWritingScope('');
             }}
             placeholder="Nhập đề bài của con vào đây..."
             className="w-full p-3.5 rounded-2xl border-2 border-purple-100 focus:border-purple-300 focus:outline-hidden text-sm sm:text-base leading-relaxed bg-pink-50/20"
@@ -1275,63 +1400,77 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
       {/* SECTION 2: CHỌN LỚP HỌC & TỰ ĐỘNG HIỂU ĐỀ */}
       <div className="grid grid-cols-1 md:grid-cols-12 gap-5">
-        {/* Grade selector (Lớp 1 đến Lớp 12, mặc định Lớp 3) */}
+        {/* Grade selector (Đúng 5 khối: Lớp 1 đến Lớp 5) */}
         <div className="md:col-span-5 bg-white rounded-3xl border-2 border-purple-200 p-5 shadow-sm space-y-3">
           <div className="flex items-center justify-between border-b border-purple-100 pb-2">
             <span className="font-extrabold text-xs uppercase tracking-wider text-purple-900 flex items-center gap-1.5">
               <span>🎒</span>
-              <span>2. Chọn lớp học của con</span>
+              <span>2. Chọn khối lớp (Lớp 1 – 5)</span>
             </span>
-            <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
-              Lớp {grade}
-            </span>
+            <div className="flex items-center gap-1.5">
+              {student?.className && (
+                <span className="text-[11px] font-bold text-stone-500 bg-stone-100 px-2 py-0.5 rounded-md" title="Lớp hành chính trong hồ sơ">
+                  {student.className}
+                </span>
+              )}
+              <span className="text-xs font-bold text-purple-600 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                Lớp {grade}
+              </span>
+            </div>
           </div>
 
           <p className="text-xs text-stone-600 leading-relaxed font-medium">
-            AI sẽ tự động điều chỉnh độ dài câu, vốn từ và dàn ý phù hợp theo từng lớp.
+            {isAssignedTask
+              ? 'Bài tập được cô giáo giao cho khối lớp này (khóa theo yêu cầu bài học).'
+              : 'Hoa Nhỏ tự động điều chỉnh độ dài câu, vốn từ và dàn ý chuẩn GDPT 2018 theo từng khối lớp (không thay đổi lớp hành chính của con).'}
           </p>
 
-          <div className="grid grid-cols-4 gap-1.5">
-            {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(g => (
+          <div className="grid grid-cols-5 gap-1.5 sm:gap-2">
+            {[1, 2, 3, 4, 5].map(g => (
               <button
                 key={g}
+                disabled={isAssignedTask}
                 onClick={() => {
                   playPop(settings.soundEnabled);
                   setGrade(g);
                 }}
-                className={`py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                className={`py-2 sm:py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold transition-all cursor-pointer ${
                   grade === g
-                    ? 'bg-purple-600 text-white shadow-xs scale-105'
-                    : 'bg-stone-50 text-stone-700 hover:bg-purple-50 border border-stone-200'
-                }`}
+                    ? 'bg-gradient-to-r from-purple-600 to-indigo-600 text-white shadow-md scale-105 ring-2 ring-purple-300'
+                    : 'bg-stone-50 text-stone-700 hover:bg-purple-50 border border-stone-200 hover:border-purple-300'
+                } ${isAssignedTask ? 'opacity-70 cursor-not-allowed' : ''}`}
               >
                 Lớp {g}
               </button>
             ))}
           </div>
+
+          <div className="pt-1 text-[11px] text-purple-800 font-semibold flex items-center gap-1">
+            <span>✨</span>
+            <span>
+              {grade === 1 && 'Lớp 1: Em tập viết câu trọn vẹn (1–2 câu)'}
+              {grade === 2 && 'Lớp 2: Em tập viết đoạn ngắn (3–5 câu)'}
+              {grade === 3 && 'Lớp 3: Em học lập dàn ý & viết đoạn văn (5–9 câu)'}
+              {grade === 4 && 'Lớp 4: Em viết đoạn và bài văn theo thể loại'}
+              {grade === 5 && 'Lớp 5: Em phát triển bài văn hoàn chỉnh'}
+            </span>
+          </div>
         </div>
 
-        {/* Helpful auto-genre indicator without forcing student selection */}
-        <div className="md:col-span-7 bg-gradient-to-br from-purple-50 via-pink-50 to-sky-50 rounded-3xl border-2 border-purple-200 p-5 shadow-sm flex flex-col justify-between space-y-3">
-          <div className="flex items-center gap-2 border-b border-purple-100 pb-2">
-            <span className="text-xl">🌸</span>
-            <h4 className="text-xs font-extrabold uppercase tracking-wider text-purple-900 font-display">
-              Hoa Nhỏ tự động nhận diện đề bài
+        {/* Thẻ thông báo Hoa Nhỏ cùng con hiểu đề */}
+        <div className="md:col-span-7 bg-[#fff5f8] border border-pink-200 rounded-[20px] p-4 sm:p-5 shadow-xs flex items-start gap-3.5 sm:gap-4">
+          <div className="shrink-0 pt-0.5">
+            <HoaNhoMascot size="sm" mood="happy" />
+          </div>
+          <div className="flex-1 space-y-2">
+            <h4 className="text-[17px] sm:text-[18px] font-bold text-pink-950 font-display tracking-tight flex items-center gap-1.5">
+              <span>🌸</span>
+              <span>HOA NHỎ CÙNG CON HIỂU ĐỀ</span>
             </h4>
-          </div>
-
-          <div className="space-y-2 text-xs sm:text-sm text-stone-700 font-medium leading-relaxed">
-            <p>
-              ✨ <strong>Con không cần tự chọn dạng bài!</strong> Trợ lý Hoa Nhỏ sẽ tự động đọc kỹ đề bài của con để nhận diện chính xác nhiệm vụ (tự giới thiệu, kể chuyện, tả đồ vật, tả cây cối hay bày tỏ tình cảm).
-            </p>
-            <p className="text-stone-600 text-xs">
-              🌱 Bấm <strong className="text-purple-800">Tạo bản đồ ý tưởng</strong> bên dưới, Hoa Nhỏ sẽ cùng con hiểu đề, đặt câu hỏi khơi mở và lập sơ đồ 5 nhánh bám sát 100% đề của con.
-            </p>
-          </div>
-
-          <div className="flex items-center gap-2 text-[11px] text-purple-800 font-bold bg-white/80 px-3 py-1.5 rounded-xl border border-purple-100">
-            <span>💡 Mẹo nhỏ:</span>
-            <span>Con có thể tải ảnh đề bài từ SGK hoặc gõ trực tiếp nội dung đề bài nhé!</span>
+            <div className="text-[15px] sm:text-[16px] text-stone-700 leading-[1.6] space-y-2 font-sans">
+              <p>Con hãy đọc lại đề bài và kiểm tra xem mình đã nhập đúng chưa nhé!</p>
+              <p>Khi con nhấn ‘Tạo bản đồ ý tưởng’, Hoa Nhỏ sẽ giúp con tìm những ý phù hợp với đề bài.</p>
+            </div>
           </div>
         </div>
       </div>
@@ -1419,50 +1558,120 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm text-stone-700 font-medium">
-            <div className="p-4 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5 md:col-span-2">
-              <strong className="text-purple-950 block font-bold text-sm sm:text-base flex items-center gap-1.5 font-display">
-                <span>💬</span>
-                <span>Lời khuyên của Hoa Nhỏ:</span>
-              </strong>
-              <p className="text-stone-800 leading-relaxed font-semibold italic bg-purple-50/60 p-3 rounded-xl border border-purple-100">
-                "{understanding.genreEvaluation}"
-              </p>
-            </div>
-
-            <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5">
-              <strong className="text-purple-900 block font-bold">1. Các yêu cầu cụ thể trong đề bài:</strong>
-              <ul className="space-y-1.5 pt-1">
-                {understanding.contentRequirements.map((r, i) => (
-                  <li key={i} className="flex items-start gap-1.5">
-                    <span className="text-emerald-600 font-black">✓</span>
-                    <span className="text-stone-800 leading-snug">{r}</span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-2">
-              <div>
-                <strong className="text-purple-900 block font-bold">2. Dung lượng & lưu ý:</strong>
-                <p className="text-stone-800 mt-0.5">• Dung lượng: <span className="font-extrabold text-sky-800">{understanding.suggestedSentenceCount}</span></p>
-                <p className="text-stone-600 text-xs mt-1">• {understanding.advice}</p>
+          {/* Khi đề có 2 hướng viết và học sinh chưa chọn hướng */}
+          {hasMultipleDirections && !selectedDirectionId && detectedDirections.length > 0 ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-white/95 rounded-2xl border-2 border-pink-300 shadow-xs space-y-2">
+                <div className="flex items-center gap-2 text-pink-900 font-extrabold text-sm sm:text-base font-display">
+                  <span>✨</span>
+                  <span>Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!</span>
+                </div>
+                <p className="text-xs sm:text-sm text-stone-600 font-medium">
+                  Hoa Nhỏ đã phân tích thấy đề bài mở ra 2 hướng viết khác nhau. Con hãy bấm chọn một hướng dưới đây để cùng Hoa Nhỏ lập sơ đồ 5 nhánh và dàn ý bám sát hướng đó:
+                </p>
               </div>
 
-              {understanding.specialWishesNoted && understanding.specialWishesNoted.length > 0 && (
-                <div className="pt-2 border-t border-purple-100">
-                  <span className="text-[11px] font-bold text-pink-900 block">Yêu cầu bổ sung của con:</span>
-                  <div className="flex flex-wrap gap-1 mt-1">
-                    {understanding.specialWishesNoted.map((w, idx) => (
-                      <span key={idx} className="px-2 py-0.5 bg-pink-50 text-pink-800 text-[11px] font-semibold rounded-md border border-pink-200">
-                        ⭐ {w}
-                      </span>
-                    ))}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {detectedDirections.map((dir, idx) => (
+                  <div
+                    key={dir.id}
+                    className="p-5 rounded-2xl bg-white border-2 border-purple-300 hover:border-pink-400 shadow-sm hover:shadow-md transition-all flex flex-col justify-between space-y-4 group"
+                  >
+                    <div className="space-y-2.5">
+                      <div className="flex items-center justify-between">
+                        <span className="px-3 py-1 rounded-full bg-pink-100 text-pink-900 font-black text-xs border border-pink-200">
+                          Cách {idx + 1}
+                        </span>
+                        <span className="text-2xl">{dir.icon || '🌸'}</span>
+                      </div>
+                      <h4 className="text-base sm:text-lg font-black text-purple-950 font-display group-hover:text-pink-600 transition-colors">
+                        {dir.title}
+                      </h4>
+                      <div className="space-y-1 text-xs text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200">
+                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject}</p>
+                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope}</p>
+                      </div>
+                    </div>
+
+                    <button
+                      onClick={() => handleSelectDirection(dir.id)}
+                      disabled={isUnderstandingLoading}
+                      className="w-full py-3 px-4 rounded-xl bg-gradient-to-r from-pink-500 via-purple-500 to-sky-500 hover:from-pink-600 hover:to-sky-600 text-white font-extrabold text-sm shadow-xs transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-50"
+                    >
+                      <span>🌸 Con chọn cách {idx + 1} này</span>
+                      <ArrowRight className="w-4 h-4" />
+                    </button>
                   </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              {/* Thẻ hiển thị hướng viết đã chọn khi đề có nhiều hướng */}
+              {hasMultipleDirections && selectedDirectionId && (
+                <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-white/95 rounded-2xl border-2 border-purple-300 shadow-2xs">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-stone-500 uppercase tracking-wide">Hướng viết đã chọn:</span>
+                    <span className="px-3 py-1 rounded-full bg-purple-700 text-white font-black text-xs sm:text-sm shadow-2xs flex items-center gap-1.5">
+                      <span>✨</span>
+                      <span>{selectedDirectionTitle || detectedDirections.find(d => d.id === selectedDirectionId)?.title || 'Hướng viết của con'}</span>
+                    </span>
+                  </div>
+                  <button
+                    onClick={handleResetDirection}
+                    className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>🔄 Đổi sang cách viết khác</span>
+                  </button>
                 </div>
               )}
-            </div>
-          </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm text-stone-700 font-medium">
+                <div className="p-4 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5 md:col-span-2">
+                  <strong className="text-purple-950 block font-bold text-sm sm:text-base flex items-center gap-1.5 font-display">
+                    <span>💬</span>
+                    <span>Lời khuyên của Hoa Nhỏ:</span>
+                  </strong>
+                  <p className="text-stone-800 leading-relaxed font-semibold italic bg-purple-50/60 p-3 rounded-xl border border-purple-100">
+                    "{understanding.genreEvaluation}"
+                  </p>
+                </div>
+
+                <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5">
+                  <strong className="text-purple-900 block font-bold">1. Các yêu cầu cụ thể trong đề bài:</strong>
+                  <ul className="space-y-1.5 pt-1">
+                    {understanding.contentRequirements.map((r, i) => (
+                      <li key={i} className="flex items-start gap-1.5">
+                        <span className="text-emerald-600 font-black">✓</span>
+                        <span className="text-stone-800 leading-snug">{r}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+
+                <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-2">
+                  <div>
+                    <strong className="text-purple-900 block font-bold">2. Dung lượng & lưu ý:</strong>
+                    <p className="text-stone-800 mt-0.5">• Dung lượng: <span className="font-extrabold text-sky-800">{understanding.suggestedSentenceCount}</span></p>
+                    <p className="text-stone-600 text-xs mt-1">• {understanding.advice}</p>
+                  </div>
+
+                  {understanding.specialWishesNoted && understanding.specialWishesNoted.length > 0 && (
+                    <div className="pt-2 border-t border-purple-100">
+                      <span className="text-[11px] font-bold text-pink-900 block">Yêu cầu bổ sung của con:</span>
+                      <div className="flex flex-wrap gap-1 mt-1">
+                        {understanding.specialWishesNoted.map((w, idx) => (
+                          <span key={idx} className="px-2 py-0.5 bg-pink-50 text-pink-800 text-[11px] font-semibold rounded-md border border-pink-200">
+                            ⭐ {w}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -2176,6 +2385,37 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           <ArrowRight className="w-4 h-4" />
         </button>
       </div>
+
+      {/* Modal chọn đề bài khác từ kho bài tập GDPT 2018 */}
+      <TopicSelectionModal
+        isOpen={isTopicModalOpen}
+        onClose={() => setIsTopicModalOpen(false)}
+        currentPrompt={promptText}
+        currentGrade={grade}
+        soundEnabled={settings.soundEnabled}
+        onSelectTopic={(topic) => {
+          setPromptText(topic.prompt);
+          if (topic.grade && topic.grade >= 1 && topic.grade <= 5) {
+            setGrade(topic.grade);
+          }
+          if (topic.genre) {
+            setGenre(topic.genre);
+          }
+          setHasCheckedPrompt(true);
+          promptVersionRef.current++;
+          setMindMapBranches([]);
+          setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
+          setActiveOutline([]);
+          setVocabBank(null);
+          setUnderstanding(null);
+          setSelectedDirectionId(null);
+          setDetectedDirections([]);
+          setHasMultipleDirections(false);
+          setSelectedDirectionTitle('');
+          setMainObject('');
+          setWritingScope('');
+        }}
+      />
     </div>
   );
 };

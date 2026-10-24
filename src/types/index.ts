@@ -61,14 +61,18 @@ export type EssayGenre =
 
 export interface WritingTask {
   id: string;
+  grade?: 1 | 2 | 3 | 4 | 5; // Khối lớp 1 đến 5 (mặc định Lớp 3)
   volume: 1 | 2; // Tập 1 hoặc Tập 2
   week: number;
   title: string;
   gardenType: GardenType;
+  genre?: EssayGenre;
   prompt: string;
   suggestedQuestions: string[];
   evaluationCriteria: string[];
   textbookRef?: string;
+  gradeMission?: string; // e.g. "Em tập viết câu", "Em tập viết đoạn 3–5 câu"...
+  expectedLength?: string; // e.g. "1–2 câu hoàn chỉnh", "3–5 câu ngắn gọn"...
 }
 
 export interface ChatMessage {
@@ -307,6 +311,15 @@ export interface PromptChoice {
   icon?: string;
 }
 
+export interface PromptDirection {
+  id: string;
+  title: string;
+  mainObject: string;
+  scope: string;
+  description?: string;
+  icon?: string;
+}
+
 export interface MindMapBranch {
   id: string;
   title: string;
@@ -321,9 +334,13 @@ export interface PromptAnalysisData {
   writingType?: EssayGenre;
   hasChoices?: boolean;
   choices?: PromptChoice[];
-  selectedChoiceId?: string;
-  selectedChoiceLabel?: string;
+  hasMultipleDirections?: boolean;
+  detectedDirections?: PromptDirection[];
+  selectedDirectionId?: string | null;
+  selectedDirectionTitle?: string;
   coreSubject: string;
+  mainObject?: string;
+  writingScope?: string;
   promptEvidence?: string[];
   suggestedLength: string;
   hoaNhoUnderstand?: string;
@@ -333,5 +350,6 @@ export interface PromptAnalysisData {
   outline: DetailedOutlineGroup;
   vocabularySuggestions: VocabularyImageryBank;
 }
+
 
 

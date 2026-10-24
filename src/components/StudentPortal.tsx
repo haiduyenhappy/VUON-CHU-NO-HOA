@@ -64,6 +64,20 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [currentStep, setCurrentStep] = useState<StudentStep>('choose_task');
   const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics' | 'my_submissions'>('volume1');
   const [selectedVolume, setSelectedVolume] = useState<1 | 2>(1);
+
+  // Grade state for student practice (Lớp 1 đến Lớp 5)
+  const getStudentDefaultGrade = (s: Student): number => {
+    if (s.className) {
+      const match = s.className.match(/(\d+)/);
+      if (match) {
+        const g = parseInt(match[1], 10);
+        if (g >= 1 && g <= 5) return g;
+      }
+    }
+    return 3;
+  };
+  const [activeGrade, setActiveGrade] = useState<number>(() => getStudentDefaultGrade(student));
+
   const [selectedGardenFilter, setSelectedGardenFilter] = useState<GardenType | 'all'>('all');
   const [selectedOtherCategory, setSelectedOtherCategory] = useState<string>('all');
   const [activeTask, setActiveTask] = useState<WritingTask | null>(null);
@@ -131,11 +145,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     setCurrentStep('write');
   };
 
-  // Filter tasks
+  // Filter tasks based on activeGrade, volume, and garden
   const filteredTasks = CURRICULUM_TASKS.filter(t => {
+    const matchGrade = (t.grade || 3) === activeGrade;
     const matchVolume = t.volume === (activeMainTab === 'volume2' ? 2 : 1);
     const matchGarden = selectedGardenFilter === 'all' || t.gardenType === selectedGardenFilter;
-    return matchVolume && matchGarden;
+    return matchGrade && matchVolume && matchGarden;
   });
 
   const filteredOtherTopics = OTHER_CREATIVE_TOPICS.filter(t => {
@@ -146,8 +161,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // Action: "🌸 Luyện viết với Hoa Nhỏ" -> Go directly to Trang 1 (Bản đồ ý tưởng)
   const handlePracticeWithHoaNho = (prompt: string, genre: EssayGenre = 'ke_su_viec', task?: WritingTask) => {
     playSparkle(settings.soundEnabled);
+    const chosenGrade = task?.grade || activeGrade;
     if (onGoToIdeaMap) {
-      onGoToIdeaMap(prompt, 3, genre);
+      onGoToIdeaMap(prompt, chosenGrade, genre);
     } else if (task) {
       handleSelectTask(task, false);
     }
@@ -532,7 +548,51 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
       {/* ================= STEP 1: CHOOSE TASK ================= */}
       {currentStep === 'choose_task' && (
-        <div className="space-y-6 animate-fade-in">
+        <div className="space-y-5 animate-fade-in">
+          {/* Thanh chọn Khối lớp luyện tập (Lớp 1 đến Lớp 5) */}
+          <div className="flex flex-wrap items-center justify-between gap-3 bg-gradient-to-r from-purple-50 via-pink-50 to-amber-50 p-4 rounded-3xl border-2 border-purple-200 shadow-2xs">
+            <div className="flex items-center gap-2.5">
+              <span className="text-2xl">🎒</span>
+              <div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <span className="text-xs font-black uppercase text-purple-950 tracking-wider">
+                    Khối lớp luyện viết (GDPT 2018):
+                  </span>
+                  {student.className && (
+                    <span className="text-[11px] font-bold text-stone-600 bg-white/90 px-2.5 py-0.5 rounded-full border border-purple-200" title="Lớp hành chính">
+                      Lớp của con: {student.className}
+                    </span>
+                  )}
+                  <span className="text-xs font-black text-purple-700 bg-purple-100 px-2 py-0.5 rounded-full">
+                    Đang xem: Lớp {activeGrade}
+                  </span>
+                </div>
+                <p className="text-[11px] text-stone-600 font-medium pt-0.5">
+                  Con có thể chọn khối lớp để luyện tập các dạng bài phù hợp mà không làm đổi lớp hành chính
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              {[1, 2, 3, 4, 5].map(g => (
+                <button
+                  key={g}
+                  onClick={() => {
+                    playPop(settings.soundEnabled);
+                    setActiveGrade(g);
+                  }}
+                  className={`px-3 sm:px-4 py-2 rounded-2xl text-xs sm:text-sm font-black transition-all cursor-pointer ${
+                    activeGrade === g
+                      ? 'bg-purple-700 text-white shadow-md scale-105 ring-2 ring-purple-300'
+                      : 'bg-white text-stone-700 border border-purple-200 hover:bg-purple-100'
+                  }`}
+                >
+                  Lớp {g}
+                </button>
+              ))}
+            </div>
+          </div>
+
           {/* Main 4 Tabs Switcher */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-3xl border-2 border-stone-200">
             {/* 4 Main Tab Buttons */}
@@ -545,7 +605,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                 }`}
               >
-                📘 Tập 1 (15 bài SGK)
+                📘 Tập 1 (Lớp {activeGrade})
               </button>
               <button
                 onClick={() => { setActiveMainTab('volume2'); setSelectedVolume(2); playPop(settings.soundEnabled); }}
@@ -555,7 +615,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                     : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                 }`}
               >
-                📗 Tập 2 (17 bài SGK)
+                📗 Tập 2 (Lớp {activeGrade})
               </button>
               <button
                 onClick={() => { setActiveMainTab('other_topics'); playSparkle(settings.soundEnabled); }}

@@ -303,6 +303,7 @@ export default function App() {
             student={activeStudent || students[0]}
             settings={settings}
             initialPrompt={sharedPrompt}
+            initialGrade={sharedGrade}
             initialGenre={sharedGenre}
             onProceedToWrite={handleProceedToWrite}
             onBackToGarden={() => {

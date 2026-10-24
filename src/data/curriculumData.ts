@@ -1,4 +1,5 @@
 import { WritingTask, GardenType } from '../types';
+import { GRADE_1_TASKS, GRADE_2_TASKS, GRADE_4_TASKS, GRADE_5_TASKS } from './curriculumTasksByGrade';
 
 export const GARDEN_INFOS: Record<GardenType, { name: string; icon: string; description: string; color: string; bgLight: string; border: string }> = {
   ke_chuyen: {
@@ -43,7 +44,7 @@ export const GARDEN_INFOS: Record<GardenType, { name: string; icon: string; desc
   }
 };
 
-export const CURRICULUM_TASKS: WritingTask[] = [
+const RAW_GRADE_3_TASKS: WritingTask[] = [
   // ===================== TẬP 1 (15 nhiệm vụ) =====================
   {
     id: 'tap1-01',
@@ -679,4 +680,20 @@ export const CURRICULUM_TASKS: WritingTask[] = [
     ],
     textbookRef: 'Tiếng Việt 3 Tập 2 - Bài Ôn tập cuối năm'
   }
+];
+
+export const GRADE_3_TASKS: WritingTask[] = RAW_GRADE_3_TASKS.map(t => ({
+  ...t,
+  grade: 3 as const,
+  gradeMission: t.gradeMission || 'Em học lập dàn ý & viết đoạn văn',
+  expectedLength: t.expectedLength || (t.volume === 1 ? '4–6 câu hoặc 7–9 câu' : '5–8 câu liên kết')
+}));
+
+// TOÀN BỘ BÀI TẬP TIẾNG VIỆT LỚP 1 ĐẾN LỚP 5 THEO GDPT 2018
+export const CURRICULUM_TASKS: WritingTask[] = [
+  ...GRADE_1_TASKS,
+  ...GRADE_2_TASKS,
+  ...GRADE_3_TASKS,
+  ...GRADE_4_TASKS,
+  ...GRADE_5_TASKS
 ];
