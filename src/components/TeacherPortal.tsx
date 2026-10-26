@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment } from '../types';
+import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData } from '../types';
+import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { playPop, playChime } from '../utils/audio';
 import { getTeacherGreeting } from '../utils/timeGreeting';
@@ -84,7 +85,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [newAssignGenre, setNewAssignGenre] = useState<string>('Tả đồ vật');
   const [newAssignPrompt, setNewAssignPrompt] = useState('');
   const [newAssignIsExam, setNewAssignIsExam] = useState(false);
-  const [newAssignDueDate, setNewAssignDueDate] = useState('');
+  const [newAssignTopicCode, setNewAssignTopicCode] = useState<string>('CD06');
+  const [newAssignDifficulty, setNewAssignDifficulty] = useState<DifficultyLevel>('co_ban');
+  const [aiPreviewData, setAiPreviewData] = useState<PromptAnalysisData | null>(null);
+  const [isAiPreviewLoading, setIsAiPreviewLoading] = useState<boolean>(false);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
   const [assignmentActionMsg, setAssignmentActionMsg] = useState('');
 
@@ -245,6 +249,30 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     }
   };
 
+  // AI Phân tích & Xem trước sơ đồ & dàn ý cho giáo viên
+  const handlePreviewAssignmentWithAi = async () => {
+    if (!newAssignPrompt.trim()) return;
+    setIsAiPreviewLoading(true);
+    try {
+      const res = await fetch('/api/ai/analyze-prompt-deep', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt: newAssignPrompt.trim(),
+          grade: Number(newAssignGrade),
+          difficultyLevel: newAssignDifficulty
+        })
+      });
+      const data = await res.json();
+      setAiPreviewData(data);
+      if (data.topicCode) setNewAssignTopicCode(data.topicCode);
+    } catch (e) {
+      console.error('Error previewing assignment:', e);
+    } finally {
+      setIsAiPreviewLoading(false);
+    }
+  };
+
   // Handler: Create Assignment
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -264,7 +292,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           dueDate: newAssignDueDate || undefined,
           classId: selectedClassId !== 'all' ? selectedClassId : (assignedClasses[0]?.id || 'L3A'),
           teacherId: currentUser?.teacherId || 'GV001',
-          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name
+          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name,
+          difficultyLevel: newAssignDifficulty,
+          topicCode: newAssignTopicCode,
+          customOutline: aiPreviewData?.outline || undefined
         })
       });
       const data = await res.json();
@@ -273,6 +304,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         setAssignmentActionMsg('✓ Đã giao bài tập thành công cho học sinh!');
         setNewAssignTitle('');
         setNewAssignPrompt('');
+        setAiPreviewData(null);
         setIsCreateAssignmentOpen(false);
         fetchAssignments();
       } else {
@@ -1561,9 +1593,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
             </div>
           </div>
 
-          {/* Accounts Table */}
+          {/* Accounts Table & Responsive Mobile Cards */}
           <div className="bg-white rounded-3xl border-2 border-stone-200 overflow-hidden shadow-xs">
-            <div className="overflow-x-auto">
+            {/* Desktop & Tablet Table (>= md) */}
+            <div className="hidden md:block overflow-x-auto">
               <table className="w-full text-left text-xs sm:text-sm">
                 <thead className="bg-emerald-50/80 border-b border-emerald-100 text-emerald-950 font-extrabold uppercase text-[11px] tracking-wider">
                   <tr>
@@ -1735,6 +1768,143 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   )}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile Card List (< md) */}
+            <div className="block md:hidden divide-y divide-stone-100 p-2 sm:p-3">
+              {accountStudentsList.length === 0 ? (
+                <div className="py-8 text-center text-stone-400 font-medium text-xs">
+                  Không tìm thấy học sinh nào trong mục này.
+                </div>
+              ) : (
+                accountStudentsList.map((st, idx) => {
+                  const isDeleted = st.accountStatus === 'deleted';
+                  const isLocked = st.accountStatus === 'locked';
+                  const caregiver = st.linkedCaregivers?.[0];
+
+                  return (
+                    <div key={st.id} className={`p-4 rounded-2xl mb-3 border border-stone-200/80 bg-white shadow-2xs space-y-3 ${isDeleted ? 'bg-stone-50/70 opacity-80' : ''}`}>
+                      {/* Top Header of Card */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-9 h-9 rounded-xl bg-stone-100 border border-stone-200 flex items-center justify-center text-lg shrink-0">
+                            {st.avatar}
+                          </span>
+                          <div className="min-w-0">
+                            <span className={`font-black text-sm block truncate ${isDeleted ? 'line-through text-stone-500' : 'text-stone-900'}`}>
+                              {idx + 1}. {st.name}
+                            </span>
+                            <span className="text-[11px] text-stone-400 block truncate">
+                              {st.demoName} • {st.className || 'Lớp 3 – TH Lê Đức Thọ'}
+                            </span>
+                          </div>
+                        </div>
+
+                        {/* Status Badge */}
+                        <div className="shrink-0">
+                          {isDeleted ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-stone-100 text-stone-600 border border-stone-300">
+                              <Trash2 className="w-3 h-3 text-stone-400" />
+                              <span>Đã xóa</span>
+                            </span>
+                          ) : isLocked ? (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-rose-100 text-rose-800 border border-rose-300">
+                              <Lock className="w-3 h-3" />
+                              <span>Tạm khóa</span>
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              <CheckCircle className="w-3 h-3 text-emerald-600" />
+                              <span>Hoạt động</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Detail Info Grid */}
+                      <div className="grid grid-cols-2 gap-2 text-xs bg-stone-50/80 p-2.5 rounded-xl border border-stone-100">
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-stone-400 block">Mã học sinh:</span>
+                          <span className="font-mono font-bold text-emerald-900">{st.id}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-stone-400 block">Tên đăng nhập:</span>
+                          <span className="font-mono font-semibold text-stone-700">{st.username || st.id.toLowerCase()}</span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-stone-400 block">Mã kết nối PH:</span>
+                          <span className="font-mono font-bold text-purple-900 bg-purple-50 px-1.5 py-0.2 rounded border border-purple-200 inline-block">
+                            {st.parentCode}
+                          </span>
+                        </div>
+                        <div>
+                          <span className="text-[10px] uppercase font-bold text-stone-400 block">Lần đăng nhập:</span>
+                          <span className="text-stone-600 truncate block">{st.lastLogin || 'Chưa đăng nhập'}</span>
+                        </div>
+                      </div>
+
+                      {/* Mobile Action Buttons (Min 38-40px touch targets) */}
+                      <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-stone-100">
+                        {isDeleted ? (
+                          <button
+                            onClick={() => handleRestoreStudent(st)}
+                            className="flex-1 min-h-[40px] px-3 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-xs flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <RotateCcw className="w-4 h-4 text-emerald-600" />
+                            <span>Khôi phục tài khoản</span>
+                          </button>
+                        ) : (
+                          <>
+                            <button
+                              onClick={() => handleOpenEdit(st)}
+                              className="flex-1 min-h-[38px] px-2.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-800 border border-stone-300 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-stone-600" />
+                              <span>Sửa</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenResetPassword(st)}
+                              className="flex-1 min-h-[38px] px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                            >
+                              <Key className="w-3.5 h-3.5 text-amber-700" />
+                              <span>Cấp MK</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleToggleLock(st)}
+                              className={`flex-1 min-h-[38px] px-2.5 py-1.5 rounded-xl font-bold text-xs border flex items-center justify-center gap-1 transition-colors ${
+                                isLocked
+                                  ? 'bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border-emerald-300'
+                                  : 'bg-rose-50 hover:bg-rose-100 text-rose-800 border-rose-300'
+                              }`}
+                            >
+                              {isLocked ? <Unlock className="w-3.5 h-3.5" /> : <Lock className="w-3.5 h-3.5" />}
+                              <span>{isLocked ? 'Mở' : 'Khóa'}</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenDelete(st)}
+                              className="min-h-[38px] px-3 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 font-bold text-xs flex items-center justify-center gap-1 transition-colors"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-rose-600" />
+                              <span>Xóa</span>
+                            </button>
+
+                            <button
+                              onClick={() => handleOpenFamilyLink(st)}
+                              className="w-full min-h-[40px] px-3 py-2 rounded-xl bg-purple-100 hover:bg-purple-200 text-purple-950 border border-purple-300 font-extrabold text-xs flex items-center justify-center gap-1.5 shadow-2xs transition-colors"
+                            >
+                              <span>👨‍👩‍👧</span>
+                              <span>Quản lý phụ huynh & mã kết nối ({st.linkedCaregivers?.length || 1})</span>
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })
+              )}
             </div>
           </div>
         </div>
@@ -2141,7 +2311,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Khối lớp:
+                    Khối lớp (1–5):
                   </label>
                   <select
                     value={newAssignGrade}
@@ -2150,6 +2320,41 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   >
                     {[1, 2, 3, 4, 5].map(g => (
                       <option key={g} value={g}>Lớp {g}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Mức độ thử thách:
+                  </label>
+                  <select
+                    value={newAssignDifficulty}
+                    onChange={e => setNewAssignDifficulty(e.target.value as DifficultyLevel)}
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
+                  >
+                    <option value="co_ban">🌱 Cơ bản (Chuẩn SGK)</option>
+                    <option value="mo_rong">🌿 Mở rộng (Quan sát phong phú)</option>
+                    <option value="nang_cao">⭐ Nâng cao (Từ ngữ gợi cảm & nghệ thuật)</option>
+                    <option value="sang_tao">✨ Sáng tạo (Tư duy mới lạ, bứt phá)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Chủ đề (25 nhóm chủ đề GDPT 2018):
+                  </label>
+                  <select
+                    value={newAssignTopicCode}
+                    onChange={e => setNewAssignTopicCode(e.target.value)}
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white font-medium"
+                  >
+                    {TOPIC_GROUPS.map(t => (
+                      <option key={t.code} value={t.code}>
+                        {t.code}: {t.name}
+                      </option>
                     ))}
                   </select>
                 </div>
@@ -2169,24 +2374,91 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     <option value="Tả người">Tả người</option>
                     <option value="Tả cảnh vật">Tả cảnh vật</option>
                     <option value="Kể chuyện">Kể chuyện</option>
+                    <option value="Thuật lại sự việc">Thuật lại sự việc</option>
                     <option value="Cảm nghĩ">Bày tỏ cảm xúc</option>
+                    <option value="Nêu ý kiến">Nêu ý kiến</option>
+                    <option value="Viết thư">Viết thư thăm hỏi / chia sẻ</option>
+                    <option value="Lời nhắn">Viết lời nhắn / tin nhắn</option>
+                    <option value="Thông báo">Viết thông báo</option>
+                    <option value="Báo cáo">Viết báo cáo / kế hoạch</option>
+                    <option value="Sáng tạo">Tưởng tượng / Sáng tạo</option>
                   </select>
                 </div>
               </div>
 
               <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Đề bài & Yêu cầu chi tiết:
-                </label>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-xs font-bold text-stone-700">
+                    Đề bài & Yêu cầu chi tiết:
+                  </label>
+                  <button
+                    type="button"
+                    onClick={handlePreviewAssignmentWithAi}
+                    disabled={isAiPreviewLoading || !newAssignPrompt.trim()}
+                    className="text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
+                  >
+                    <Sparkles className={`w-3.5 h-3.5 ${isAiPreviewLoading ? 'animate-spin text-purple-600' : ''}`} />
+                    <span>{isAiPreviewLoading ? 'Đang phân tích...' : '🔍 Xem trước sơ đồ & dàn ý AI'}</span>
+                  </button>
+                </div>
                 <textarea
                   rows={3}
                   required
                   value={newAssignPrompt}
-                  onChange={e => setNewAssignPrompt(e.target.value)}
+                  onChange={e => {
+                    setNewAssignPrompt(e.target.value);
+                    setAiPreviewData(null);
+                  }}
                   placeholder="Viết một đoạn văn từ 5 đến 7 câu tả một đồ dùng học tập gắn bó với em hàng ngày..."
                   className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
                 />
               </div>
+
+              {/* AI PREVIEW CARD FOR TEACHER */}
+              {aiPreviewData && (
+                <div className="p-3.5 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-2xl space-y-2.5 text-xs animate-fade-in">
+                  <div className="flex items-center justify-between border-b border-purple-200 pb-2">
+                    <span className="font-extrabold text-purple-950 flex items-center gap-1.5">
+                      <span>🌸</span>
+                      <span>Kết quả phân tích đề bài & Bản đồ ý tưởng</span>
+                    </span>
+                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] border border-emerald-300 flex items-center gap-1">
+                      <span>✓</span>
+                      <span>Đạt 20/20 tiêu chuẩn GDPT 2018</span>
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
+                      <strong className="text-purple-900 block font-bold">Đối tượng chính:</strong>
+                      <span className="text-stone-800">{aiPreviewData.mainObject || aiPreviewData.coreSubject}</span>
+                    </div>
+                    <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
+                      <strong className="text-purple-900 block font-bold">Chủ đề & Thể loại:</strong>
+                      <span className="text-stone-800">{aiPreviewData.topicName} • {aiPreviewData.writingFormat}</span>
+                    </div>
+                  </div>
+
+                  {aiPreviewData.branches && aiPreviewData.branches.length > 0 && (
+                    <div className="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-1">
+                      <strong className="text-purple-900 block font-bold text-[11px]">
+                        5 nhánh gợi mở tư duy:
+                      </strong>
+                      <div className="flex flex-wrap gap-1.5">
+                        {aiPreviewData.branches.map((b, idx) => (
+                          <span key={idx} className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 font-semibold text-[10px]">
+                            {b.icon} {b.name}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  <p className="text-[11px] text-purple-900 italic font-medium">
+                    "{aiPreviewData.hoaNhoUnderstand}"
+                  </p>
+                </div>
+              )}
 
               {/* Mode Selection */}
               <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">

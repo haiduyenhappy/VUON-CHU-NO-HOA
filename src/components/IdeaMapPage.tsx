@@ -4,6 +4,7 @@ import {
   WritingTask, 
   OutlineItem, 
   DetailedOutlineGroup,
+  DetailedOutlineSection,
   AppSettings, 
   EssayGenre, 
   PromptUnderstanding, 
@@ -15,7 +16,9 @@ import {
   PromptChoice,
   PromptDirection,
   MindMapBranch,
-  PromptAnalysisData 
+  PromptAnalysisData,
+  DifficultyLevel,
+  ValidationCheckItem
 } from '../types';
 import { HoaNhoMascot } from './HoaNhoMascot';
 import { AiStatusBar } from './AiStatusBar';
@@ -51,6 +54,16 @@ import {
   Share2
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
+import { detectGenre, getGenreLabel } from '../utils/genreDetector';
+
+interface DirectionDraft {
+  mindMapBranches: MindMapBranch[];
+  detailedOutline: DetailedOutlineGroup;
+  activeOutline: OutlineItem[];
+  vocabBank: VocabularyImageryBank | null;
+  understanding: PromptUnderstanding | null;
+  socraticQuestion: string;
+}
 
 interface IdeaMapPageProps {
   student: Student;
@@ -113,6 +126,15 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const [detectedDirections, setDetectedDirections] = useState<PromptDirection[]>([]);
   const [selectedDirectionId, setSelectedDirectionId] = useState<string | null>(null);
   const [selectedDirectionTitle, setSelectedDirectionTitle] = useState<string>('');
+  // Multi-tier prompt analysis, 25 topic groups & GDPT 2018 validation states
+  const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel>('co_ban');
+  const [topicCode, setTopicCode] = useState<string>('');
+  const [topicName, setTopicName] = useState<string>('');
+  const [detectedTaskCodes, setDetectedTaskCodes] = useState<string[]>([]);
+  const [detectedTaskLabels, setDetectedTaskLabels] = useState<string[]>([]);
+  const [validationChecks, setValidationChecks] = useState<ValidationCheckItem[]>([]);
+  const [allChecksPassed, setAllChecksPassed] = useState<boolean>(true);
+  const [showValidationModal, setShowValidationModal] = useState<boolean>(false);
   const [mainObject, setMainObject] = useState<string>('');
   const [writingScope, setWritingScope] = useState<string>('');
   const promptVersionRef = useRef<number>(0);
@@ -147,7 +169,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   }, [initialGrade]);
 
-  const [specialWishes, setSpecialWishes] = useState<string>('Có từ láy, có hình ảnh so sánh, kể thật từ trải nghiệm của em');
+  const [specialWishes, setSpecialWishes] = useState<string>('Lời văn tự nhiên, có cảm xúc thật từ trải nghiệm của em');
 
   // AI Understanding state ("HOA NHỎ CÙNG CON HIỂU ĐỀ")
   const [isUnderstandingLoading, setIsUnderstandingLoading] = useState(false);
@@ -170,13 +192,26 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const [refreshComparison, setRefreshComparison] = useState<RefreshOutlineResult | null>(null);
   const [isRefreshingOutline, setIsRefreshingOutline] = useState(false);
 
+  // Direction caching ref (Lưu giữ bản nháp của từng hướng viết khi học sinh chuyển đổi)
+  const directionDraftsRef = useRef<Record<string, DirectionDraft>>({});
+
   // Editing state for outline bullets
   const [newBulletText, setNewBulletText] = useState<{ section: 'moDoan' | 'phatTrienDoan' | 'ketDoan'; text: string } | null>(null);
+  const [newSectionBulletText, setNewSectionBulletText] = useState<{ secIndex: number; text: string } | null>(null);
+
+  // Helper checks for genres and custom outline sections
+  const isLetterPrompt = genre === 'viet_thu' || detectGenre(promptText) === 'viet_thu';
+  const isNotePrompt = genre === 'loi_nhan' || detectGenre(promptText) === 'loi_nhan';
+  const isSentencePrompt = genre === 'viet_cau' || detectGenre(promptText) === 'viet_cau';
+  const isOpinionPrompt = genre === 'neu_y_kien' || detectGenre(promptText) === 'neu_y_kien';
+  const isEmotionPrompt = genre === 'tinh_cam_cam_xuc' || detectGenre(promptText) === 'tinh_cam_cam_xuc';
+  const hasCustomSections = Boolean(detailedOutline?.sections && detailedOutline.sections.length > 0);
+  const isLetterMode = isLetterPrompt;
 
   // 7. Socratic Brainstorming / Personal experiences chat (Contextual)
   const [studentExperienceText, setStudentExperienceText] = useState('');
   const [socraticQuestion, setSocraticQuestion] = useState(
-    'Trong ngôi nhà thân yêu, góc nhỏ nào (bàn học bên cửa sổ, góc đọc sách, gian bếp...) làm con thấy gắn bó và ấm áp nhất?'
+    'Con hãy bấm "Tạo bản đồ ý tưởng" để Hoa Nhỏ cùng con khám phá những gợi ý thú vị nhất cho bài viết nhé!'
   );
   const [isSocraticLoading, setIsSocraticLoading] = useState(false);
 
@@ -185,69 +220,38 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     {
       id: 'c-1',
       sender: 'hoanho',
-      text: 'Con còn điều gì băn khoăn về cách chọn góc nhỏ hay từ ngữ miêu tả? Hãy chia sẻ cùng Hoa Nhỏ nhé! Mỗi ý tưởng của con đều rất đáng quý.',
+      text: 'Chào con! Khi con nhấn "Tạo bản đồ ý tưởng", Hoa Nhỏ sẽ cùng con trò chuyện, tìm ý tứ và câu văn hay nhất cho đề bài của con nhé!',
       timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
     }
   ]);
   const [creativeInput, setCreativeInput] = useState('');
   const [isCreativeChatLoading, setIsCreativeChatLoading] = useState(false);
 
-  // 9. Contextual Vocabulary & Imagery Bank
-  const [vocabBank, setVocabBank] = useState<VocabularyImageryBank | null>({
-    goodWords: [
-      { word: 'ấm cúng', meaningAndUsage: 'Gợi không gian gia đình thân thương, an yên và chan chứa tình yêu thương' },
-      { word: 'ngăn nắp', meaningAndUsage: 'Mọi đồ dùng sách vở được xếp đặt gọn gàng, trật tự, sạch đẹp' },
-      { word: 'xinh xắn', meaningAndUsage: 'Nhỏ nhắn, đáng yêu và ưa nhìn' },
-      { word: 'yên bình', meaningAndUsage: 'Tĩnh lặng, dễ chịu, không ồn ào vội vã' }
-    ],
-    imageries: [
-      { type: 'So sánh', example: 'Góc học tập như người bạn nhỏ thầm lặng luôn kiên nhẫn đợi em trở về', explanation: 'Gợi sự gắn bó thân thiết và gần gũi' },
-      { type: 'Nhân hóa', example: 'Khung cửa sổ mỉm cười đón những tia nắng vàng ấm áp rọi vào phòng', explanation: 'Làm không gian trở nên sống động, có tâm hồn' }
-    ],
-    sampleSentences: [
-      {
-        type: 'mo_bai',
-        label: 'Gợi ý mở đoạn tả góc nhỏ yêu thích',
-        sentence: 'Trong ngôi nhà thân yêu của em, nơi em gắn bó nhiều nhất chính là góc học tập nhỏ bên khung cửa sổ.',
-        whyItIsGood: 'Nêu trực tiếp góc nhỏ yêu thích một cách tự nhiên và ấm áp.'
-      },
-      {
-        type: 'mieu_ta',
-        label: 'Gợi ý chi tiết sinh động',
-        sentence: 'Mỗi buổi chiều, từng tia nắng vàng ấm áp lại rọi qua ô cửa kính, sưởi ấm hàng sách được xếp ngay ngắn.',
-        whyItIsGood: 'Kết hợp ánh sáng thiên nhiên với sự ngăn nắp, gợi cảm giác êm đềm.'
-      },
-      {
-        type: 'ket_bai',
-        label: 'Gợi ý câu kết lắng đọng',
-        sentence: 'Góc nhỏ ấy không chỉ giúp em học tập chăm chỉ mà còn là nơi lưu giữ những ước mơ thơ ấu của em.',
-        whyItIsGood: 'Nâng ý nghĩa của góc nhỏ lên thành nơi nuôi dưỡng ước mơ.'
-      }
-    ],
-    creativeIdeas: [
-      'Kể về mùi hương thoang thoảng của trang vở mới',
-      'Chi tiết một món đồ nhỏ tự tay em trang trí đặt trên bàn'
-    ]
-  });
+  // 9. Contextual Vocabulary & Imagery Bank (Generated dynamically from prompt)
+  const [vocabBank, setVocabBank] = useState<VocabularyImageryBank | null>(null);
   const [isLoadingVocab, setIsLoadingVocab] = useState(false);
   const [activeVocabTab, setActiveVocabTab] = useState<'words' | 'images' | 'sentences'>('words');
 
 
-  // Genre labels mapping
+  // Genre labels mapping - 12 thể loại chuẩn GDPT 2018
   const genreOptions: { value: EssayGenre; label: string; icon: string }[] = [
-    { value: 'ke_su_viec', label: 'Kể lại một sự việc hoặc hoạt động', icon: '🏃' },
-    { value: 'ta_do_vat', label: 'Tả đồ vật', icon: '🎒' },
-    { value: 'ta_canh_vat', label: 'Tả cảnh vật', icon: '🌅' },
-    { value: 'ta_nguoi', label: 'Tả người', icon: '👵' },
-    { value: 'tinh_cam_cam_xuc', label: 'Viết đoạn văn nêu tình cảm, cảm xúc', icon: '💖' },
-    { value: 'y_kien_nhan_vat', label: 'Nêu suy nghĩ, ý kiến về nhân vật', icon: '💡' },
+    { value: 'viet_thu', label: 'Viết thư', icon: '💌' },
     { value: 'ke_chuyen', label: 'Kể lại một câu chuyện', icon: '📖' },
+    { value: 'thuat_lai', label: 'Thuật lại sự việc hoặc hoạt động', icon: '🏃' },
+    { value: 'mieu_ta', label: 'Miêu tả (đồ vật, cảnh vật, người)', icon: '🎒' },
+    { value: 'tinh_cam_cam_xuc', label: 'Viết đoạn văn nêu tình cảm, cảm xúc', icon: '💖' },
+    { value: 'neu_y_kien', label: 'Nêu suy nghĩ, ý kiến', icon: '💡' },
+    { value: 'viet_cau', label: 'Viết câu', icon: '✍️' },
+    { value: 'viet_doan_van', label: 'Viết đoạn văn', icon: '📄' },
+    { value: 'loi_nhan', label: 'Viết lời nhắn', icon: '📌' },
+    { value: 'thong_bao', label: 'Viết thông báo', icon: '📢' },
+    { value: 'huong_dan', label: 'Viết hướng dẫn', icon: '📋' },
     { value: 'sang_tao', label: 'Viết đoạn văn sáng tạo', icon: '✨' },
     { value: 'khac', label: 'Dạng bài khác', icon: '📝' }
   ];
 
-  // Quick special wish tags
-  const quickWishes = [
+  // Quick special wish tags tailored to genre
+  const normalQuickWishes = [
     'Viết khoảng 4–6 câu',
     'Viết khoảng 7–9 câu',
     'Có sử dụng từ láy',
@@ -258,6 +262,59 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     'Có câu kết ấn tượng',
     'Có chi tiết từ trải nghiệm của em'
   ];
+
+  const letterQuickWishes = [
+    'Thư ngắn (khoảng 80–120 chữ)',
+    'Đủ 5 phần chuẩn mực của thư',
+    'Lời xưng hô thân mật, lễ phép',
+    'Thăm hỏi sức khỏe và sinh hoạt',
+    'Kể chuyện trường lớp, học tập',
+    'Bày tỏ tình cảm gắn bó, nhớ thương',
+    'Lời chúc ấm áp và lời hứa chăm ngoan'
+  ];
+
+  const noteQuickWishes = [
+    'Lời nhắn ngắn gọn, súc tích (3–5 câu)',
+    'Ghi rõ người nhận lời nhắn',
+    'Nội dung dặn dò hoặc hẹn giờ rõ ràng',
+    'Lời nhắn lễ phép, chân thành',
+    'Ghi rõ người để lại lời nhắn & thời gian'
+  ];
+
+  const opinionQuickWishes = [
+    'Nêu rõ ý kiến đồng tình / ủng hộ',
+    'Lý lẽ xác đáng, thuyết phục',
+    'Có dẫn chứng từ thực tế cuộc sống',
+    'Từ ngữ lập luận mạch lạc, tự nhiên',
+    'Thông điệp ý nghĩa gửi tới mọi người'
+  ];
+
+  const emotionQuickWishes = [
+    'Kể một kỷ niệm ấm áp với người thân',
+    'Bộc lộ lòng biết ơn và yêu kính',
+    'Dùng từ ngữ gợi cảm xúc chân thành',
+    'Có câu văn so sánh giàu cảm xúc',
+    'Có lời hứa chăm ngoan, tiến bộ'
+  ];
+
+  const sentenceQuickWishes = [
+    'Viết đúng 2–3 câu theo yêu cầu',
+    'Đầu câu viết hoa, cuối câu có dấu chấm',
+    'Các câu liên kết tự nhiên, mạch lạc',
+    'Từ ngữ trong sáng, giàu cảm xúc'
+  ];
+
+  const quickWishes = isLetterPrompt
+    ? letterQuickWishes
+    : isNotePrompt
+    ? noteQuickWishes
+    : isOpinionPrompt
+    ? opinionQuickWishes
+    : isEmotionPrompt
+    ? emotionQuickWishes
+    : isSentencePrompt
+    ? sentenceQuickWishes
+    : normalQuickWishes;
 
   // Image Rotation (Canvas-based)
   const rotateImage = (dataUrl: string, degrees: 90 | 180 | 270): Promise<string> => {
@@ -452,6 +509,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
     // Invalidate stale data immediately
     promptVersionRef.current++;
+    directionDraftsRef.current = {};
     setMindMapBranches([]);
     setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
     setActiveOutline([]);
@@ -460,13 +518,30 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     setSelectedDirectionId(null);
     setDetectedDirections([]);
     setHasMultipleDirections(false);
+    setSelectedDirectionTitle('');
+    setMainObject('');
+    setWritingScope('');
+    setSocraticQuestion('Con hãy bấm "Tạo bản đồ ý tưởng" để Hoa Nhỏ cùng con khám phá những gợi ý thú vị nhất cho bài viết nhé!');
+    setCreativeChat([
+      {
+        id: `c-${Date.now()}`,
+        sender: 'hoanho',
+        text: 'Chào con! Khi con nhấn "Tạo bản đồ ý tưởng", Hoa Nhỏ sẽ cùng con tìm kiếm những ý tưởng hay và câu văn sáng tạo nhất nhé!',
+        timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+      }
+    ]);
 
     if (isShort23) {
       setSpecialWishes('Viết 2–3 câu theo đúng yêu cầu đề bài; lời văn tự nhiên, chân thật.');
       setDetailedOutline({
         moDoan: ['Câu 1: Giới thiệu người bạn em yêu quý và cảm xúc ấm áp.'],
         phatTrienDoan: ['Câu 2: Kể một nét đáng yêu hoặc việc bạn làm khiến em xúc động.'],
-        ketDoan: ['Câu 3: Bày tỏ tình bạn gắn bó bền chặt và lời hứa với bạn.']
+        ketDoan: ['Câu 3: Bày tỏ tình bạn gắn bó bền chặt và lời hứa với bạn.'],
+        sections: [
+          { id: 'sec-1', title: 'Câu 1 (Mở đầu)', icon: '🌱', guide: 'Giới thiệu đối tượng và cảm xúc ấm áp', bullets: ['Giới thiệu người bạn em yêu quý và cảm xúc ấm áp.'] },
+          { id: 'sec-2', title: 'Câu 2 (Cảm xúc & chi tiết)', icon: '💖', guide: 'Kể nét đáng yêu hoặc việc làm đáng nhớ', bullets: ['Kể một nét đáng yêu hoặc việc bạn làm khiến em xúc động.'] },
+          { id: 'sec-3', title: 'Câu 3 (Gắn bó & lời hứa)', icon: '🌸', guide: 'Bày tỏ tình bạn và lời chúc', bullets: ['Bày tỏ tình bạn gắn bó bền chặt và lời hứa với bạn.'] }
+        ]
       });
       setActiveOutline([
         { id: '1', section: 'Câu 1 (Mở đầu)', content: 'Giới thiệu người bạn em yêu quý và cảm xúc ấm áp.' },
@@ -513,7 +588,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           prompt: promptText.trim(),
           grade,
           specialWishes,
-          selectedDirectionId: dirIdToSend
+          selectedDirectionId: dirIdToSend,
+          difficultyLevel
         })
       });
 
@@ -530,6 +606,18 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         setSelectedDirectionTitle(deepData.selectedDirectionTitle || '');
         setMainObject(deepData.mainObject || '');
         setWritingScope(deepData.writingScope || '');
+        setTopicCode(deepData.topicCode || '');
+        setTopicName(deepData.topicName || '');
+        setDetectedTaskCodes(deepData.detectedTaskCodes || []);
+        setDetectedTaskLabels(deepData.detectedTaskLabels || []);
+        if (deepData.validationChecks) {
+          setValidationChecks(deepData.validationChecks);
+          setAllChecksPassed(deepData.allChecksPassed ?? true);
+        }
+
+        const detectedWType = (deepData.writingType as EssayGenre) || detectGenre(promptText.trim());
+        setGenre(detectedWType);
+        const isLetter = detectedWType === 'viet_thu' || Boolean(deepData.outline?.sections && deepData.outline.sections.length > 0);
 
         if (deepData.coreSubject) {
           setCoreSubject(deepData.coreSubject);
@@ -549,7 +637,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             contentRequirements: deepData.specificRequirements || [
               'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
             ],
-            suggestedSentenceCount: deepData.suggestedLength || (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'),
+            suggestedSentenceCount: deepData.suggestedLength || (isLetter ? 'Thư ngắn (khoảng 80–120 chữ, có đủ 5 phần chuẩn mực của thư)' : (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu')),
             specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
             advice: 'Chọn cách viết con cảm thấy gần gũi và có nhiều kỷ niệm nhất!'
           });
@@ -560,11 +648,23 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           }
           if (deepData.outline) {
             setDetailedOutline(deepData.outline);
-            const newActive: OutlineItem[] = [
-              { id: '1', section: 'Mở đoạn', content: deepData.outline.moDoan[0] || 'Giới thiệu đối tượng theo đề bài' },
-              { id: '2', section: 'Phát triển đoạn', content: deepData.outline.phatTrienDoan.slice(0, 2).join(' ') || 'Miêu tả và chia sẻ các nội dung chi tiết' },
-              { id: '3', section: 'Kết đoạn', content: deepData.outline.ketDoan[0] || 'Bộc lộ cảm nghĩ và mong ước' }
-            ];
+            let newActive: OutlineItem[];
+            if (deepData.outline.sections && deepData.outline.sections.length > 0) {
+              newActive = deepData.outline.sections.map((s: DetailedOutlineSection, idx: number) => {
+                const bullets = s.bullets || s.bulletPoints || [];
+                return {
+                  id: String(idx + 1),
+                  section: s.title,
+                  content: bullets.length > 0 ? bullets.map((b: string) => `• ${b}`).join('\n') : (s.guide || s.guideNote || '')
+                };
+              });
+            } else {
+              newActive = [
+                { id: '1', section: 'Mở đoạn', content: deepData.outline.moDoan[0] || 'Giới thiệu đối tượng theo đề bài' },
+                { id: '2', section: 'Phát triển đoạn', content: deepData.outline.phatTrienDoan.slice(0, 2).join(' ') || 'Miêu tả và chia sẻ các nội dung chi tiết' },
+                { id: '3', section: 'Kết đoạn', content: deepData.outline.ketDoan[0] || 'Bộc lộ cảm nghĩ và mong ước' }
+              ];
+            }
             setActiveOutline(newActive);
             setInitialOutlineBackup(newActive);
           }
@@ -575,6 +675,22 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             setSocraticQuestion(deepData.socraticQuestions[0]);
           }
 
+          // Cập nhật lời chào và gợi ý của Hoa Nhỏ trong Góc sáng tạo ý tưởng
+          setCreativeChat([
+            {
+              id: `c-${Date.now()}`,
+              sender: 'hoanho',
+              text: isLetter
+                ? `Chào con! Bức thư của con gửi tới ${deepData.coreSubject || 'người nhận'} sẽ thật ấm áp và ý nghĩa. Con có muốn Hoa Nhỏ gợi ý thêm lời thăm hỏi hay lời chúc nào không?`
+                : (detectedWType === 'loi_nhan')
+                ? `Chào con! Lời nhắn của con gửi tới ${deepData.coreSubject || 'người nhận'} cần ngắn gọn và rõ ràng. Con có muốn Hoa Nhỏ gợi ý thêm cách dặn dò hay hẹn giờ không?`
+                : (detectedWType === 'neu_y_kien')
+                ? `Chào con! Nêu ý kiến về "${deepData.coreSubject || promptText}" cần lý lẽ và dẫn chứng thuyết phục. Con hãy chia sẻ lý do của mình để Hoa Nhỏ cùng con rèn giũa nhé!`
+                : `Hoa Nhỏ đã chuẩn bị xong các nhánh ý tưởng cho đề bài "${deepData.coreSubject || promptText}". Con còn điều gì băn khoăn về cách diễn đạt hay từ ngữ không, hãy chia sẻ cùng Hoa Nhỏ nhé!`,
+              timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
+            }
+          ]);
+
           // Cập nhật CÙNG HOA NHỎ HIỂU ĐỀ
           const reqs = deepData.specificRequirements || deepData.branches?.map(b => b.title) || [
             'Nêu đối tượng hoặc sự việc trong đề',
@@ -584,11 +700,11 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
           setUnderstanding({
             target: deepData.mainObject || deepData.coreSubject || promptText,
-            genreEvaluation: deepData.hoaNhoUnderstand || `Đề bài muốn con bám sát chủ đề "${deepData.coreSubject || promptText}" để viết đoạn văn thật sinh động.`,
+            genreEvaluation: deepData.hoaNhoUnderstand || (isLetter ? 'Con sẽ viết một bức thư để hỏi thăm và chia sẻ tình cảm với người thân hoặc bạn bè. Hoa Nhỏ sẽ giúp con tìm những điều muốn nói, sắp xếp thành một bức thư thật tự nhiên nhé!' : `Đề bài muốn con bám sát chủ đề "${deepData.coreSubject || promptText}" để viết đoạn văn thật sinh động.`),
             contentRequirements: reqs,
-            suggestedSentenceCount: deepData.suggestedLength || (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu'),
+            suggestedSentenceCount: deepData.suggestedLength || (isLetter ? 'Thư ngắn (khoảng 80–120 chữ, có đủ 5 phần chuẩn mực của thư)' : (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu')),
             specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
-            advice: 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!'
+            advice: isLetter ? 'Con hãy viết lời xưng hô phù hợp, hỏi thăm chân thành và nhớ trình bày đủ 5 phần của bức thư nhé!' : 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!'
           });
         }
       } else {
@@ -609,18 +725,99 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   };
 
-  // Chọn hướng viết khi đề bài có 2 cách viết
+  // Chọn hướng viết khi đề bài có 2 cách viết - CÓ LƯU VÀ KHÔI PHỤC BẢN NHÁP
   const handleSelectDirection = (directionId: string) => {
     playSparkle(settings.soundEnabled);
+
+    // 1. Lưu bản nháp của hướng hiện tại trước khi chuyển đổi
+    if (selectedDirectionId) {
+      directionDraftsRef.current[selectedDirectionId] = {
+        mindMapBranches,
+        detailedOutline,
+        activeOutline,
+        vocabBank,
+        understanding,
+        socraticQuestion
+      };
+    }
+
     setSelectedDirectionId(directionId);
+    const dir = detectedDirections.find(d => d.id === directionId);
+    if (dir) {
+      setSelectedDirectionTitle(dir.title);
+      setMainObject(dir.mainObject || '');
+      setWritingScope(dir.scope || '');
+    }
+
+    // 2. Nếu đã có bản nháp trước đó -> Khôi phục toàn bộ, giữ lại thành quả của con
+    const cached = directionDraftsRef.current[directionId];
+    if (cached) {
+      setMindMapBranches(cached.mindMapBranches);
+      setDetailedOutline(cached.detailedOutline);
+      setActiveOutline(cached.activeOutline);
+      setVocabBank(cached.vocabBank);
+      setUnderstanding(cached.understanding);
+      setSocraticQuestion(cached.socraticQuestion);
+      return;
+    }
+
+    // 3. Chưa có bản nháp -> Gọi tạo mới theo đúng hướng được chọn
     handleGenerateIdeaMap(directionId);
   };
 
   // Đổi sang hướng viết khác
   const handleResetDirection = () => {
     playPop(settings.soundEnabled);
+    if (selectedDirectionId) {
+      directionDraftsRef.current[selectedDirectionId] = {
+        mindMapBranches,
+        detailedOutline,
+        activeOutline,
+        vocabBank,
+        understanding,
+        socraticQuestion
+      };
+    }
     setSelectedDirectionId(null);
+    setSelectedDirectionTitle('');
     handleGenerateIdeaMap('');
+  };
+
+  // Thêm ý vào phần của thư (5 phần chuẩn mực)
+  const handleAddSectionBullet = (secIndex: number, text: string) => {
+    if (!text.trim()) return;
+    setDetailedOutline(prev => {
+      if (!prev.sections) return prev;
+      const nextSections = [...prev.sections];
+      const targetSec = nextSections[secIndex];
+      const currentBullets = targetSec.bullets || targetSec.bulletPoints || [];
+      const updatedBullets = [...currentBullets, text.trim()];
+      nextSections[secIndex] = {
+        ...targetSec,
+        bullets: updatedBullets,
+        bulletPoints: updatedBullets
+      };
+      return { ...prev, sections: nextSections };
+    });
+    setNewSectionBulletText(null);
+    playPop(settings.soundEnabled);
+  };
+
+  // Xóa ý khỏi phần của thư
+  const handleDeleteSectionBullet = (secIndex: number, bulletIndex: number) => {
+    setDetailedOutline(prev => {
+      if (!prev.sections) return prev;
+      const nextSections = [...prev.sections];
+      const targetSec = nextSections[secIndex];
+      const currentBullets = (targetSec.bullets || targetSec.bulletPoints || []).filter((_: string, i: number) => i !== bulletIndex);
+      nextSections[secIndex] = {
+        ...targetSec,
+        bullets: currentBullets,
+        bulletPoints: currentBullets
+      };
+      return { ...prev, sections: nextSections };
+    });
+    playPop(settings.soundEnabled);
   };
 
   // Branch CRUD operations
@@ -905,6 +1102,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               setHasCheckedPrompt(true);
               // Xóa sạch kết quả phân tích cũ ngay lập tức để không bị lẫn lộn giữa các đề
               promptVersionRef.current++;
+              directionDraftsRef.current = {};
+              const g = detectGenre(val);
+              setGenre(g);
               setMindMapBranches([]);
               setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
               setActiveOutline([]);
@@ -1523,6 +1723,50 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           className="w-full px-4 py-2.5 rounded-2xl border-2 border-pink-100 focus:border-pink-300 focus:outline-hidden text-sm"
         />
 
+        {/* MỨC ĐỘ THỬ THÁCH (GDPT 2018) */}
+        <div className="pt-2 border-t border-pink-100 space-y-2">
+          <div className="flex flex-wrap items-center justify-between gap-1.5">
+            <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
+              <span>🎯</span>
+              <span>Mức độ thử thách rèn luyện:</span>
+            </label>
+            <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
+              {difficultyLevel === 'co_ban' && '🌱 Cơ bản: Nắm chắc kết cấu chuẩn SGK'}
+              {difficultyLevel === 'mo_rong' && '🌿 Mở rộng: Quan sát phong phú, liên tưởng mở rộng'}
+              {difficultyLevel === 'nang_cao' && '⭐ Nâng cao: Vận dụng so sánh, nhân hóa & từ ngữ gợi cảm'}
+              {difficultyLevel === 'sang_tao' && '✨ Sáng tạo: Góc nhìn mới mẻ, bất ngờ, cảm xúc lắng đọng'}
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {[
+              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: 'Chuẩn SGK' },
+              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: 'Thêm quan sát' },
+              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: 'Từ ngữ gợi cảm' },
+              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: 'Ý tưởng mới lạ' }
+            ].map((dl) => (
+              <button
+                key={dl.id}
+                type="button"
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setDifficultyLevel(dl.id as DifficultyLevel);
+                }}
+                className={`p-2 rounded-xl text-left border-2 transition-all cursor-pointer ${
+                  difficultyLevel === dl.id
+                    ? 'bg-purple-50 border-purple-500 shadow-xs ring-1 ring-purple-300'
+                    : 'bg-stone-50/60 border-stone-200 hover:border-pink-200'
+                }`}
+              >
+                <div className="flex items-center gap-1.5 font-bold text-xs text-stone-900">
+                  <span>{dl.icon}</span>
+                  <span>{dl.label}</span>
+                </div>
+                <span className="text-[10px] text-stone-500 block mt-0.5">{dl.desc}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+
         <div className="pt-2 flex justify-center">
           <button
             onClick={() => handleGenerateIdeaMap()}
@@ -1548,13 +1792,46 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             <div className="w-12 h-12 rounded-2xl bg-white border-2 border-purple-400 flex items-center justify-center text-2xl shadow-xs">
               🌸
             </div>
-            <div>
-              <span className="text-xs font-extrabold uppercase tracking-wider text-purple-800">
-                Hiểu đề sâu sắc • Không sợ lạc đề
-              </span>
-              <h3 className="text-xl font-black text-purple-950 font-display">
-                HOA NHỎ CÙNG CON HIỂU ĐỀ
-              </h3>
+            <div className="flex-1 flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <span className="text-xs font-extrabold uppercase tracking-wider text-purple-800">
+                  Hiểu đề sâu sắc • Không sợ lạc đề
+                </span>
+                <h3 className="text-xl font-black text-purple-950 font-display">
+                  HOA NHỎ CÙNG CON HIỂU ĐỀ
+                </h3>
+              </div>
+
+              {/* Badges: Topic & Task & 20 Checks indicator */}
+              <div className="flex flex-wrap items-center gap-2">
+                {topicName && (
+                  <span className="px-3 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-200 text-xs font-extrabold flex items-center gap-1 shadow-2xs">
+                    <span>🏷️</span>
+                    <span>{topicCode}: {topicName}</span>
+                  </span>
+                )}
+                {detectedTaskLabels && detectedTaskLabels.length > 0 && (
+                  <span className="px-3 py-1 rounded-full bg-sky-100 text-sky-900 border border-sky-200 text-xs font-bold flex items-center gap-1 shadow-2xs">
+                    <span>🎯</span>
+                    <span>{detectedTaskLabels[0]}</span>
+                  </span>
+                )}
+                {validationChecks && validationChecks.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      playPop(settings.soundEnabled);
+                      setShowValidationModal(true);
+                    }}
+                    className="px-3 py-1 rounded-full bg-emerald-100 hover:bg-emerald-200 text-emerald-900 border border-emerald-300 text-xs font-extrabold flex items-center gap-1.5 shadow-2xs transition-colors cursor-pointer"
+                    title="Bấm để xem chi tiết 20 tiêu chuẩn kiểm định GDPT 2018"
+                  >
+                    <span>✓</span>
+                    <span>Đạt 20/20 tiêu chí GDPT 2018</span>
+                    <span className="underline text-[10px] ml-0.5">🔍 Xem</span>
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 
@@ -1728,12 +2005,12 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               >
                 <div className="space-y-2.5">
                   {/* Branch Title & Icon */}
-                  <div className="flex items-center justify-between border-b border-black/5 pb-2">
-                    <span className={`text-xs font-black ${c.text} flex items-center gap-1.5 font-display`}>
-                      <span className="text-base">{branch.icon}</span>
-                      <span className="line-clamp-1">{branch.title}</span>
+                  <div className="flex items-center justify-between border-b border-black/5 pb-2 gap-2">
+                    <span className={`text-xs sm:text-sm font-black ${c.text} flex items-center gap-1.5 font-display min-w-0`}>
+                      <span className="text-base shrink-0">{branch.icon}</span>
+                      <span className="break-words leading-tight">{branch.title}</span>
                     </span>
-                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border ${c.badge}`}>
+                    <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded-full border shrink-0 ${c.badge}`}>
                       {branch.points.length} ý
                     </span>
                   </div>
@@ -1755,7 +2032,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                                 type="text"
                                 defaultValue={pt}
                                 id={`input-${editKey}`}
-                                className="w-full p-1.5 rounded-lg border border-purple-300 text-xs focus:outline-hidden"
+                                className="w-full p-2 rounded-lg border border-purple-300 text-xs sm:text-sm focus:outline-hidden"
                                 autoFocus
                                 onKeyDown={(e) => {
                                   if (e.key === 'Enter') {
@@ -1763,10 +2040,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                                   }
                                 }}
                               />
-                              <div className="flex items-center justify-end gap-1">
+                              <div className="flex items-center justify-end gap-1.5">
                                 <button
                                   onClick={() => setEditingBranchId(null)}
-                                  className="px-2 py-0.5 rounded-md text-[10px] text-stone-500 hover:bg-stone-100"
+                                  className="px-2.5 py-1 rounded-md text-xs text-stone-500 hover:bg-stone-100 min-h-[32px]"
                                 >
                                   Hủy
                                 </button>
@@ -1775,7 +2052,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                                     const input = document.getElementById(`input-${editKey}`) as HTMLInputElement;
                                     if (input) handleEditBranchPoint(branch.id, pIdx, input.value);
                                   }}
-                                  className="px-2 py-0.5 rounded-md text-[10px] bg-purple-600 text-white font-bold"
+                                  className="px-3 py-1 rounded-md text-xs bg-purple-600 text-white font-bold min-h-[32px]"
                                 >
                                   Lưu
                                 </button>
@@ -1787,20 +2064,20 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                                 <span className="text-purple-600 font-bold shrink-0 mt-0.5">•</span>
                                 <span className="leading-snug font-medium text-stone-700 break-words">{pt}</span>
                               </div>
-                              <div className="flex items-center gap-1 opacity-80 group-hover:opacity-100 transition-opacity shrink-0">
+                              <div className="flex items-center gap-1.5 opacity-90 sm:opacity-75 sm:group-hover:opacity-100 transition-opacity shrink-0">
                                 <button
                                   onClick={() => setEditingBranchId(editKey)}
-                                  className="p-1 text-stone-400 hover:text-purple-700 rounded-md hover:bg-purple-50 transition-colors"
+                                  className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center text-stone-500 hover:text-purple-700 rounded-lg hover:bg-purple-100/80 active:scale-95 transition-all"
                                   title="Chỉnh sửa ý này"
                                 >
-                                  <Edit3 className="w-3 h-3" />
+                                  <Edit3 className="w-3.5 h-3.5" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteBranchPoint(branch.id, pIdx)}
-                                  className="p-1 text-stone-400 hover:text-rose-600 rounded-md hover:bg-rose-50 transition-colors"
+                                  className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center text-stone-500 hover:text-rose-600 rounded-lg hover:bg-rose-100/80 active:scale-95 transition-all"
                                   title="Xóa ý này"
                                 >
-                                  <Trash2 className="w-3 h-3" />
+                                  <Trash2 className="w-3.5 h-3.5" />
                                 </button>
                               </div>
                             </div>
@@ -1820,22 +2097,22 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                         value={newBranchPointText.text}
                         onChange={(e) => setNewBranchPointText({ branchId: branch.id, text: e.target.value })}
                         placeholder="Nhập ý tưởng mới của con..."
-                        className="w-full p-2 rounded-xl border border-purple-300 text-xs bg-white focus:outline-hidden"
+                        className="w-full p-2.5 rounded-xl border border-purple-300 text-xs sm:text-sm bg-white focus:outline-hidden"
                         autoFocus
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') handleAddBranchPoint(branch.id, newBranchPointText.text);
                         }}
                       />
-                      <div className="flex items-center justify-end gap-1">
+                      <div className="flex items-center justify-end gap-1.5">
                         <button
                           onClick={() => setNewBranchPointText(null)}
-                          className="px-2.5 py-1 text-[11px] text-stone-500 rounded-lg hover:bg-stone-100"
+                          className="px-3 py-1.5 text-xs text-stone-500 rounded-lg hover:bg-stone-100 min-h-[34px]"
                         >
                           Hủy
                         </button>
                         <button
                           onClick={() => handleAddBranchPoint(branch.id, newBranchPointText.text)}
-                          className="px-3 py-1 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-[11px] font-bold"
+                          className="px-3.5 py-1.5 bg-purple-700 hover:bg-purple-800 text-white rounded-lg text-xs font-bold min-h-[34px]"
                         >
                           Thêm ý
                         </button>
@@ -1844,7 +2121,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   ) : (
                     <button
                       onClick={() => setNewBranchPointText({ branchId: branch.id, text: '' })}
-                      className="w-full py-1.5 rounded-xl border border-dashed border-stone-300 hover:border-purple-400 hover:bg-white text-stone-600 hover:text-purple-700 text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+                      className="w-full py-2 min-h-[38px] rounded-xl border border-dashed border-stone-300 hover:border-purple-400 hover:bg-white text-stone-600 hover:text-purple-700 text-xs font-bold flex items-center justify-center gap-1 transition-colors cursor-pointer active:scale-98"
                     >
                       <Plus className="w-3.5 h-3.5" />
                       <span>Thêm ý tưởng</span>
@@ -1858,227 +2135,372 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       </div>
       )}
 
-      {/* SECTION 5: DÀN Ý CHI TIẾT 3 PHẦN & KHƠI MỞ Ý TƯỞNG RIÊNG */}
-      {(detailedOutline.moDoan.length > 0 || detailedOutline.phatTrienDoan.length > 0 || activeOutline.length > 0) && (
+      {/* SECTION 5: DÀN Ý CHI TIẾT THEO THỂ LOẠI (VIẾT THƯ 5 PHẦN / ĐOẠN VĂN 3 PHẦN) */}
+      {(detailedOutline.moDoan.length > 0 || detailedOutline.phatTrienDoan.length > 0 || (detailedOutline.sections && detailedOutline.sections.length > 0) || activeOutline.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 animate-fade-in">
-          {/* Left (7 cols): Dàn ý chi tiết 3 phần theo gạch đầu dòng */}
+          {/* Left (7 cols): Dàn ý chi tiết theo thể loại */}
           <div className="lg:col-span-7 bg-white rounded-3xl border-2 border-purple-200 p-5 shadow-sm space-y-4">
           <div className="flex items-center justify-between border-b border-purple-100 pb-2">
             <div className="flex items-center gap-2">
-              <span className="text-xl">📋</span>
+              <span className="text-xl">
+                {isLetterPrompt ? '💌' : isNotePrompt ? '📌' : isSentencePrompt ? '✍️' : isOpinionPrompt ? '💡' : isEmotionPrompt ? '💖' : '📋'}
+              </span>
               <h3 className="text-base font-bold text-stone-900 font-display">
-                Dàn ý chi tiết 3 phần của con
+                {isLetterPrompt
+                  ? 'Dàn ý 5 phần chuẩn mực của bức thư'
+                  : isNotePrompt
+                  ? 'Dàn ý 3 phần chuẩn mực của lời nhắn'
+                  : isSentencePrompt
+                  ? 'Dàn ý 3 câu văn liền mạch theo đề bài'
+                  : hasCustomSections
+                  ? 'Dàn ý chi tiết các phần của bài'
+                  : 'Dàn ý chi tiết 3 phần của con'}
               </h3>
             </div>
             <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-              Mở đoạn • Phát triển đoạn • Kết đoạn
+              {isLetterPrompt
+                ? '5 phần chuẩn mực của thư'
+                : isNotePrompt
+                ? '3 phần chuẩn mực của lời nhắn'
+                : isSentencePrompt
+                ? '3 câu văn liền mạch'
+                : hasCustomSections
+                ? `${detailedOutline.sections!.length} phần chi tiết của bài`
+                : 'Mở đoạn • Phát triển đoạn • Kết đoạn'}
             </span>
           </div>
 
           <p className="text-xs text-stone-600 font-medium">
-            Dàn ý giúp con định hướng từng câu văn. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:
+            {isLetterPrompt
+              ? 'Dàn ý bức thư chuẩn GDPT 2018 gồm 5 phần. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'
+              : isNotePrompt
+              ? 'Dàn ý lời nhắn chuẩn GDPT 2018 gồm 3 phần rõ ràng. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'
+              : isSentencePrompt
+              ? 'Dàn ý hướng dẫn viết từng câu trọn vẹn, giàu cảm xúc. Con có thể thêm hoặc sửa đổi theo ý mình:'
+              : hasCustomSections
+              ? 'Dàn ý bài viết chuẩn GDPT 2018 bám sát đề bài. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'
+              : 'Dàn ý giúp con định hướng từng câu văn. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'}
           </p>
 
-          {/* 1. MỞ ĐOẠN (2-3 gạch đầu dòng) */}
-          <div className="p-4 rounded-2xl bg-emerald-50/60 border-2 border-emerald-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-display">
-                <span>🌱</span>
-                <span>1. MỞ ĐOẠN (2–3 gạch đầu dòng)</span>
-              </span>
-              <span className="text-[11px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
-                {detailedOutline.moDoan.length} ý
-              </span>
-            </div>
+          {/* HIỂN THỊ CÁC PHẦN DÀN Ý TÙY BIẾN HOẶC 5 PHẦN VIẾT THƯ */}
+          {(hasCustomSections || isLetterPrompt) ? (
+            <div className="space-y-3.5">
+              {(
+                (detailedOutline.sections && detailedOutline.sections.length > 0
+                  ? detailedOutline.sections
+                  : [
+                      { id: 'sec-1', title: 'Phần 1. Địa điểm, ngày tháng và lời chào', icon: '📍', guide: 'Ghi rõ địa danh, ngày tháng và lời chào trang trọng hoặc thân mật', bullets: detailedOutline.moDoan.slice(0, 1) },
+                      { id: 'sec-2', title: 'Phần 2. Mở đầu bức thư', icon: '✍️', guide: 'Nêu lý do viết thư và cảm xúc nhớ thương', bullets: detailedOutline.moDoan.slice(1) },
+                      { id: 'sec-3', title: 'Phần 3. Nội dung chính', icon: '📜', guide: 'Thăm hỏi sức khỏe, cuộc sống và báo tin vui của bản thân', bullets: detailedOutline.phatTrienDoan },
+                      { id: 'sec-4', title: 'Phần 4. Lời kết', icon: '💖', guide: 'Gửi lời chúc tốt đẹp, lời hứa hẹn và lời chào tạm biệt', bullets: detailedOutline.ketDoan.slice(0, 1) },
+                      { id: 'sec-5', title: 'Phần 5. Chữ ký', icon: '✒️', guide: 'Lời kết thúc thân thương và chữ ký nắn nót', bullets: detailedOutline.ketDoan.slice(1) }
+                    ]
+                ) as DetailedOutlineSection[]
+              ).map((sec: DetailedOutlineSection, secIdx: number) => {
+                const bullets: string[] = sec.bullets || sec.bulletPoints || [];
+                const guide = sec.guide || sec.guideNote || '';
+                const cardColors = [
+                  'bg-emerald-50/60 border-emerald-200 text-emerald-950',
+                  'bg-purple-50/60 border-purple-200 text-purple-950',
+                  'bg-amber-50/60 border-amber-200 text-amber-950',
+                  'bg-sky-50/60 border-sky-200 text-sky-950',
+                  'bg-rose-50/60 border-rose-200 text-rose-950'
+                ];
+                const badgeColors = [
+                  'text-emerald-700 border-emerald-200',
+                  'text-purple-700 border-purple-200',
+                  'text-amber-700 border-amber-200',
+                  'text-sky-700 border-sky-200',
+                  'text-rose-700 border-rose-200'
+                ];
+                const bulletDotColors = [
+                  'text-emerald-600',
+                  'text-purple-600',
+                  'text-amber-600',
+                  'text-sky-600',
+                  'text-rose-600'
+                ];
 
-            <div className="space-y-1.5">
-              {detailedOutline.moDoan.map((bullet, idx) => (
-                <div key={idx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-emerald-100 text-xs sm:text-sm text-stone-800">
-                  <div className="flex items-start gap-2">
-                    <span className="text-emerald-600 font-black">•</span>
-                    <span className="leading-relaxed font-medium">{bullet}</span>
+                return (
+                  <div key={sec.id || secIdx} className={`p-4 rounded-2xl border-2 space-y-2 ${cardColors[secIdx % 5]}`}>
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black uppercase tracking-wide flex items-center gap-1.5 font-display">
+                        <span>{sec.icon || '💌'}</span>
+                        <span>{sec.title}</span>
+                      </span>
+                      <span className={`text-[11px] font-bold bg-white px-2 py-0.5 rounded-full border ${badgeColors[secIdx % 5]}`}>
+                        {bullets.length} ý
+                      </span>
+                    </div>
+
+                    {guide && (
+                      <p className="text-[11px] text-stone-600 font-medium italic">
+                        💡 {guide}
+                      </p>
+                    )}
+
+                    <div className="space-y-1.5">
+                      {bullets.map((bullet: string, bIdx: number) => (
+                        <div key={bIdx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-stone-200/80 text-xs sm:text-sm text-stone-800 shadow-2xs">
+                          <div className="flex items-start gap-2">
+                            <span className={`font-black ${bulletDotColors[secIdx % 5]}`}>•</span>
+                            <span className="leading-relaxed font-medium">{bullet}</span>
+                          </div>
+                          <button
+                            onClick={() => handleDeleteSectionBullet(secIdx, bIdx)}
+                            className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors cursor-pointer shrink-0"
+                            title="Xóa ý này"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+
+                    {newSectionBulletText?.secIndex === secIdx ? (
+                      <div className="flex items-center gap-2 pt-1">
+                        <input
+                          type="text"
+                          value={newSectionBulletText.text}
+                          onChange={(e) => setNewSectionBulletText({ secIndex: secIdx, text: e.target.value })}
+                          placeholder={`Nhập ý mới cho ${sec.title.toLowerCase()}...`}
+                          className="flex-1 p-2 rounded-xl border border-purple-300 text-xs bg-white focus:outline-hidden"
+                          autoFocus
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleAddSectionBullet(secIdx, newSectionBulletText.text);
+                          }}
+                        />
+                        <button
+                          onClick={() => handleAddSectionBullet(secIdx, newSectionBulletText.text)}
+                          className="px-3 py-2 bg-purple-700 text-white rounded-xl text-xs font-bold cursor-pointer"
+                        >
+                          Thêm
+                        </button>
+                        <button
+                          onClick={() => setNewSectionBulletText(null)}
+                          className="px-2 py-2 text-stone-500 text-xs cursor-pointer"
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => setNewSectionBulletText({ secIndex: secIdx, text: '' })}
+                        className="text-xs font-bold text-purple-800 hover:text-purple-950 flex items-center gap-1 pt-1 cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Thêm ý vào {sec.title.toLowerCase()}</span>
+                      </button>
+                    )}
                   </div>
-                  <button
-                    onClick={() => handleDeleteBullet('moDoan', idx)}
-                    className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors"
-                    title="Xóa ý này"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
+                );
+              })}
+            </div>
+          ) : (
+            /* THỂ LOẠI KHÁC: GIỮ NGUYÊN BỐ CỤC 3 PHẦN TRUYỀN THỐNG */
+            <div className="space-y-3.5">
+              {/* 1. MỞ ĐOẠN (2-3 gạch đầu dòng) */}
+              <div className="p-4 rounded-2xl bg-emerald-50/60 border-2 border-emerald-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5 font-display">
+                    <span>🌱</span>
+                    <span>1. MỞ ĐOẠN (2–3 gạch đầu dòng)</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-emerald-700 bg-white px-2 py-0.5 rounded-full border border-emerald-200">
+                    {detailedOutline.moDoan.length} ý
+                  </span>
                 </div>
-              ))}
-            </div>
 
-            {newBulletText?.section === 'moDoan' ? (
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  value={newBulletText.text}
-                  onChange={(e) => setNewBulletText({ section: 'moDoan', text: e.target.value })}
-                  placeholder="Nhập ý mở đoạn mới của con..."
-                  className="flex-1 p-2 rounded-xl border border-emerald-300 text-xs bg-white focus:outline-hidden"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddBullet('moDoan', newBulletText.text);
-                  }}
-                />
-                <button
-                  onClick={() => handleAddBullet('moDoan', newBulletText.text)}
-                  className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"
-                >
-                  Thêm
-                </button>
-                <button
-                  onClick={() => setNewBulletText(null)}
-                  className="px-2 py-2 text-stone-500 text-xs"
-                >
-                  Hủy
-                </button>
-              </div>
-            ) : (
-              <button
-                onClick={() => setNewBulletText({ section: 'moDoan', text: '' })}
-                className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 pt-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm ý mở đoạn</span>
-              </button>
-            )}
-          </div>
+                <div className="space-y-1.5">
+                  {detailedOutline.moDoan.map((bullet, idx) => (
+                    <div key={idx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-emerald-100 text-xs sm:text-sm text-stone-800">
+                      <div className="flex items-start gap-2">
+                        <span className="text-emerald-600 font-black">•</span>
+                        <span className="leading-relaxed font-medium">{bullet}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteBullet('moDoan', idx)}
+                        className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors"
+                        title="Xóa ý này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
 
-          {/* 2. PHÁT TRIỂN ĐOẠN (4-5 gạch đầu dòng) */}
-          <div className="p-4 rounded-2xl bg-purple-50/60 border-2 border-purple-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-purple-950 uppercase tracking-wide flex items-center gap-1.5 font-display">
-                <span>🌿</span>
-                <span>2. PHÁT TRIỂN ĐOẠN (4–5 gạch đầu dòng)</span>
-              </span>
-              <span className="text-[11px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded-full border border-purple-200">
-                {detailedOutline.phatTrienDoan.length} ý
-              </span>
-            </div>
-
-            <div className="space-y-1.5">
-              {detailedOutline.phatTrienDoan.map((bullet, idx) => (
-                <div key={idx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-purple-100 text-xs sm:text-sm text-stone-800">
-                  <div className="flex items-start gap-2">
-                    <span className="text-purple-600 font-black">•</span>
-                    <span className="leading-relaxed font-medium">{bullet}</span>
+                {newBulletText?.section === 'moDoan' ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={newBulletText.text}
+                      onChange={(e) => setNewBulletText({ section: 'moDoan', text: e.target.value })}
+                      placeholder="Nhập ý mở đoạn mới của con..."
+                      className="flex-1 p-2 rounded-xl border border-emerald-300 text-xs bg-white focus:outline-hidden"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddBullet('moDoan', newBulletText.text);
+                      }}
+                    />
+                    <button
+                      onClick={() => handleAddBullet('moDoan', newBulletText.text)}
+                      className="px-3 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold"
+                    >
+                      Thêm
+                    </button>
+                    <button
+                      onClick={() => setNewBulletText(null)}
+                      className="px-2 py-2 text-stone-500 text-xs"
+                    >
+                      Hủy
+                    </button>
                   </div>
+                ) : (
                   <button
-                    onClick={() => handleDeleteBullet('phatTrienDoan', idx)}
-                    className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors"
-                    title="Xóa ý này"
+                    onClick={() => setNewBulletText({ section: 'moDoan', text: '' })}
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 pt-1"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm ý mở đoạn</span>
                   </button>
-                </div>
-              ))}
-            </div>
-
-            {newBulletText?.section === 'phatTrienDoan' ? (
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  value={newBulletText.text}
-                  onChange={(e) => setNewBulletText({ section: 'phatTrienDoan', text: e.target.value })}
-                  placeholder="Nhập ý phát triển đoạn mới..."
-                  className="flex-1 p-2 rounded-xl border border-purple-300 text-xs bg-white focus:outline-hidden"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddBullet('phatTrienDoan', newBulletText.text);
-                  }}
-                />
-                <button
-                  onClick={() => handleAddBullet('phatTrienDoan', newBulletText.text)}
-                  className="px-3 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold"
-                >
-                  Thêm
-                </button>
-                <button
-                  onClick={() => setNewBulletText(null)}
-                  className="px-2 py-2 text-stone-500 text-xs"
-                >
-                  Hủy
-                </button>
+                )}
               </div>
-            ) : (
-              <button
-                onClick={() => setNewBulletText({ section: 'phatTrienDoan', text: '' })}
-                className="text-xs font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 pt-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm ý phát triển đoạn</span>
-              </button>
-            )}
-          </div>
 
-          {/* 3. KẾT ĐOẠN (2 gạch đầu dòng) */}
-          <div className="p-4 rounded-2xl bg-sky-50/60 border-2 border-sky-200 space-y-2">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-black text-sky-950 uppercase tracking-wide flex items-center gap-1.5 font-display">
-                <span>🌸</span>
-                <span>3. KẾT ĐOẠN (2 gạch đầu dòng)</span>
-              </span>
-              <span className="text-[11px] font-bold text-sky-700 bg-white px-2 py-0.5 rounded-full border border-sky-200">
-                {detailedOutline.ketDoan.length} ý
-              </span>
-            </div>
+              {/* 2. PHÁT TRIỂN ĐOẠN (4-5 gạch đầu dòng) */}
+              <div className="p-4 rounded-2xl bg-purple-50/60 border-2 border-purple-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-purple-950 uppercase tracking-wide flex items-center gap-1.5 font-display">
+                    <span>🌿</span>
+                    <span>2. PHÁT TRIỂN ĐOẠN (4–5 gạch đầu dòng)</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-purple-700 bg-white px-2 py-0.5 rounded-full border border-purple-200">
+                    {detailedOutline.phatTrienDoan.length} ý
+                  </span>
+                </div>
 
-            <div className="space-y-1.5">
-              {detailedOutline.ketDoan.map((bullet, idx) => (
-                <div key={idx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-sky-100 text-xs sm:text-sm text-stone-800">
-                  <div className="flex items-start gap-2">
-                    <span className="text-sky-600 font-black">•</span>
-                    <span className="leading-relaxed font-medium">{bullet}</span>
+                <div className="space-y-1.5">
+                  {detailedOutline.phatTrienDoan.map((bullet, idx) => (
+                    <div key={idx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-purple-100 text-xs sm:text-sm text-stone-800">
+                      <div className="flex items-start gap-2">
+                        <span className="text-purple-600 font-black">•</span>
+                        <span className="leading-relaxed font-medium">{bullet}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteBullet('phatTrienDoan', idx)}
+                        className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors"
+                        title="Xóa ý này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {newBulletText?.section === 'phatTrienDoan' ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={newBulletText.text}
+                      onChange={(e) => setNewBulletText({ section: 'phatTrienDoan', text: e.target.value })}
+                      placeholder="Nhập ý phát triển đoạn mới..."
+                      className="flex-1 p-2 rounded-xl border border-purple-300 text-xs bg-white focus:outline-hidden"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddBullet('phatTrienDoan', newBulletText.text);
+                      }}
+                    />
+                    <button
+                      onClick={() => handleAddBullet('phatTrienDoan', newBulletText.text)}
+                      className="px-3 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold"
+                    >
+                      Thêm
+                    </button>
+                    <button
+                      onClick={() => setNewBulletText(null)}
+                      className="px-2 py-2 text-stone-500 text-xs"
+                    >
+                      Hủy
+                    </button>
                   </div>
+                ) : (
                   <button
-                    onClick={() => handleDeleteBullet('ketDoan', idx)}
-                    className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors"
-                    title="Xóa ý này"
+                    onClick={() => setNewBulletText({ section: 'phatTrienDoan', text: '' })}
+                    className="text-xs font-bold text-purple-700 hover:text-purple-900 flex items-center gap-1 pt-1"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm ý phát triển đoạn</span>
                   </button>
-                </div>
-              ))}
-            </div>
-
-            {newBulletText?.section === 'ketDoan' ? (
-              <div className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  value={newBulletText.text}
-                  onChange={(e) => setNewBulletText({ section: 'ketDoan', text: e.target.value })}
-                  placeholder="Nhập ý kết đoạn mới..."
-                  className="flex-1 p-2 rounded-xl border border-sky-300 text-xs bg-white focus:outline-hidden"
-                  autoFocus
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') handleAddBullet('ketDoan', newBulletText.text);
-                  }}
-                />
-                <button
-                  onClick={() => handleAddBullet('ketDoan', newBulletText.text)}
-                  className="px-3 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold"
-                >
-                  Thêm
-                </button>
-                <button
-                  onClick={() => setNewBulletText(null)}
-                  className="px-2 py-2 text-stone-500 text-xs"
-                >
-                  Hủy
-                </button>
+                )}
               </div>
-            ) : (
-              <button
-                onClick={() => setNewBulletText({ section: 'ketDoan', text: '' })}
-                className="text-xs font-bold text-sky-700 hover:text-sky-900 flex items-center gap-1 pt-1"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Thêm ý kết đoạn</span>
-              </button>
-            )}
-          </div>
+
+              {/* 3. KẾT ĐOẠN (2 gạch đầu dòng) */}
+              <div className="p-4 rounded-2xl bg-sky-50/60 border-2 border-sky-200 space-y-2">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-black text-sky-950 uppercase tracking-wide flex items-center gap-1.5 font-display">
+                    <span>🌸</span>
+                    <span>3. KẾT ĐOẠN (2 gạch đầu dòng)</span>
+                  </span>
+                  <span className="text-[11px] font-bold text-sky-700 bg-white px-2 py-0.5 rounded-full border border-sky-200">
+                    {detailedOutline.ketDoan.length} ý
+                  </span>
+                </div>
+
+                <div className="space-y-1.5">
+                  {detailedOutline.ketDoan.map((bullet, idx) => (
+                    <div key={idx} className="flex items-start justify-between gap-2 bg-white p-2.5 rounded-xl border border-sky-100 text-xs sm:text-sm text-stone-800">
+                      <div className="flex items-start gap-2">
+                        <span className="text-sky-600 font-black">•</span>
+                        <span className="leading-relaxed font-medium">{bullet}</span>
+                      </div>
+                      <button
+                        onClick={() => handleDeleteBullet('ketDoan', idx)}
+                        className="text-stone-300 hover:text-rose-500 p-0.5 transition-colors"
+                        title="Xóa ý này"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                {newBulletText?.section === 'ketDoan' ? (
+                  <div className="flex items-center gap-2 pt-1">
+                    <input
+                      type="text"
+                      value={newBulletText.text}
+                      onChange={(e) => setNewBulletText({ section: 'ketDoan', text: e.target.value })}
+                      placeholder="Nhập ý kết đoạn mới..."
+                      className="flex-1 p-2 rounded-xl border border-sky-300 text-xs bg-white focus:outline-hidden"
+                      autoFocus
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleAddBullet('ketDoan', newBulletText.text);
+                      }}
+                    />
+                    <button
+                      onClick={() => handleAddBullet('ketDoan', newBulletText.text)}
+                      className="px-3 py-2 bg-sky-600 text-white rounded-xl text-xs font-bold"
+                    >
+                      Thêm
+                    </button>
+                    <button
+                      onClick={() => setNewBulletText(null)}
+                      className="px-2 py-2 text-stone-500 text-xs"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setNewBulletText({ section: 'ketDoan', text: '' })}
+                    className="text-xs font-bold text-sky-700 hover:text-sky-900 flex items-center gap-1 pt-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Thêm ý kết đoạn</span>
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
 
           {/* Socratic question to break vague ideas into personal details */}
           <div className="p-4 rounded-2xl bg-amber-50/70 border-2 border-amber-200 space-y-2.5">
@@ -2129,7 +2551,20 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 {refreshComparison.comparisonNote}
               </p>
 
-              {refreshComparison.detailedOutline ? (
+              {refreshComparison.detailedOutline?.sections && refreshComparison.detailedOutline.sections.length > 0 ? (
+                <div className="space-y-2.5 bg-white p-3.5 rounded-xl border border-emerald-200 text-xs">
+                  {refreshComparison.detailedOutline.sections.map((sec: DetailedOutlineSection, i: number) => (
+                    <div key={i}>
+                      <strong className="text-emerald-900 block font-bold mb-0.5">{sec.icon || '💌'} {sec.title}:</strong>
+                      <ul className="list-disc list-inside space-y-0.5 text-stone-700 pl-1">
+                        {(sec.bullets || sec.bulletPoints || []).map((b: string, bIdx: number) => (
+                          <li key={bIdx}>{b}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  ))}
+                </div>
+              ) : refreshComparison.detailedOutline ? (
                 <div className="space-y-2 bg-white p-3 rounded-xl border border-emerald-200 text-xs">
                   <div>
                     <strong className="text-emerald-900 block font-bold mb-1">🌱 Mở đoạn:</strong>
@@ -2376,7 +2811,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               grade,
               genre,
               specialWishes,
-              selectedOutline: activeOutline
+              selectedOutline: activeOutline,
+              detailedOutline
             });
           }}
           className="px-6 py-3 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-extrabold text-sm shadow-md transition-all flex items-center gap-2"
@@ -2403,6 +2839,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           }
           setHasCheckedPrompt(true);
           promptVersionRef.current++;
+          directionDraftsRef.current = {};
           setMindMapBranches([]);
           setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
           setActiveOutline([]);
@@ -2416,6 +2853,72 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           setWritingScope('');
         }}
       />
+
+      {/* MODAL 20 TIÊU CHÍ KIỂM ĐỊNH TỰ ĐỘNG GDPT 2018 */}
+      {showValidationModal && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-2xl w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
+            <button
+              onClick={() => setShowValidationModal(false)}
+              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full cursor-pointer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-3 border-b border-emerald-100 pb-3">
+              <div className="w-12 h-12 rounded-2xl bg-emerald-100 text-emerald-700 flex items-center justify-center text-2xl shadow-xs font-black">
+                ✓
+              </div>
+              <div>
+                <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">
+                  Hệ thống kiểm định chất lượng GDPT 2018
+                </span>
+                <h3 className="text-lg font-black text-emerald-950 font-display">
+                  Bảng 20 Tiêu Chuẩn Kiểm Định Đề Bài & Dàn Ý
+                </h3>
+              </div>
+            </div>
+
+            <p className="text-xs text-stone-600 leading-relaxed">
+              Mỗi đề bài khi học sinh bấm "Tạo bản đồ ý tưởng" đều được hệ thống đối chiếu tự động với 20 tiêu chuẩn sư phạm nghiêm ngặt, đảm bảo đúng thể loại, đúng đối tượng và không tự viết bài thay học sinh:
+            </p>
+
+            <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">
+              {validationChecks.map((chk) => (
+                <div
+                  key={chk.id}
+                  className="p-3 rounded-2xl bg-stone-50 border border-stone-200 flex items-start gap-3 text-xs"
+                >
+                  <span className="w-6 h-6 rounded-full bg-emerald-100 text-emerald-700 font-black flex items-center justify-center shrink-0 mt-0.5 text-xs">
+                    ✓
+                  </span>
+                  <div className="flex-1 space-y-0.5">
+                    <div className="flex items-center justify-between gap-2">
+                      <strong className="text-stone-900 font-bold">{chk.id}: {chk.title}</strong>
+                      <span className="px-2 py-0.5 rounded-md bg-emerald-100 text-emerald-800 font-black text-[10px]">
+                        ĐẠT
+                      </span>
+                    </div>
+                    {chk.note && (
+                      <p className="text-stone-600 text-[11px] leading-relaxed">{chk.note}</p>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t border-stone-100 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setShowValidationModal(false)}
+                className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer"
+              >
+                Đã hiểu & Đóng
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

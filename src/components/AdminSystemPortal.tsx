@@ -682,8 +682,8 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
             </button>
           </div>
 
-          {/* Teachers Table */}
-          <div className="overflow-x-auto rounded-2xl border border-stone-200">
+          {/* Teachers Table & Mobile Responsive Cards */}
+          <div className="hidden md:block overflow-x-auto rounded-2xl border border-stone-200">
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="bg-purple-50/80 text-purple-950 font-extrabold border-b border-purple-200">
                 <tr>
@@ -707,7 +707,6 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
                   })
                   .map((teacher, idx) => {
                     const isSuper = teacher.role === 'SUPER_ADMIN';
-                    const isSelf = teacher.id === adminProfile.id;
 
                     return (
                       <tr key={teacher.id} className="hover:bg-purple-50/30 transition-colors">
@@ -813,6 +812,109 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
                   })}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card List (< md) */}
+          <div className="block md:hidden space-y-3">
+            {teachers
+              .filter(t => {
+                if (!teacherSearch.trim()) return true;
+                const q = teacherSearch.toLowerCase();
+                return t.fullName.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.username.toLowerCase().includes(q);
+              })
+              .map((teacher, idx) => {
+                const isSuper = teacher.role === 'SUPER_ADMIN';
+
+                return (
+                  <div key={teacher.id} className="p-4 rounded-2xl border border-stone-200 bg-white shadow-2xs space-y-3">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <span className="text-xl shrink-0">{teacher.salutation === 'thầy' ? '👨‍🏫' : '👩‍🏫'}</span>
+                        <div className="min-w-0">
+                          <span className="font-black text-sm block text-stone-900 truncate">
+                            {idx + 1}. {teacher.fullName}
+                          </span>
+                          <span className="text-[11px] text-stone-400 block font-mono">
+                            {teacher.id} • {teacher.username}
+                          </span>
+                        </div>
+                      </div>
+
+                      <div className="shrink-0 flex items-center gap-1">
+                        {isSuper ? (
+                          <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-extrabold text-[10px] border border-amber-300">
+                            👑 ADMIN
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-700 font-bold text-[10px] border border-stone-200">
+                            GV
+                          </span>
+                        )}
+                        <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                          teacher.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {teacher.status === 'active' ? 'Hoạt động' : 'Đang khóa'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="text-xs bg-stone-50 p-2.5 rounded-xl space-y-1">
+                      <div className="flex items-center justify-between">
+                        <span className="text-stone-500 font-medium">Lớp phụ trách:</span>
+                        <div className="flex flex-wrap gap-1 justify-end">
+                          {teacher.assignedClassIds && teacher.assignedClassIds.length > 0 ? (
+                            teacher.assignedClassIds.map(cId => {
+                              const cls = classes.find(c => c.id === cId);
+                              return (
+                                <span key={cId} className="px-2 py-0.2 rounded-md bg-purple-100 text-purple-900 text-[10px] font-bold border border-purple-200">
+                                  {cls?.name || cId}
+                                </span>
+                              );
+                            })
+                          ) : (
+                            <span className="text-stone-400 text-xs italic">Chưa phân công</span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-between">
+                        <span className="text-stone-500 font-medium">Lần đăng nhập:</span>
+                        <span className="text-stone-700 font-semibold">{teacher.lastLogin || 'Chưa đăng nhập'}</span>
+                      </div>
+                    </div>
+
+                    {/* Mobile Action buttons */}
+                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-stone-100">
+                      <button
+                        onClick={() => handleResetTeacherPassword(teacher)}
+                        className="px-3 py-1.5 min-h-[36px] bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-purple-700" />
+                        <span>Cấp lại MK</span>
+                      </button>
+
+                      {!isSuper && (
+                        teacher.status === 'locked' ? (
+                          <button
+                            onClick={() => handleToggleTeacherStatus(teacher, 'active')}
+                            className="px-3 py-1.5 min-h-[36px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                          >
+                            <Unlock className="w-3.5 h-3.5 text-emerald-600" />
+                            <span>Mở khóa</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleToggleTeacherStatus(teacher, 'locked')}
+                            className="px-3 py-1.5 min-h-[36px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                          >
+                            <Lock className="w-3.5 h-3.5 text-rose-600" />
+                            <span>Khóa</span>
+                          </button>
+                        )
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

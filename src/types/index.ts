@@ -50,14 +50,26 @@ export type GardenType =
   | 'cuoc_song';   // Vườn cuộc sống
 
 export type EssayGenre =
+  | 'viet_cau'          // Viết câu
+  | 'viet_doan_van'     // Viết đoạn văn
+  | 'ke_chuyen'         // Kể lại một câu chuyện / Kể chuyện
+  | 'thuat_lai'         // Thuật lại sự việc
+  | 'mieu_ta'           // Miêu tả
+  | 'tinh_cam_cam_xuc'  // Viết đoạn văn nêu tình cảm, cảm xúc
+  | 'neu_y_kien'        // Nêu ý kiến / suy nghĩ
+  | 'viet_thu'          // Viết thư
+  | 'loi_nhan'          // Viết lời nhắn
+  | 'thong_bao'         // Viết thông báo
+  | 'huong_dan'         // Viết hướng dẫn
+  | 'bao_cao'           // Viết báo cáo
+  | 'ke_hoach'          // Viết kế hoạch
+  | 'sang_tao'          // Viết sáng tạo
+  // Các định danh tương thích ngược
   | 'ke_su_viec'        // Kể lại một sự việc hoặc hoạt động
   | 'ta_do_vat'         // Tả đồ vật
   | 'ta_canh_vat'       // Tả cảnh vật
   | 'ta_nguoi'          // Tả người
-  | 'tinh_cam_cam_xuc'  // Viết đoạn văn nêu tình cảm, cảm xúc
   | 'y_kien_nhan_vat'   // Nêu suy nghĩ, ý kiến về nhân vật
-  | 'ke_chuyen'         // Kể lại một câu chuyện
-  | 'sang_tao'          // Viết đoạn văn sáng tạo
   | 'khac';             // Dạng bài khác
 
 export interface WritingTask {
@@ -85,14 +97,27 @@ export interface ChatMessage {
 
 export interface OutlineItem {
   id: string;
-  section: string; // Mở đoạn, Phát triển đoạn, Kết đoạn...
+  section: string; // Mở đoạn, Phát triển đoạn, Kết đoạn... hoặc Phần 1, Phần 2...
   content: string;
+}
+
+export interface DetailedOutlineSection {
+  id: string;
+  title: string;
+  bulletPoints?: string[];
+  bullets?: string[];
+  guideNote?: string;
+  guide?: string;
+  icon?: string;
+  color?: string;
 }
 
 export interface DetailedOutlineGroup {
   moDoan: string[];         // Mở đoạn: danh sách các ý gợi mở
   phatTrienDoan: string[];  // Phát triển đoạn: danh sách các ý chi tiết
   ketDoan: string[];        // Kết đoạn: danh sách các ý kết
+  sections?: DetailedOutlineSection[]; // Cấu trúc động chuyên biệt (ví dụ: Viết thư 5 phần)
+  genre?: EssayGenre;
 }
 
 export interface AIFeedback {
@@ -168,6 +193,9 @@ export interface ClassAssignment {
   maxScore?: number; // 10
   status: 'active' | 'closed';
   instructions?: string;
+  difficultyLevel?: DifficultyLevel;
+  topicCode?: string;
+  customOutline?: DetailedOutlineGroup;
 }
 
 export interface AuditLogItem {
@@ -399,15 +427,23 @@ export interface PromptDirection {
 export interface MindMapBranch {
   id: string;
   title: string;
+  name?: string;
   icon: string;
   color: string;
   points: string[];
+  items?: string[];
 }
 
 export interface PromptAnalysisData {
   originalPrompt: string;
   grade: number;
   writingType?: EssayGenre;
+  writingFormat?: string;
+  topicCode?: string;
+  topicName?: string;
+  difficultyLevel?: DifficultyLevel;
+  detectedTaskCodes?: string[];
+  detectedTaskLabels?: string[];
   hasChoices?: boolean;
   choices?: PromptChoice[];
   hasMultipleDirections?: boolean;
@@ -417,6 +453,8 @@ export interface PromptAnalysisData {
   coreSubject: string;
   mainObject?: string;
   writingScope?: string;
+  audienceOrRecipient?: string;
+  pointOfView?: string;
   promptEvidence?: string[];
   suggestedLength: string;
   hoaNhoUnderstand?: string;
@@ -425,7 +463,44 @@ export interface PromptAnalysisData {
   branches: MindMapBranch[];
   outline: DetailedOutlineGroup;
   vocabularySuggestions: VocabularyImageryBank;
+  validationChecks?: ValidationCheckItem[];
+  allChecksPassed?: boolean;
 }
+
+// ------------------- HỆ THỐNG 25 CHỦ ĐỀ & 64 NHIỆM VỤ VIẾT & KIỂM ĐỊNH 20 TIÊU CHÍ -------------------
+
+export type DifficultyLevel = 'co_ban' | 'mo_rong' | 'nang_cao' | 'sang_tao';
+
+export interface TopicGroupInfo {
+  code: string;
+  name: string;
+  icon: string;
+  description: string;
+}
+
+export interface WritingTaskDefinition {
+  code: string;
+  name: string;
+  genre: EssayGenre;
+  description: string;
+  targetGrades: number[];
+}
+
+export interface ValidationCheckItem {
+  id: string; // CHECK 01 - CHECK 20
+  title: string;
+  passed: boolean;
+  note: string;
+}
+
+export interface PromptValidationReport {
+  prompt: string;
+  passedCount: number;
+  totalChecks: number;
+  isFullyValid: boolean;
+  checks: ValidationCheckItem[];
+}
+
 
 
 

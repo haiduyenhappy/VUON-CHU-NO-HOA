@@ -364,40 +364,40 @@ export const EssayFeedbackPage: React.FC<EssayFeedbackPageProps> = ({
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-6 space-y-6">
       {/* Top Banner with Soft Pastel Pink / Lavender / Sky Blue Gradient */}
-      <div className="bg-gradient-to-r from-pink-100 via-purple-100 to-sky-100 rounded-3xl p-4 sm:p-5 border-2 border-pink-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+      <div className="bg-gradient-to-r from-pink-100 via-purple-100 to-sky-100 rounded-3xl p-3.5 sm:p-5 border-2 border-pink-200 shadow-xs flex flex-wrap items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 sm:gap-3 flex-wrap sm:flex-nowrap min-w-0">
           <button
             onClick={() => {
               playPop(settings.soundEnabled);
               onBackToIdeaMap();
             }}
-            className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-purple-900 border-2 border-purple-200 font-extrabold text-xs sm:text-sm shadow-xs transition-all hover:scale-102"
+            className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-purple-900 border-2 border-purple-200 font-extrabold text-xs sm:text-sm shadow-xs transition-all min-h-[42px]"
             title="Quay lại Bản đồ ý tưởng mà không mất bài viết"
           >
             <ArrowLeft className="w-4 h-4 text-purple-700" />
             <span>← Quay lại</span>
           </button>
 
-          <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white border-2 border-pink-300 flex items-center justify-center text-2xl sm:text-3xl shadow-xs">
+          <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-white border-2 border-pink-300 flex items-center justify-center text-xl sm:text-3xl shadow-xs shrink-0">
             ✍️
           </div>
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-pink-500 text-white">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-[11px] sm:text-xs font-bold px-2.5 py-0.5 rounded-full bg-pink-500 text-white">
                 Trang 2 • Cô Góp Ý Bài Văn
               </span>
-              <span className="text-xs text-purple-900 font-bold">Lớp {initialGrade}</span>
+              <span className="text-[11px] sm:text-xs text-purple-900 font-bold">Lớp {initialGrade}</span>
             </div>
-            <h2 className="text-xl sm:text-3xl font-black text-purple-950 font-display">
+            <h2 className="text-base sm:text-2xl font-black text-purple-950 font-display break-words mt-0.5">
               Lắng Nghe Góp Ý – Tự Tay Hoàn Thiện Bài Viết
             </h2>
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 w-full sm:w-auto">
           <button
             onClick={onBackToIdeaMap}
-            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-stone-700 border border-stone-300 font-bold text-xs sm:text-sm shadow-xs transition-colors"
+            className="w-full sm:w-auto flex items-center justify-center gap-1.5 px-3.5 py-2 sm:py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-stone-700 border border-stone-300 font-bold text-xs sm:text-sm shadow-xs transition-colors min-h-[42px]"
           >
             <BookOpen className="w-4 h-4 text-purple-600" />
             <span>Xem lại dàn ý & từ vựng</span>

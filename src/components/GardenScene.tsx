@@ -81,17 +81,20 @@ export const GardenScene: React.FC<GardenSceneProps> = ({
       {/* Main Content Area */}
       <div className="relative z-10 max-w-6xl mx-auto w-full my-auto py-4">
         {/* Header Greeting Banner */}
-        <div className="text-center mb-6 sm:mb-8">
-          <div className="inline-flex items-center gap-2 px-4 py-1.5 rounded-full bg-amber-100/90 text-amber-900 border border-amber-300 text-xs sm:text-sm font-bold shadow-xs mb-3">
-            <Sparkles className="w-4 h-4 text-amber-600" />
-            <span>MỖI EM MỘT Ý TƯỞNG – MỖI BÀI VIẾT MỘT SẮC MÀU</span>
+        <div className="text-center mb-5 sm:mb-8 px-1">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-amber-100/95 text-amber-900 border border-amber-300 text-[11px] sm:text-sm font-bold shadow-xs mb-3 max-w-full">
+            <Sparkles className="w-3.5 h-3.5 text-amber-600 shrink-0" />
+            <span className="truncate">MỖI EM MỘT Ý TƯỞNG – MỖI BÀI VIẾT MỘT SẮC MÀU</span>
           </div>
 
-          <h1 className="text-3xl sm:text-5xl lg:text-6xl font-black text-emerald-950 font-display tracking-tight drop-shadow-xs mb-2">
-            VƯỜN CHỮ NỞ HOA 🌸
+          <h1 className="text-2xl xs:text-3xl sm:text-5xl lg:text-6xl font-black text-emerald-950 font-display tracking-tight drop-shadow-xs mb-2.5 leading-tight break-words">
+            <span>VƯỜN CHỮ NỞ HOA</span> 🌸
+            <span className="block text-lg xs:text-xl sm:text-3xl lg:text-4xl font-extrabold text-emerald-800 tracking-normal mt-1 sm:mt-2">
+              CÙNG EM VIẾT VĂN SÁNG TẠO
+            </span>
           </h1>
 
-          <p className="text-base sm:text-lg text-emerald-800/90 font-medium max-w-2xl mx-auto">
+          <p className="text-sm sm:text-lg text-emerald-800/90 font-medium max-w-2xl mx-auto px-2">
             Không gian rèn luyện viết văn tương tác, nuôi dưỡng cảm xúc và khơi nguồn sáng tạo cho học sinh lớp 3
           </p>
         </div>
@@ -218,7 +221,7 @@ export const GardenScene: React.FC<GardenSceneProps> = ({
 
       {/* Footer bar */}
       <footer className="relative z-10 text-center py-2 text-xs text-stone-500 font-medium">
-        Trường Tiểu học Lê Đức Thọ • Ứng dụng Vườn Chữ Nở Hoa • Đồng hành phát triển năng lực viết văn Tiếng Việt 3
+        Trường Tiểu học Lê Đức Thọ • Vườn Chữ Nở Hoa – Cùng Em Viết Văn Sáng Tạo
       </footer>
     </div>
   );

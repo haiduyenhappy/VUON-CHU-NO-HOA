@@ -2,6 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { WritingTask, GardenType, EssayGenre } from '../types';
 import { CURRICULUM_TASKS, GARDEN_INFOS } from '../data/curriculumData';
 import { OTHER_CREATIVE_TOPICS, OTHER_TOPICS_CATEGORIES } from '../data/otherTopicsData';
+import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { playPop, playSparkle } from '../utils/audio';
 import { 
   X, 
@@ -42,6 +43,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   const [selectedGrade, setSelectedGrade] = useState<number | 'all'>(currentGrade || 3);
   const [selectedVolumeTab, setSelectedVolumeTab] = useState<'all' | 'tap1' | 'tap2' | 'other'>('all');
   const [selectedGarden, setSelectedGarden] = useState<GardenType | 'all'>('all');
+  const [selectedTopicCode, setSelectedTopicCode] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Combine curriculum tasks and other creative topics into a unified selectable list
@@ -124,6 +126,18 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
         return false;
       }
 
+      // Topic group filter (25 nhóm chủ đề GDPT 2018)
+      if (selectedTopicCode !== 'all') {
+        const found = TOPIC_GROUPS.find(t => t.code === selectedTopicCode);
+        if (found) {
+          const qName = found.name.toLowerCase();
+          const matchTitle = item.title.toLowerCase().includes(qName);
+          const matchPrompt = item.prompt.toLowerCase().includes(qName);
+          const matchDesc = found.description.toLowerCase().split(', ').some(w => item.prompt.toLowerCase().includes(w));
+          if (!matchTitle && !matchPrompt && !matchDesc) return false;
+        }
+      }
+
       // Search query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase().trim();
@@ -135,7 +149,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
 
       return true;
     });
-  }, [allAvailableTasks, selectedGrade, selectedVolumeTab, selectedGarden, searchQuery]);
+  }, [allAvailableTasks, selectedGrade, selectedVolumeTab, selectedGarden, selectedTopicCode, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -250,24 +264,43 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
               </button>
             </div>
 
-            {/* Keyword search box */}
-            <div className="relative min-w-[200px] sm:w-64">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Tìm tên đề, từ khóa..."
-                className="w-full pl-9 pr-3 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-medium focus:outline-hidden focus:border-purple-400"
-              />
-              {searchQuery && (
-                <button
-                  onClick={() => setSearchQuery('')}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
+            <div className="flex items-center gap-2">
+              {/* 25 Chủ đề mở GDPT 2018 selector */}
+              <select
+                value={selectedTopicCode}
+                onChange={(e) => {
+                  playPop(soundEnabled);
+                  setSelectedTopicCode(e.target.value);
+                }}
+                className="text-xs font-bold text-stone-700 bg-white border border-stone-300 rounded-xl px-2.5 py-1.5 focus:border-purple-400 focus:outline-hidden max-w-[170px] truncate"
+              >
+                <option value="all">Tất cả 25 chủ đề</option>
+                {TOPIC_GROUPS.map((tg) => (
+                  <option key={tg.code} value={tg.code}>
+                    {tg.code}: {tg.name}
+                  </option>
+                ))}
+              </select>
+
+              {/* Keyword search box */}
+              <div className="relative min-w-[160px] sm:w-56">
+                <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Tìm tên đề, từ khóa..."
+                  className="w-full pl-9 pr-3 py-1.5 bg-white border border-stone-300 rounded-xl text-xs font-medium focus:outline-hidden focus:border-purple-400"
+                />
+                {searchQuery && (
+                  <button
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
             </div>
           </div>
 

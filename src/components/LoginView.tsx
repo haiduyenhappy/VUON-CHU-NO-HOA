@@ -272,7 +272,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   };
 
   return (
-    <div className="min-h-[calc(100vh-70px)] py-8 px-4 sm:px-6 lg:px-8 bg-gradient-to-b from-sky-100 via-amber-50 to-emerald-100 flex flex-col justify-center items-center relative overflow-hidden">
+    <div className="min-h-[calc(100vh-70px)] py-5 sm:py-8 px-3 sm:px-6 lg:px-8 bg-gradient-to-b from-sky-100 via-amber-50 to-emerald-100 flex flex-col justify-center items-center relative overflow-hidden">
       {/* Decorative fairy garden elements */}
       <div className="absolute inset-0 pointer-events-none -z-0">
         <div className="absolute top-10 left-10 w-40 h-40 bg-amber-200/40 rounded-full blur-2xl" />
@@ -284,27 +284,27 @@ export const LoginView: React.FC<LoginViewProps> = ({
         )}
       </div>
 
-      <div className="w-full max-w-xl relative z-10 space-y-6">
+      <div className="w-full max-w-xl relative z-10 space-y-4 sm:space-y-6">
         {/* Navigation back button */}
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
           <button
             onClick={() => {
               playPop(settings.soundEnabled);
               onBackToHome();
             }}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-white/90 hover:bg-white text-stone-700 hover:text-stone-900 border-2 border-stone-200 font-bold text-sm shadow-xs transition-all hover:scale-102"
+            className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/90 hover:bg-white text-stone-700 hover:text-stone-900 border-2 border-stone-200 font-bold text-xs sm:text-sm shadow-xs transition-all min-h-[40px]"
           >
             <ArrowLeft className="w-4 h-4" />
             <span>← Về Vườn Chữ Nở Hoa</span>
           </button>
 
-          <span className={`text-xs font-black px-3.5 py-1 rounded-full shadow-xs uppercase tracking-wider ${config.badgeBg}`}>
+          <span className={`text-[11px] sm:text-xs font-black px-3 py-1 rounded-full shadow-xs uppercase tracking-wider ${config.badgeBg} truncate max-w-full`}>
             {config.gateTitle}
           </span>
         </div>
 
         {/* Hoa Nhỏ Mascot Speech Bubble Banner */}
-        <div className="flex justify-center">
+        <div className="flex justify-center w-full">
           <HoaNhoMascot
             mood="happy"
             size="md"
@@ -314,18 +314,18 @@ export const LoginView: React.FC<LoginViewProps> = ({
         </div>
 
         {/* Main Pastel Login Card */}
-        <div className={`bg-white rounded-3xl border-3 ${config.cardBorder} p-6 sm:p-8 shadow-xl relative overflow-hidden backdrop-blur-xs`}>
+        <div className={`bg-white rounded-3xl border-3 ${config.cardBorder} p-4 sm:p-8 shadow-xl relative overflow-hidden backdrop-blur-xs`}>
           {/* Card Top Header */}
-          <div className={`-mx-6 -mt-6 sm:-mx-8 sm:-mt-8 p-5 mb-6 bg-gradient-to-r ${config.headerBg} border-b-2 border-stone-100 flex items-center gap-3`}>
-            <div className="w-12 h-12 rounded-2xl bg-white border-2 border-stone-200 flex items-center justify-center text-2xl shadow-xs">
+          <div className={`-mx-4 -mt-4 sm:-mx-8 sm:-mt-8 p-4 sm:p-5 mb-5 bg-gradient-to-r ${config.headerBg} border-b-2 border-stone-100 flex items-center gap-3`}>
+            <div className="w-11 h-11 sm:w-12 sm:h-12 rounded-2xl bg-white border-2 border-stone-200 flex items-center justify-center text-2xl shadow-xs shrink-0">
               {config.icon}
             </div>
-            <div>
-              <h2 className="text-2xl sm:text-3xl font-black text-stone-900 font-display tracking-tight">
+            <div className="min-w-0">
+              <h2 className="text-xl sm:text-3xl font-black text-stone-900 font-display tracking-tight truncate">
                 {config.pageTitle}
               </h2>
-              <p className="text-xs sm:text-sm text-stone-600 font-medium mt-0.5">
-                Vườn Chữ Nở Hoa • Trường Tiểu học Lê Đức Thọ
+              <p className="text-[11px] sm:text-sm text-stone-600 font-medium mt-0.5 truncate">
+                Vườn Chữ Nở Hoa – Cùng Em Viết Văn Sáng Tạo • Trường TH Lê Đức Thọ
               </p>
             </div>
           </div>

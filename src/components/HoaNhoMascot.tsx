@@ -23,11 +23,11 @@ export const HoaNhoMascot: React.FC<HoaNhoMascotProps> = ({
   };
 
   return (
-    <div className="flex items-end gap-3.5 select-none">
+    <div className="flex flex-col sm:flex-row items-center sm:items-end gap-3 sm:gap-3.5 select-none w-full max-w-full justify-center">
       {/* Mascot illustration */}
       <div 
         onClick={onTalk}
-        className={`relative ${sizeClasses[size]} cursor-pointer group flex-shrink-0 transition-transform ${
+        className={`relative ${sizeClasses[size]} cursor-pointer group shrink-0 transition-transform ${
           !reducedMotion ? 'hover:scale-105 active:scale-95 animate-bounce-gentle' : ''
         }`}
         title="Hoa Nhỏ - Người bạn đồng hành cùng em"
@@ -103,9 +103,9 @@ export const HoaNhoMascot: React.FC<HoaNhoMascotProps> = ({
 
       {/* Speech bubble */}
       {message && (
-        <div className="relative bg-white/95 backdrop-blur-sm border-2 border-amber-300 rounded-3xl rounded-bl-sm p-4 shadow-lg text-stone-800 text-sm sm:text-base max-w-sm sm:max-w-md md:max-w-lg leading-relaxed">
+        <div className="relative bg-white/95 backdrop-blur-sm border-2 border-amber-300 rounded-2xl sm:rounded-3xl sm:rounded-bl-sm p-3.5 sm:p-4 shadow-md sm:shadow-lg text-stone-800 text-sm sm:text-base w-full max-w-full sm:max-w-md md:max-w-lg leading-relaxed break-words">
           <div className="flex items-center gap-1.5 text-xs font-bold text-amber-700 uppercase tracking-wider mb-1">
-            <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 inline" />
+            <Heart className="w-3.5 h-3.5 text-rose-500 fill-rose-500 inline shrink-0" />
             <span>Hoa Nhỏ nhắn bạn:</span>
           </div>
           <p className="font-medium text-stone-700">{message}</p>
