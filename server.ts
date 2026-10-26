@@ -4,7 +4,7 @@ import fs from 'fs';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
-import { INITIAL_STUDENTS } from './src/data/studentsData.js';
+import { INITIAL_STUDENTS } from './src/data/studentsData.ts';
 import type { 
   Student, 
   LinkedCaregiver, 
@@ -16,15 +16,15 @@ import type {
   ClassAssignment,
   AuditLogItem,
   DifficultyLevel
-} from './src/types/index.js';
-import { detectGenre, getGenreLabel } from './src/utils/genreDetector.js';
+} from './src/types/index.ts';
+import { detectGenre, getGenreLabel } from './src/utils/genreDetector.ts';
 import {
   TOPIC_GROUPS,
   WRITING_TASKS_CATALOG,
   analyzePromptSemantics,
   buildGenreStructure,
   validatePromptAnalysisResult
-} from './src/utils/promptAnalyzerEngine.js';
+} from './src/utils/promptAnalyzerEngine.ts';
 
 dotenv.config();
 
@@ -2050,7 +2050,7 @@ Nếu ảnh quá mờ, bị che mất chữ, thiếu nội dung hoặc ánh sán
     parts.push({ text: userPrompt });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: { parts },
       config: {
         systemInstruction,
@@ -2143,7 +2143,7 @@ app.post('/api/ai/ocr-prompt', async (req, res) => {
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: { parts },
       config: {
         responseMimeType: 'application/json',
@@ -2273,6 +2273,26 @@ function detectPromptDirections(promptText: string): PromptDirection[] {
     ];
   }
 
+  // ĐỀ D: Người thân HOẶC Thầy cô giáo
+  if (hasAlternative && (p.includes('người thân') || p.includes('người em yêu')) && (p.includes('thầy') || p.includes('cô giáo') || p.includes('thầy cô'))) {
+    return [
+      {
+        id: 'nguoi_than',
+        title: 'Bày tỏ tình cảm, cảm xúc với một người thân trong gia đình',
+        mainObject: 'Một người thân trong gia đình (ông bà, cha mẹ, anh chị em...)',
+        scope: 'Tình cảm yêu thương, sự chăm sóc ân cần, kỷ niệm ấm áp và lòng biết ơn sâu sắc của em',
+        icon: '🏡'
+      },
+      {
+        id: 'thay_co',
+        title: 'Bày tỏ tình cảm, cảm xúc với thầy giáo hoặc cô giáo kính yêu',
+        mainObject: 'Thầy giáo hoặc cô giáo kính yêu của em',
+        scope: 'Tấm lòng tri ân sâu sắc, sự dạy dỗ tận tình, kỷ niệm dưới mái trường và lời hứa chăm ngoan',
+        icon: '👩‍🏫'
+      }
+    ];
+  }
+
   // Tự động phân tách nếu đề có cấu trúc "hoặc" / "hay là" rõ ràng
   if (hasAlternative && !p.includes('bản thân') && !p.includes('giới thiệu')) {
     const parts = p.split(/\bhoặc\b|\bhay là\b/);
@@ -2283,15 +2303,15 @@ function detectPromptDirections(promptText: string): PromptDirection[] {
       return [
         {
           id: 'dir_1',
-          title: cap(clean1.length > 50 ? clean1.slice(0, 48) + '...' : clean1),
-          mainObject: cap(clean1.slice(0, 30)),
+          title: cap(clean1),
+          mainObject: cap(clean1),
           scope: 'Nội dung và chi tiết theo cách viết thứ nhất',
           icon: '✨'
         },
         {
           id: 'dir_2',
-          title: cap(clean2.length > 50 ? clean2.slice(0, 48) + '...' : clean2),
-          mainObject: cap(clean2.slice(0, 30)),
+          title: cap(clean2),
+          mainObject: cap(clean2),
           scope: 'Nội dung và chi tiết theo cách viết thứ hai',
           icon: '🌟'
         }
@@ -2349,8 +2369,8 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         hasMultipleDirections: true,
         detectedDirections: semantics.detectedDirections,
         selectedDirectionId: null,
-        coreSubject: `Chọn hướng viết cho đề bài: ${semantics.targetObject}`,
-        mainObject: semantics.targetObject,
+        coreSubject: `Chọn hướng viết cho đề bài: ${semantics.mainObject}`,
+        mainObject: semantics.mainObject,
         audienceOrRecipient: semantics.audienceOrRecipient,
         pointOfView: semantics.pointOfView,
         hoaNhoUnderstand: 'Đề bài mở ra hai hướng viết phong phú. Con hãy chọn một hướng mà con có nhiều kỷ niệm và cảm xúc nhất nhé!',
@@ -2371,19 +2391,41 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
     // 3. Tạo cấu trúc chuẩn sư phạm tương ứng với thể loại (13 thể loại GDPT 2018)
     const baseAnalysis = buildGenreStructure(semantics, numGrade, specialWishes);
 
-    let finalResult = { ...baseAnalysis };
+    let finalResult: PromptAnalysisData = {
+      originalPrompt: prompt,
+      grade: numGrade,
+      difficultyLevel: diffLevel,
+      topicCode: semantics.topicCode,
+      topicName: semantics.topicName,
+      detectedTaskCodes: semantics.detectedTaskCodes,
+      detectedTaskLabels: semantics.detectedTaskLabels,
+      writingType: semantics.genre,
+      writingFormat: semantics.genre === 'viet_thu' ? 'Thư' : semantics.genre === 'loi_nhan' ? 'Lời nhắn' : 'Đoạn văn',
+      coreSubject: semantics.coreSubject,
+      mainObject: semantics.mainObject,
+      writingScope: semantics.writingScope,
+      audienceOrRecipient: semantics.audienceOrRecipient,
+      pointOfView: semantics.pointOfView,
+      hasMultipleDirections: semantics.hasMultipleDirections,
+      detectedDirections: semantics.detectedDirections,
+      selectedDirectionId,
+      selectedDirectionTitle: semantics.detectedDirections.find(d => d.id === selectedDirectionId)?.title,
+      suggestedLength: semantics.suggestedLength,
+      ...baseAnalysis
+    };
 
     // 4. Nếu có Gemini AI, làm giàu thêm ý tưởng sinh động nhưng KHÔNG ĐƯỢC LÀM SAI LỆCH cấu trúc và đối tượng
     if (ai) {
       try {
         const systemInstruction = `Bạn là Hoa Nhỏ - Cố vấn sư phạm môn Tiếng Việt tiểu học (GDPT 2018) của "VƯỜN CHỮ NỞ HOA".
 HÃY TUÂN THỦ NGHIÊM NGẶT 20 TIÊU CHÍ KIỂM ĐỊNH GDPT 2018:
-1. ĐỐI TƯỢNG BẮT BUỘC: "${semantics.targetObject}". Tuyệt đối không đổi sang đối tượng khác (Ví dụ: đề tả trường học/sân trường thì không được đổi thành cây bóng mát, đề viết thư thăm ông bà không được đổi thành tả cây hay kể chuyện).
-2. THỂ LOẠI BẮT BUỘC: "${semantics.genre}". ${semantics.genre === 'viet_thu' ? 'Bắt buộc cấu trúc thư 5 phần (Địa điểm ngày tháng & Lời chào; Thăm hỏi; Kể tin tức; Lời chúc & lời hứa; Ký tên).' : semantics.genre === 'loi_nhan' ? 'Bắt buộc cấu trúc lời nhắn 3 phần (Gửi ai; Nội dung nhắn; Ký tên).' : ''}
-3. PHÙ HỢP LỚP: Lớp ${numGrade}. Ngôn ngữ trong sáng, giàu hình ảnh, khơi mở, TUYỆT ĐỐI KHÔNG viết bài văn hoàn chỉnh thay học sinh.
-4. MỨC ĐỘ THỬ THÁCH: "${diffLevel}".
+1. ĐỐI TƯỢNG BẮT BUỘC: "${semantics.mainObject}". Tuyệt đối không đổi sang đối tượng khác (Ví dụ: đề tả trường học/sân trường thì không được đổi thành cây bóng mát, đề viết thư thăm bạn thân thì không được đổi thành ông bà).
+2. TUYỆT ĐỐI ĐỒNG BỘ THEO HƯỚNG ĐÃ CHỌN: Nếu đề có nhiều phương án và học sinh đã chọn một hướng viết, TOÀN BỘ lời hiểu đề, câu hỏi gợi mở, 5 nhánh sơ đồ tư duy và từ ngữ gợi ý PHẢI 100% bám sát hướng đó. TUYỆT ĐỐI KHÔNG để lọt từ ngữ hoặc ý tứ của phương án còn lại trong đề gốc.
+3. THỂ LOẠI BẮT BUỘC: "${semantics.genre}". ${semantics.genre === 'viet_thu' ? 'Bắt buộc cấu trúc thư 5 phần (Địa điểm ngày tháng & Lời chào; Thăm hỏi; Kể tin tức; Lời chúc & lời hứa; Ký tên).' : semantics.genre === 'loi_nhan' ? 'Bắt buộc cấu trúc lời nhắn 3 phần (Gửi ai; Nội dung nhắn; Ký tên).' : ''}
+4. PHÙ HỢP LỚP: Lớp ${numGrade}. Ngôn ngữ trong sáng, giàu hình ảnh, khơi mở, TUYỆT ĐỐI KHÔNG viết bài văn hoàn chỉnh thay học sinh.
+5. MỨC ĐỘ THỬ THÁCH: "${diffLevel}".
 
-Hãy làm giàu thêm 5 nhánh sơ đồ tư duy (mỗi nhánh 3 gợi ý sinh động), câu hỏi khơi gợi và kho từ ngữ hay cho đề bài này.
+Hãy làm giàu thêm 5 nhánh sơ đồ tư duy (mỗi nhánh 3 gợi ý sinh động), câu hỏi khơi gợi và kho từ ngữ hay cho hướng viết này.
 Trả về JSON đúng cấu trúc sau:
 {
   "hoaNhoUnderstand": "Lời nhắn ấm áp của Hoa Nhỏ giải thích đề",
@@ -2400,17 +2442,23 @@ Trả về JSON đúng cấu trúc sau:
   }
 }`;
 
-        const promptText = `Đề bài: "${prompt}"
-Lớp: ${numGrade}
-Thể loại: ${semantics.genre}
-Đối tượng chính: ${semantics.targetObject}
+        const promptText = `HỌC SINH ĐÃ CHỌN HƯỚNG VIẾT RÕ RÀNG:
+Hướng viết: "${semantics.coreSubject}"
+Đối tượng chính duy nhất: "${semantics.mainObject}"
 Chủ đề: ${semantics.topicName} (${semantics.topicCode})
 Nhiệm vụ: ${semantics.detectedTaskLabels.join(', ')}
+${selectedDirectionId ? `LƯU Ý ĐẶC BIỆT VỀ HƯỚNG VIẾT ĐÃ CHỌN (${selectedDirectionId}):
+- Học sinh chỉ viết về hướng này, TUYỆT ĐỐI KHÔNG đề cập hay gợi ý đối tượng của các hướng khác trong đề gốc!
+- Nếu chọn "thu_ban_than" (viết thư cho bạn thân chuyển trường): Tuyệt đối KHÔNG viết về ông bà, cháu ngoan hay gia đình, xưng hô tớ - cậu hoặc mình - bạn, hỏi thăm trường lớp mới.
+- Nếu chọn "thu_ong_ba" (viết thư cho ông bà): Tuyệt đối KHÔNG viết về bạn thân hay chuyển trường, xưng hô cháu - ông/bà kính cẩn.` : ''}
+Đề bài gốc của giáo viên: "${prompt}"
+Lớp: ${numGrade}
+Thể loại: ${semantics.genre}
 Yêu cầu riêng của học sinh (nếu có): "${specialWishes || 'Không có'}"
 Mức độ: ${diffLevel}`;
 
         const response = await ai.models.generateContent({
-          model: 'gemini-2.5-flash',
+          model: 'gemini-3.8-flash',
           contents: promptText,
           config: {
             systemInstruction,
@@ -2420,10 +2468,20 @@ Mức độ: ${diffLevel}`;
 
         const parsed = JSON.parse(response.text?.trim() || '{}');
         
-        // Kiểm tra an toàn: AI không được cướp chủ đề (hijack)
+        // Kiểm tra an toàn: AI không được cướp chủ đề (hijack) và không được lẫn lộn phương án
         const checkStr = JSON.stringify(parsed).toLowerCase();
-        const objLower = semantics.targetObject.toLowerCase();
-        const isNotHijacked = !checkStr.includes('cây bóng mát') || objLower.includes('cây');
+        const objLower = semantics.mainObject.toLowerCase();
+        let isNotHijacked = !checkStr.includes('cây bóng mát') || objLower.includes('cây');
+
+        if (selectedDirectionId === 'thu_ban_than') {
+          if (checkStr.includes('ông bà') || checkStr.includes('cháu ngoan') || checkStr.includes('cháu kính chúc') || checkStr.includes('kính gửi ông bà')) {
+            isNotHijacked = false;
+          }
+        } else if (selectedDirectionId === 'thu_ong_ba') {
+          if (checkStr.includes('chuyển trường') || checkStr.includes('bạn thân của cậu') || checkStr.includes('tớ - cậu')) {
+            isNotHijacked = false;
+          }
+        }
 
         if (isNotHijacked && parsed.hoaNhoUnderstand) {
           if (parsed.hoaNhoUnderstand) finalResult.hoaNhoUnderstand = parsed.hoaNhoUnderstand;
@@ -2451,7 +2509,7 @@ Mức độ: ${diffLevel}`;
     }
 
     // 5. Kiểm định tự động 20 tiêu chuẩn GDPT 2018 (Section XV)
-    const validationReport = validatePromptAnalysisResult(finalResult);
+    const validationReport = validatePromptAnalysisResult(finalResult, semantics);
     finalResult.validationChecks = validationReport.checks;
     finalResult.allChecksPassed = validationReport.isFullyValid;
 
@@ -2460,7 +2518,22 @@ Mức độ: ${diffLevel}`;
     console.error('Error in analyze-prompt-deep:', err);
     // Trả về phân tích an toàn mặc định từ engine
     const fallbackSemantics = analyzePromptSemantics(req.body?.prompt || 'Viết một đoạn văn ngắn', Number(req.body?.grade) || 3);
-    const fallback = buildGenreStructure(fallbackSemantics, Number(req.body?.grade) || 3);
+    const fallbackBase = buildGenreStructure(fallbackSemantics, Number(req.body?.grade) || 3);
+    const fallback: PromptAnalysisData = {
+      originalPrompt: req.body?.prompt || 'Viết một đoạn văn ngắn',
+      grade: Number(req.body?.grade) || 3,
+      difficultyLevel: 'co_ban',
+      topicCode: fallbackSemantics.topicCode,
+      topicName: fallbackSemantics.topicName,
+      detectedTaskCodes: fallbackSemantics.detectedTaskCodes,
+      detectedTaskLabels: fallbackSemantics.detectedTaskLabels,
+      writingType: fallbackSemantics.genre,
+      writingFormat: 'Đoạn văn',
+      coreSubject: fallbackSemantics.coreSubject,
+      mainObject: fallbackSemantics.mainObject,
+      suggestedLength: fallbackSemantics.suggestedLength,
+      ...fallbackBase
+    };
     const val = validatePromptAnalysisResult(fallback);
     fallback.validationChecks = val.checks;
     fallback.allChecksPassed = val.isFullyValid;
@@ -2538,7 +2611,7 @@ Hãy trả về JSON theo cấu trúc:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -2720,7 +2793,7 @@ Dạng bài em chọn: "${genre}"
 Hãy tạo kho từ ngữ và hình ảnh sáng tạo ngữ cảnh hóa CHẶT CHẼ THEO ĐÚNG ĐỀ BÀI TRÊN.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: userPrompt,
       config: {
         responseMimeType: 'application/json',
@@ -2825,7 +2898,7 @@ Hãy trả về JSON:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -2943,7 +3016,7 @@ ${isShortTask ? `
 TUYỆT ĐỐI KHÔNG GHÉP THÀNH ĐOẠN VĂN VIẾT SẴN! MỖI Ý LÀ MỘT GỢI Ý GẠCH ĐẦU DÒNG ĐỂ EM TỰ VIẾT.`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: userPrompt,
       config: {
         responseMimeType: 'application/json',
@@ -3036,7 +3109,7 @@ NGUYÊN TẮC:
     ];
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents,
       config: {
         systemInstruction,
@@ -3109,7 +3182,7 @@ Trả về JSON:
     });
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: { parts },
       config: {
         responseMimeType: 'application/json',
@@ -3270,7 +3343,7 @@ Hãy trả về định dạng JSON chính xác:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -3325,7 +3398,7 @@ QUY TẮC CỐT LÕI:
     ];
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents,
       config: {
         systemInstruction,
@@ -3355,7 +3428,7 @@ app.post('/api/ai/ask-idea', async (req, res) => {
       }
     ];
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents,
       config: { systemInstruction, temperature: 0.7 }
     });
@@ -3452,7 +3525,7 @@ Hãy trả về JSON theo định dạng:
 }`;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: userPrompt,
       config: {
         systemInstruction,
@@ -3509,7 +3582,7 @@ app.post('/api/ai/feedback', async (req, res) => {
   if (!ai || !studentText) return res.json(fallback);
   try {
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-3.8-flash',
       contents: `Đề: "${taskTitle}". Bài học sinh: "${studentText}". Nhận xét 3 phần: flowerPraise, leafReminder, smallChallenge, suggestedStars`,
       config: {
         responseMimeType: 'application/json',
