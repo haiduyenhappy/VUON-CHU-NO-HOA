@@ -2323,6 +2323,9 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       grade = 3, 
       specialWishes = '', 
       selectedDirectionId = null,
+      selectedObjectId = null,
+      selectedObjectName = null,
+      customObjectName = '',
       difficultyLevel = 'co_ban'
     } = req.body;
 
@@ -2332,9 +2335,16 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       : 'co_ban');
 
     // 1. Phân tích ngữ nghĩa đa tầng (semantic analysis)
-    const semantics = analyzePromptSemantics(prompt, numGrade, diffLevel, selectedDirectionId);
+    const semantics = analyzePromptSemantics(
+      prompt, 
+      numGrade, 
+      diffLevel, 
+      selectedDirectionId, 
+      selectedObjectId, 
+      customObjectName
+    );
 
-    // 2. Nếu đề có nhiều hướng viết (từ khóa hoặc, chọn một...) và học sinh chưa chọn:
+    // 2. Nếu đề có nhiều hướng viết (LOẠI B hoặc LOẠI C) và học sinh chưa chọn:
     if (semantics.hasMultipleDirections && !selectedDirectionId) {
       return res.json({
         originalPrompt: prompt,
@@ -2345,7 +2355,8 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         detectedTaskCodes: semantics.detectedTaskCodes,
         detectedTaskLabels: semantics.detectedTaskLabels,
         writingType: semantics.genre,
-        writingFormat: 'Lựa chọn hướng viết',
+        writingFormat: semantics.choiceType === 'task_selection' ? 'Lựa chọn nhiệm vụ' : 'Lựa chọn hướng viết',
+        choiceType: semantics.choiceType,
         hasMultipleDirections: true,
         detectedDirections: semantics.detectedDirections,
         selectedDirectionId: null,
@@ -2354,7 +2365,9 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         mainObject: semantics.mainObject,
         audienceOrRecipient: semantics.audienceOrRecipient,
         pointOfView: semantics.pointOfView,
-        hoaNhoUnderstand: 'Đề bài mở ra hai hướng viết phong phú. Con hãy chọn một hướng mà con có nhiều kỷ niệm và cảm xúc nhất nhé!',
+        hoaNhoUnderstand: semantics.choiceType === 'task_selection' 
+          ? 'Đề bài cho con hai nhiệm vụ viết khác nhau. Con hãy chọn một nhiệm vụ mà con tự tin và hứng thú nhất nhé!'
+          : 'Đề bài mở ra hai hướng viết phong phú. Con hãy chọn một hướng mà con có nhiều kỷ niệm và cảm xúc nhất nhé!',
         specificRequirements: semantics.detectedDirections.map(d => `${d.title} (Đối tượng: ${d.mainObject})`),
         suggestedLength: numGrade <= 2 ? '3–4 câu ngắn' : numGrade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu (hoặc 3–4 đoạn văn)',
         socraticQuestions: [
@@ -2382,6 +2395,12 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       difficultyLevel: diffLevel,
       detectedTaskCodes: semantics.detectedTaskCodes,
       detectedTaskLabels: semantics.detectedTaskLabels,
+      choiceType: semantics.choiceType,
+      objectChoiceQuestion: semantics.objectChoiceQuestion,
+      availableObjects: semantics.availableObjects,
+      selectedObjectId: semantics.selectedObjectId,
+      selectedObjectName: semantics.selectedObjectName,
+      customObjectName: semantics.customObjectName,
       hasMultipleDirections: semantics.hasMultipleDirections,
       detectedDirections: semantics.detectedDirections,
       selectedDirectionId: selectedDirectionId || null,
@@ -2403,7 +2422,8 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
     };
 
     // 4. Nếu có Gemini AI, làm giàu thêm ý tưởng sinh động nhưng KHÔNG ĐƯỢC LÀM SAI LỆCH cấu trúc và đối tượng
-    if (ai) {
+    // Nếu là LOẠI A khi chưa chọn đồ vật: giữ nguyên bản phân tích chuẩn sư phạm không để AI đoán mò đối tượng
+    if (ai && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
       try {
         const directionInstruction = semantics.selectedDirection ? `
 CHÚ Ý ĐẶC BIỆT VỀ HƯỚNG VIẾT ĐÃ CHỌN:
@@ -2415,7 +2435,15 @@ TUYỆT ĐỐI KHÔNG ĐƯỢC NHẦM LẪN SANG ĐỐI TƯỢNG CỦA HƯỚNG 
 ${selectedDirectionId === 'thu_ban_than' ? '- ĐÂY LÀ THƯ GỬI CHO BẠN THÂN CHUYỂN TRƯỜNG: Xưng hô "mình - bạn" hoặc "tớ - cậu". Nội dung thăm hỏi trường mới, bạn mới, kể chuyện lớp cũ, tình bạn. TUYỆT ĐỐI CẤM NHẮC ĐẾN ÔNG BÀ, KÍNH YÊU, CHÁU NGOAN!' : ''}
 ${selectedDirectionId === 'thu_ong_ba' ? '- ĐÂY LÀ THƯ GỬI CHO ÔNG BÀ: Xưng hô "cháu - ông bà". Kính chúc sức khỏe, hỏi thăm quê hương, vườn cây. TUYỆT ĐỐI KHÔNG NHẮC ĐẾN CHUYỂN TRƯỜNG HAY BẠN THÂN!' : ''}
 ${selectedDirectionId === 'goc_san_truong' ? '- ĐÂY LÀ TẢ GÓC SÂN TRƯỜNG: Ghế đá, bồn hoa, gốc cây, giờ ra chơi. KHÔNG ĐƯỢC TẢ TOÀN CẢNH TRƯỜNG HAY BIẾN THÀNH TẢ CÂY BÓNG MÁT ĐƠN LẺ!' : ''}
-` : '';
+` : (semantics.choiceType === 'object_selection' && semantics.selectedObjectId ? `
+CHÚ Ý ĐẶC BIỆT VỀ ĐỒ VẬT ĐÃ CHỌN:
+- Đồ vật học sinh đã chọn: "${semantics.mainObject}"
+- TUYỆT ĐỐI CHỈ TẢ "${semantics.mainObject}".
+${semantics.selectedObjectId === 'dong_ho' ? '- ĐÂY LÀ TẢ ĐỒNG HỒ: Mặt tròn, kim giờ kim phút, tiếng tích tắc, báo thức. TUYỆT ĐỐI KHÔNG NHẮC ĐẾN HỘP BÚT, BẢNG LỚP HAY NGĂN CẶP!' : ''}
+${semantics.selectedObjectId === 'hop_but' ? '- ĐÂY LÀ TẢ HỘP BÚT: Khóa kéo, các ngăn chứa bút, thước, tẩy. TUYỆT ĐỐI KHÔNG NHẮC ĐẾN KIM ĐỒNG HỒ HAY BẢNG LỚP!' : ''}
+${semantics.selectedObjectId === 'chiec_cap' ? '- ĐÂY LÀ TẢ CHIẾC CẶP SÁCH: Quai đeo, khóa bấm, chứa sách vở. TUYỆT ĐỐI KHÔNG NHẮC ĐẾN KIM ĐỒNG HỒ HAY PHẤN TRẮNG!' : ''}
+${semantics.selectedObjectId === 'bang_lop' ? '- ĐÂY LÀ TẢ CHIẾC BẢNG LỚP: Khung nhôm, màu xanh chống lóa, ô kẻ, viết phấn. TUYỆT ĐỐI KHÔNG NHẮC ĐẾN QUAI ĐEO HAY BÁO THỨC!' : ''}
+` : '');
 
         const systemInstruction = `Bạn là Hoa Nhỏ - Cố vấn sư phạm môn Tiếng Việt tiểu học (GDPT 2018) của "VƯỜN CHỮ NỞ HOA".
 HÃY TUÂN THỦ NGHIÊM NGẶT 20 TIÊU CHÍ KIỂM ĐỊNH GDPT 2018:
@@ -2447,6 +2475,7 @@ Lớp: ${numGrade}
 Thể loại: ${semantics.genre}
 Đối tượng chính: ${semantics.mainObject}
 ${semantics.selectedDirection ? `Hướng viết đã chọn: ${semantics.selectedDirection.title} (Đối tượng: ${semantics.selectedDirection.mainObject})` : ''}
+${semantics.selectedObjectName ? `Đồ vật đã chọn: ${semantics.selectedObjectName}` : ''}
 Chủ đề: ${semantics.topicName} (${semantics.topicCode})
 Nhiệm vụ: ${semantics.detectedTaskLabels.join(', ')}
 Yêu cầu riêng của học sinh (nếu có): "${specialWishes || 'Không có'}"
@@ -2463,20 +2492,34 @@ Mức độ: ${diffLevel}`;
 
         const parsed = JSON.parse(response.text?.trim() || '{}');
         
-        // Kiểm tra an toàn: AI không được cướp chủ đề và không được nhiễm chéo giữa các hướng viết
+        // Kiểm tra an toàn: AI không được cướp chủ đề và không được nhiễm chéo giữa các hướng viết/đối tượng
         const checkStr = JSON.stringify(parsed).toLowerCase();
         const objLower = semantics.mainObject.toLowerCase();
         const isNotHijacked = !checkStr.includes('cây bóng mát') || objLower.includes('cây');
 
         let isContaminated = false;
         if (selectedDirectionId === 'thu_ban_than') {
-          // Tuyệt đối không chứa ông bà hay cháu khi viết cho bạn thân
           if (checkStr.includes('ông') || checkStr.includes('bà') || checkStr.includes('cháu ngoan') || checkStr.includes('kính yêu')) {
             isContaminated = true;
           }
         } else if (selectedDirectionId === 'thu_ong_ba') {
-          // Tuyệt đối không chứa chuyển trường đi xa khi viết cho ông bà
           if (checkStr.includes('chuyển trường') || checkStr.includes('bạn thân')) {
+            isContaminated = true;
+          }
+        } else if (semantics.selectedObjectId === 'dong_ho') {
+          if (checkStr.includes('hộp bút') || checkStr.includes('bảng lớp') || checkStr.includes('quai đeo')) {
+            isContaminated = true;
+          }
+        } else if (semantics.selectedObjectId === 'hop_but') {
+          if (checkStr.includes('kim giờ') || checkStr.includes('bảng lớp') || checkStr.includes('báo thức')) {
+            isContaminated = true;
+          }
+        } else if (semantics.selectedObjectId === 'bang_lop') {
+          if (checkStr.includes('quai đeo') || checkStr.includes('khóa kéo') || checkStr.includes('báo thức')) {
+            isContaminated = true;
+          }
+        } else if (semantics.selectedObjectId === 'chiec_cap') {
+          if (checkStr.includes('kim đồng hồ') || checkStr.includes('phấn trắng') || checkStr.includes('mặt kính')) {
             isContaminated = true;
           }
         }
@@ -2501,7 +2544,7 @@ Mức độ: ${diffLevel}`;
             };
           }
         } else if (isContaminated) {
-          console.warn(`[AI Guardrail] Discarded Gemini enrichment due to cross-contamination for direction: ${selectedDirectionId}`);
+          console.warn(`[AI Guardrail] Discarded Gemini enrichment due to cross-contamination for: ${selectedDirectionId || semantics.selectedObjectId}`);
         }
       } catch (aiErr) {
         console.warn('Gemini enrichment skipped or timed out, keeping clean pedagogical baseline:', aiErr);

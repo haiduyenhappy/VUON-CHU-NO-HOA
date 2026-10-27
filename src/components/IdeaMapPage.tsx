@@ -15,6 +15,8 @@ import {
   TextbookOcrResult,
   PromptChoice,
   PromptDirection,
+  PromptChoiceType,
+  ObjectChoiceItem,
   MindMapBranch,
   PromptAnalysisData,
   DifficultyLevel,
@@ -126,6 +128,16 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const [detectedDirections, setDetectedDirections] = useState<PromptDirection[]>([]);
   const [selectedDirectionId, setSelectedDirectionId] = useState<string | null>(null);
   const [selectedDirectionTitle, setSelectedDirectionTitle] = useState<string>('');
+
+  // Choice types & Object selection states (LOẠI A: Lựa chọn đối tượng)
+  const [choiceType, setChoiceType] = useState<PromptChoiceType>('none');
+  const [objectChoiceQuestion, setObjectChoiceQuestion] = useState<string>('Con muốn tả đồ vật nào?');
+  const [availableObjects, setAvailableObjects] = useState<ObjectChoiceItem[]>([]);
+  const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+  const [selectedObjectName, setSelectedObjectName] = useState<string | null>(null);
+  const [customObjectName, setCustomObjectName] = useState<string>('');
+  const [isEnteringCustomObject, setIsEnteringCustomObject] = useState<boolean>(false);
+  const objectDraftsRef = useRef<Record<string, DirectionDraft>>({});
   // Multi-tier prompt analysis, 25 topic groups & GDPT 2018 validation states
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel>('co_ban');
   const [topicCode, setTopicCode] = useState<string>('');
@@ -563,7 +575,12 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   };
 
   // Generate / Update Idea Map ("Tạo bản đồ ý tưởng")
-  const handleGenerateIdeaMap = async (forceDirectionId?: string) => {
+  const handleGenerateIdeaMap = async (
+    forceDirectionId?: string,
+    forceObjectId?: string,
+    forceObjectName?: string,
+    forceCustomName?: string
+  ) => {
     if (!promptText.trim()) return;
 
     playChime(settings.soundEnabled);
@@ -571,6 +588,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     setIsLoadingVocab(true);
 
     const dirIdToSend = forceDirectionId !== undefined ? forceDirectionId : selectedDirectionId;
+    const objIdToSend = forceObjectId !== undefined ? forceObjectId : selectedObjectId;
+    const objNameToSend = forceObjectName !== undefined ? forceObjectName : selectedObjectName;
+    const customNameToUse = forceCustomName !== undefined ? forceCustomName : customObjectName;
     const currentVersion = ++promptVersionRef.current;
 
     // XÓA SẠCH DỮ LIỆU CŨ CỦA ĐỀ TRƯỚC - KHÔNG ĐỂ DỮ LIỆU CŨ LƯU LẠI
@@ -589,6 +609,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           grade,
           specialWishes,
           selectedDirectionId: dirIdToSend,
+          selectedObjectId: objIdToSend,
+          selectedObjectName: objNameToSend,
+          customObjectName: customNameToUse,
           difficultyLevel
         })
       });
@@ -604,6 +627,16 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         setDetectedDirections(deepData.detectedDirections || []);
         setSelectedDirectionId(deepData.selectedDirectionId || null);
         setSelectedDirectionTitle(deepData.selectedDirectionTitle || '');
+
+        setChoiceType(deepData.choiceType || 'none');
+        setObjectChoiceQuestion(deepData.objectChoiceQuestion || 'Con muốn tả đồ vật nào?');
+        setAvailableObjects(deepData.availableObjects || []);
+        setSelectedObjectId(deepData.selectedObjectId || null);
+        setSelectedObjectName(deepData.selectedObjectName || null);
+        if (deepData.customObjectName) {
+          setCustomObjectName(deepData.customObjectName);
+        }
+
         setMainObject(deepData.mainObject || '');
         setWritingScope(deepData.writingScope || '');
         setTopicCode(deepData.topicCode || '');
@@ -642,7 +675,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             advice: 'Chọn cách viết con cảm thấy gần gũi và có nhiều kỷ niệm nhất!'
           });
         } else {
-          // Đã chọn hướng hoặc đề đơn lẻ 1 hướng
+          // Đã chọn hướng hoặc đề đơn lẻ 1 hướng HOẶC LOẠI A (lựa chọn đối tượng)
           if (deepData.branches && deepData.branches.length > 0) {
             setMindMapBranches(deepData.branches);
           }
@@ -686,6 +719,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 ? `Chào con! Lời nhắn của con gửi tới ${deepData.coreSubject || 'người nhận'} cần ngắn gọn và rõ ràng. Con có muốn Hoa Nhỏ gợi ý thêm cách dặn dò hay hẹn giờ không?`
                 : (detectedWType === 'neu_y_kien')
                 ? `Chào con! Nêu ý kiến về "${deepData.coreSubject || promptText}" cần lý lẽ và dẫn chứng thuyết phục. Con hãy chia sẻ lý do của mình để Hoa Nhỏ cùng con rèn giũa nhé!`
+                : deepData.choiceType === 'object_selection'
+                ? deepData.selectedObjectId
+                  ? `Hoa Nhỏ đã chuẩn bị xong các nhánh ý tưởng và từ ngữ hay để con miêu tả "${deepData.selectedObjectName || 'đồ vật'}". Con hãy quan sát kỹ từng chi tiết để viết bài thật sinh động nhé!`
+                  : `Chào con! Đề bài yêu cầu miêu tả một đồ vật gần gũi. Con hãy chọn đồ vật mình thích nhất ở bên trên để Hoa Nhỏ hướng dẫn dàn ý chi tiết nhé!`
                 : `Hoa Nhỏ đã chuẩn bị xong các nhánh ý tưởng cho đề bài "${deepData.coreSubject || promptText}". Con còn điều gì băn khoăn về cách diễn đạt hay từ ngữ không, hãy chia sẻ cùng Hoa Nhỏ nhé!`,
               timestamp: new Date().toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })
             }
@@ -704,7 +741,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             contentRequirements: reqs,
             suggestedSentenceCount: deepData.suggestedLength || (isLetter ? 'Thư ngắn (khoảng 80–120 chữ, có đủ 5 phần chuẩn mực của thư)' : (grade <= 2 ? '3–4 câu ngắn' : grade === 3 ? '4–6 câu hoặc 7–9 câu' : '8–12 câu')),
             specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
-            advice: isLetter ? 'Con hãy viết lời xưng hô phù hợp, hỏi thăm chân thành và nhớ trình bày đủ 5 phần của bức thư nhé!' : 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!'
+            advice: isLetter ? 'Con hãy viết lời xưng hô phù hợp, hỏi thăm chân thành và nhớ trình bày đủ 5 phần của bức thư nhé!' : (deepData.choiceType === 'object_selection' && !deepData.selectedObjectId ? 'Con hãy chọn một đồ vật mình hiểu rõ nhất ở bên trên để Hoa Nhỏ hướng dẫn chi tiết nhé!' : 'Con hãy chọn lọc chi tiết từ trải nghiệm thật của chính mình để bài viết ấm áp và giàu cảm xúc nhất!')
           });
         }
       } else {
@@ -723,6 +760,82 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       setIsUnderstandingLoading(false);
       setIsLoadingVocab(false);
     }
+  };
+
+  // Chọn đồ vật (LOẠI A) - CÓ LƯU VÀ KHÔI PHỤC BẢN NHÁP
+  const handleSelectObject = (objectId: string, objectName?: string) => {
+    playSparkle(settings.soundEnabled);
+
+    // 1. Lưu bản nháp của đồ vật hiện tại trước khi chuyển đổi
+    if (selectedObjectId) {
+      objectDraftsRef.current[selectedObjectId] = {
+        mindMapBranches,
+        detailedOutline,
+        activeOutline,
+        vocabBank,
+        understanding,
+        socraticQuestion
+      };
+    }
+
+    const targetName = objectName || availableObjects.find(o => o.id === objectId)?.name || objectId;
+    setSelectedObjectId(objectId);
+    setSelectedObjectName(targetName);
+
+    // 2. Nếu đã có bản nháp trước đó và không bị nhiễm chéo -> Khôi phục
+    const cached = objectDraftsRef.current[objectId];
+    if (cached) {
+      const cachedStr = JSON.stringify(cached).toLowerCase();
+      let isContaminated = false;
+      if (objectId === 'dong_ho' && (cachedStr.includes('hộp bút') || cachedStr.includes('chiếc cặp') || cachedStr.includes('bảng lớp') || cachedStr.includes('quai đeo') || cachedStr.includes('khóa kéo'))) {
+        isContaminated = true;
+      } else if (objectId === 'hop_but' && (cachedStr.includes('chiếc cặp') || cachedStr.includes('đồng hồ') || cachedStr.includes('bảng lớp') || cachedStr.includes('kim giờ') || cachedStr.includes('quai đeo'))) {
+        isContaminated = true;
+      } else if (objectId === 'chiec_cap' && (cachedStr.includes('hộp bút') || cachedStr.includes('đồng hồ') || cachedStr.includes('bảng lớp') || cachedStr.includes('kim giờ') || cachedStr.includes('ngăn cài bút'))) {
+        isContaminated = true;
+      } else if (objectId === 'bang_lop' && (cachedStr.includes('hộp bút') || cachedStr.includes('chiếc cặp') || cachedStr.includes('đồng hồ') || cachedStr.includes('quai đeo'))) {
+        isContaminated = true;
+      }
+
+      if (!isContaminated && cached.mindMapBranches && cached.mindMapBranches.length === 5) {
+        setMindMapBranches(cached.mindMapBranches);
+        setDetailedOutline(cached.detailedOutline);
+        setActiveOutline(cached.activeOutline);
+        setVocabBank(cached.vocabBank);
+        setUnderstanding(cached.understanding);
+        setSocraticQuestion(cached.socraticQuestion);
+        return;
+      }
+    }
+
+    // 3. Chưa có bản nháp -> Gọi tạo mới theo đúng đồ vật được chọn
+    handleGenerateIdeaMap(selectedDirectionId || undefined, objectId, targetName, objectId === 'do_vat_khac' ? (customObjectName || targetName) : undefined);
+  };
+
+  // Xác nhận đồ vật tự chọn khác
+  const handleConfirmCustomObject = () => {
+    if (!customObjectName.trim()) return;
+    setIsEnteringCustomObject(false);
+    handleSelectObject('do_vat_khac', customObjectName.trim());
+  };
+
+  // Đổi sang chọn đồ vật khác
+  const handleResetObject = () => {
+    playPop(settings.soundEnabled);
+    if (selectedObjectId) {
+      objectDraftsRef.current[selectedObjectId] = {
+        mindMapBranches,
+        detailedOutline,
+        activeOutline,
+        vocabBank,
+        understanding,
+        socraticQuestion
+      };
+    }
+    setSelectedObjectId(null);
+    setSelectedObjectName(null);
+    setIsEnteringCustomObject(false);
+    handleGenerateIdeaMap(selectedDirectionId || undefined, '', '', '');
   };
 
   // Chọn hướng viết khi đề bài có 2 cách viết - CÓ LƯU VÀ KHÔI PHỤC BẢN NHÁP
@@ -1842,8 +1955,171 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             </div>
           </div>
 
-          {/* Khi đề có 2 hướng viết và học sinh chưa chọn hướng */}
-          {hasMultipleDirections && !selectedDirectionId && detectedDirections.length > 0 ? (
+          {/* LOẠI A: Lựa chọn đối tượng miêu tả (Hộp bút, Chiếc cặp, Đồng hồ, Bảng lớp, Đồ vật khác) */}
+          {choiceType === 'object_selection' ? (
+            <div className="space-y-4">
+              <div className="p-4 bg-white/95 rounded-2xl border-2 border-purple-200 shadow-2xs space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">🎒</span>
+                    <span className="font-extrabold text-purple-950 font-display text-sm sm:text-base">
+                      {objectChoiceQuestion || 'Con muốn tả đồ vật nào?'}
+                    </span>
+                  </div>
+                  {selectedObjectId && (
+                    <button
+                      onClick={handleResetObject}
+                      className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <span>🔄 Chọn đồ vật khác</span>
+                    </button>
+                  )}
+                </div>
+
+                {/* 5 lựa chọn đồ vật */}
+                <div className="flex flex-wrap gap-2.5 pt-1">
+                  {(availableObjects && availableObjects.length > 0 ? availableObjects : [
+                    { id: 'hop_but', name: 'Hộp bút', icon: '✏️' },
+                    { id: 'chiec_cap', name: 'Chiếc cặp', icon: '🎒' },
+                    { id: 'dong_ho', name: 'Đồng hồ', icon: '⏰' },
+                    { id: 'bang_lop', name: 'Bảng lớp', icon: '📋' },
+                    { id: 'do_vat_khac', name: 'Đồ vật khác', icon: '✨', isCustom: true }
+                  ]).map((obj) => {
+                    const isSelected = selectedObjectId === obj.id;
+                    return (
+                      <button
+                        key={obj.id}
+                        type="button"
+                        onClick={() => {
+                          if (obj.isCustom) {
+                            setIsEnteringCustomObject(true);
+                          } else {
+                            setIsEnteringCustomObject(false);
+                            handleSelectObject(obj.id, obj.name);
+                          }
+                        }}
+                        disabled={isUnderstandingLoading}
+                        className={`px-4 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm border-2 transition-all flex items-center gap-2 cursor-pointer shadow-2xs ${
+                          isSelected
+                            ? 'bg-purple-600 text-white border-purple-700 shadow-sm ring-2 ring-purple-300'
+                            : 'bg-white hover:bg-purple-50 text-purple-950 border-purple-200 hover:border-purple-300'
+                        }`}
+                      >
+                        <span>{obj.icon || '🌸'}</span>
+                        <span>{obj.name}</span>
+                        {isSelected && <span className="ml-1 text-xs">✓ Đang chọn</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Nhập tên đồ vật khác */}
+                {isEnteringCustomObject && (
+                  <div className="flex flex-wrap items-center gap-2 pt-2 p-3 bg-purple-50/70 rounded-xl border border-purple-200">
+                    <span className="text-xs font-bold text-purple-900">Tên đồ vật của con:</span>
+                    <input
+                      type="text"
+                      value={customObjectName}
+                      onChange={(e) => setCustomObjectName(e.target.value)}
+                      placeholder="Ví dụ: Thước kẻ, Bình nước, Gấu bông..."
+                      className="flex-1 min-w-[200px] px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg text-stone-800 focus:outline-none focus:ring-2 focus:ring-purple-400 font-medium"
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') handleConfirmCustomObject();
+                      }}
+                      autoFocus
+                    />
+                    <button
+                      type="button"
+                      onClick={handleConfirmCustomObject}
+                      disabled={!customObjectName.trim() || isUnderstandingLoading}
+                      className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                    >
+                      ✓ Đồng ý chọn
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsEnteringCustomObject(false)}
+                      className="px-2.5 py-1.5 rounded-lg text-stone-500 hover:text-stone-700 text-xs font-semibold cursor-pointer"
+                    >
+                      Hủy
+                    </button>
+                  </div>
+                )}
+
+                {selectedObjectId && (
+                  <div className="flex items-center gap-2 pt-1 text-xs font-bold text-purple-900">
+                    <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                      ⭐ Đồ vật con đang chọn: <strong className="font-extrabold text-purple-950">{selectedObjectName || 'Đồ vật của con'}</strong>
+                    </span>
+                    <span className="text-stone-500 font-normal">Sơ đồ và dàn ý bên dưới đã được chuẩn hóa riêng cho {selectedObjectName || 'đồ vật này'}.</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Các nội dung bắt buộc: Lời khuyên, Yêu cầu cụ thể (5 ý), Dung lượng (gợi ý linh hoạt) */}
+              {understanding && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm text-stone-700 font-medium">
+                  <div className="p-4 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5 md:col-span-2">
+                    <strong className="text-purple-950 block font-bold text-sm sm:text-base flex items-center gap-1.5 font-display">
+                      <span>💬</span>
+                      <span>Lời khuyên của Hoa Nhỏ:</span>
+                    </strong>
+                    <p className="text-stone-800 leading-relaxed font-semibold italic bg-purple-50/60 p-3 rounded-xl border border-purple-100">
+                      "{understanding.genreEvaluation}"
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5">
+                    <strong className="text-purple-900 block font-bold">1. Các yêu cầu cụ thể trong đề bài:</strong>
+                    <ul className="space-y-1.5 pt-1">
+                      {understanding.contentRequirements && understanding.contentRequirements.length > 0 ? (
+                        understanding.contentRequirements.map((r, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span className="text-stone-800 leading-snug">{r}</span>
+                          </li>
+                        ))
+                      ) : (
+                        [
+                          'Chọn một đồ vật gần gũi trong học tập hoặc đời sống',
+                          'Nêu rõ tên đồ vật và lý do con chọn đồ vật đó',
+                          'Miêu tả các đặc điểm nổi bật: hình dáng, kích thước, màu sắc, cấu tạo',
+                          'Nêu công dụng và ích lợi thiết thực của đồ vật đối với bản thân',
+                          'Bày tỏ tình cảm yêu quý, cách giữ gìn bảo quản đồ vật cẩn thận'
+                        ].map((r, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span className="text-stone-800 leading-snug">{r}</span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-2">
+                    <div>
+                      <strong className="text-purple-900 block font-bold">2. Dung lượng & lưu ý:</strong>
+                      <p className="text-stone-800 mt-0.5">• Dung lượng: <span className="font-extrabold text-sky-800">{understanding.suggestedSentenceCount}</span></p>
+                      <p className="text-stone-600 text-xs mt-1">• {understanding.advice}</p>
+                    </div>
+
+                    {understanding.specialWishesNoted && understanding.specialWishesNoted.length > 0 && (
+                      <div className="pt-2 border-t border-purple-100">
+                        <span className="text-[11px] font-bold text-pink-900 block">Yêu cầu bổ sung của con:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {understanding.specialWishesNoted.map((w, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-pink-50 text-pink-800 text-[11px] font-semibold rounded-md border border-pink-200">
+                              ⭐ {w}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : hasMultipleDirections && !selectedDirectionId && detectedDirections.length > 0 ? (
             <div className="space-y-4">
               <div className="p-4 bg-white/95 rounded-2xl border-2 border-pink-300 shadow-xs space-y-2">
                 <div className="flex items-center gap-2 text-pink-900 font-extrabold text-sm sm:text-base font-display">

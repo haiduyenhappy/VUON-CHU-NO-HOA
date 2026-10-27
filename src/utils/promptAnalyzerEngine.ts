@@ -10,7 +10,9 @@ import type {
   DetailedOutlineSection, 
   VocabularyImageryBank,
   DifficultyLevel,
-  PromptAnalysisData
+  PromptAnalysisData,
+  PromptChoiceType,
+  ObjectChoiceItem
 } from '../types/index.ts';
 
 // =========================================================================
@@ -132,6 +134,13 @@ export interface SemanticAnalysisResult {
   detectedTaskLabels: string[];
   audienceOrRecipient: string;
   pointOfView: string;
+  // Phân loại 3 nhóm lựa chọn: LOẠI A (đối tượng), LOẠI B (hướng viết), LOẠI C (nhiệm vụ)
+  choiceType: PromptChoiceType;
+  objectChoiceQuestion?: string;
+  availableObjects?: ObjectChoiceItem[];
+  selectedObjectId?: string | null;
+  selectedObjectName?: string | null;
+  customObjectName?: string;
   hasMultipleDirections: boolean;
   detectedDirections: PromptDirection[];
   selectedDirectionId?: string | null;
@@ -141,6 +150,7 @@ export interface SemanticAnalysisResult {
   combinedTasks: string[];
   compulsoryConstraints: string[];
   negativeConstraints: string[];
+  lengthSpecified: boolean;
   suggestedLength: string;
   difficultyLevel: DifficultyLevel;
 }
@@ -152,7 +162,9 @@ export function analyzePromptSemantics(
   promptText: string, 
   grade: number = 3, 
   difficulty: DifficultyLevel = 'co_ban',
-  selectedDirectionId?: string | null
+  selectedDirectionId?: string | null,
+  selectedObjectId?: string | null,
+  customObjectName?: string
 ): SemanticAnalysisResult {
   const p = promptText.trim();
   const pLower = p.toLowerCase();
@@ -196,20 +208,86 @@ export function analyzePromptSemantics(
     }
   }
 
-  // 2. Nhận diện đề có nhiều hướng ("hoặc" / "hay là" / "chọn một" / "một trong các" / "có thể viết về" / "tùy chọn")
-  const hasAlternative = 
-    pLower.includes('hoặc') || 
-    pLower.includes('hay là') || 
-    (pLower.includes(' hay ') && !pLower.includes('hay ho') && !pLower.includes('điều hay')) ||
-    pLower.includes('một trong các') ||
-    pLower.includes('chọn một') ||
-    pLower.includes('có thể viết về') ||
-    pLower.includes('tùy chọn');
-  const hasMultipleDirections = hasAlternative && !pLower.includes('bản thân') && !pLower.includes('giới thiệu bản thân');
+  // 2. PHÂN BIỆT RÕ RÀNG 3 LOẠI LỰA CHỌN THEO ĐÚNG BẢN CHẤT NGỮ NGHĨA:
+  // LOẠI A: Lựa chọn đối tượng (Ví dụ: "Chọn một đồ vật gần gũi (hộp bút, chiếc cặp, đồng hồ, bảng lớp...) và viết đoạn văn...")
+  // Cùng một thể loại miêu tả và nhiệm vụ viết, học sinh chỉ chọn 1 đối tượng cụ thể để tả.
+  const isObjectSelectionPrompt = 
+    (
+      pLower.includes('chọn một đồ vật') ||
+      pLower.includes('chọn 1 đồ vật') ||
+      pLower.includes('chọn đồ vật') ||
+      pLower.includes('chọn một món đồ') ||
+      (pLower.includes('đồ vật') && (pLower.includes('hộp bút') || pLower.includes('chiếc cặp') || pLower.includes('đồng hồ') || pLower.includes('bảng lớp')))
+    ) && (pLower.includes('tả') || pLower.includes('miêu tả') || pLower.includes('đoạn văn'));
 
+  // LOẠI C: Lựa chọn nhiệm vụ (Ví dụ: "Kể lại một việc tốt HOẶC nêu suy nghĩ về việc làm tốt")
+  // Đề mở ra hai nhiệm vụ khác nhau: kể chuyện (tự sự) hoặc nêu ý kiến (nghị luận).
+  const isTaskSelectionPrompt = 
+    !isObjectSelectionPrompt &&
+    (pLower.includes('kể') && (pLower.includes('nêu suy nghĩ') || pLower.includes('nêu ý kiến') || pLower.includes('bày tỏ cảm xúc')) && (pLower.includes('hoặc') || pLower.includes('hay')));
+
+  // LOẠI B: Lựa chọn hướng viết (Ví dụ: "Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường đi xa", "Tả ngôi trường HOẶC góc sân trường")
+  // Hai hướng có đối tượng người nhận/không gian và nội dung khác biệt.
+  const isDirectionSelectionPrompt = 
+    !isObjectSelectionPrompt && 
+    !isTaskSelectionPrompt && 
+    (
+      ((pLower.includes('thư') || pLower.includes('bức thư')) && (pLower.includes('ông') || pLower.includes('bà')) && (pLower.includes('bạn thân') || pLower.includes('chuyển trường') || pLower.includes('bạn'))) ||
+      ((pLower.includes('ngôi trường') || pLower.includes('trường')) && (pLower.includes('góc sân') || pLower.includes('sân trường'))) ||
+      (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà')) && (pLower.includes(' hoặc ') || pLower.includes(' hay '))) ||
+      ((pLower.includes('thư') || pLower.includes('bức thư')) && pLower.includes('người thân') && (pLower.includes('bạn ở xa') || pLower.includes('bạn'))) ||
+      (pLower.includes('sách') && pLower.includes('nhân vật') && (pLower.includes('hoặc') || pLower.includes('hay'))) ||
+      (pLower.includes('hoặc') || pLower.includes('hay là'))
+    ) && !pLower.includes('bản thân') && !pLower.includes('giới thiệu bản thân');
+
+  let choiceType: PromptChoiceType = 'none';
+  let objectChoiceQuestion: string | undefined = undefined;
+  let availableObjects: ObjectChoiceItem[] | undefined = undefined;
+  let hasMultipleDirections = false;
   const detectedDirections: PromptDirection[] = [];
 
-  if (hasMultipleDirections) {
+  if (isObjectSelectionPrompt) {
+    choiceType = 'object_selection';
+    hasMultipleDirections = false; // LOẠI A: Cùng 1 nhiệm vụ miêu tả, KHÔNG được coi là hai hướng viết phong phú!
+    objectChoiceQuestion = 'Con muốn tả đồ vật nào?';
+    availableObjects = [
+      { id: 'hop_but', name: 'Hộp bút', icon: '✏️' },
+      { id: 'chiec_cap', name: 'Chiếc cặp', icon: '🎒' },
+      { id: 'dong_ho', name: 'Đồng hồ', icon: '⏰' },
+      { id: 'bang_lop', name: 'Bảng lớp', icon: '📋' },
+      { id: 'do_vat_khac', name: 'Đồ vật khác', icon: '✨', isCustom: true }
+    ];
+  } else if (isTaskSelectionPrompt) {
+    choiceType = 'task_selection';
+    hasMultipleDirections = true;
+    detectedDirections.push({
+      id: 'task_ke_chuyen',
+      title: 'Kể lại một việc tốt em đã làm hoặc chứng kiến',
+      mainObject: 'Câu chuyện việc tốt',
+      scope: 'Kể rõ thời gian, địa điểm, diễn biến việc tốt và niềm vui khi giúp đỡ người khác',
+      recipient: 'Người đọc',
+      purpose: 'Kể chuyện và chia sẻ việc tốt',
+      pointOfView: 'Em',
+      topicCode: 'CD13',
+      topicName: 'Việc tốt',
+      icon: '💖'
+    });
+    detectedDirections.push({
+      id: 'task_neu_y_kien',
+      title: 'Nêu suy nghĩ, ý kiến của em về việc làm tốt',
+      mainObject: 'Ý nghĩa của việc làm tốt',
+      scope: 'Khẳng định sự đồng tình, nêu các lý do vì sao việc làm tốt đem lại ý nghĩa đẹp và kêu gọi bạn bè',
+      recipient: 'Người đọc',
+      purpose: 'Nêu ý kiến và bài học',
+      pointOfView: 'Em',
+      topicCode: 'CD13',
+      topicName: 'Việc tốt',
+      icon: '💡'
+    });
+  } else if (isDirectionSelectionPrompt) {
+    choiceType = 'direction_selection';
+    hasMultipleDirections = true;
+
     // Trường hợp 1: Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường đi xa (Đề kiểm thử trọng tâm)
     if (
       (pLower.includes('thư') || pLower.includes('bức thư')) && 
@@ -526,8 +604,57 @@ export function analyzePromptSemantics(
   let coreSubject = p;
   let audienceOrRecipient = 'Người đọc bài văn của em';
   let pointOfView = 'Ngôi thứ nhất (Em / Con)';
+  let selectedObjectName: string | null = null;
 
-  // Xử lý khi đã chọn hướng viết
+  // Xử lý LOẠI A - Lựa chọn đối tượng
+  if (choiceType === 'object_selection') {
+    topicCode = 'CD06';
+    topicName = 'Đồ vật';
+    genre = 'mieu_ta';
+    if (!detectedTaskCodes.includes('NV10')) {
+      detectedTaskCodes.unshift('NV10');
+      detectedTaskLabels.unshift('Viết đoạn văn miêu tả');
+    }
+    if (!detectedTaskCodes.includes('NV24')) {
+      detectedTaskCodes.push('NV24');
+      detectedTaskLabels.push('Tả đồ vật');
+    }
+
+    if (selectedObjectId === 'hop_but') {
+      mainObject = 'Chiếc hộp bút';
+      coreSubject = 'Miêu tả đặc điểm và ích lợi của chiếc hộp bút';
+      selectedObjectName = 'Hộp bút';
+      writingScope = 'Hình dáng hộp chữ nhật, màu sắc tươi tắn, các ngăn chứa đồ tiện ích và công dụng giữ đồ dùng học tập luôn gọn gàng';
+    } else if (selectedObjectId === 'chiec_cap') {
+      mainObject = 'Chiếc cặp sách';
+      coreSubject = 'Miêu tả đặc điểm và ích lợi của chiếc cặp sách';
+      selectedObjectName = 'Chiếc cặp';
+      writingScope = 'Dáng vẻ vuông vắn, quai đeo êm ái, các ngăn rộng rãi và ích lợi bảo vệ sách vở đồng hành cùng em đến trường';
+    } else if (selectedObjectId === 'dong_ho') {
+      mainObject = 'Chiếc đồng hồ';
+      coreSubject = 'Miêu tả đặc điểm và ích lợi của chiếc đồng hồ';
+      selectedObjectName = 'Đồng hồ';
+      writingScope = 'Mặt tròn sáng bóng, các con số rõ nét, kim giờ kim phút cần mẫn và ích lợi nhắc nhở giờ giấc học tập, sinh hoạt';
+    } else if (selectedObjectId === 'bang_lop') {
+      mainObject = 'Chiếc bảng lớp';
+      coreSubject = 'Miêu tả đặc điểm và ích lợi của chiếc bảng lớp';
+      selectedObjectName = 'Bảng lớp';
+      writingScope = 'Hình chữ nhật rộng lớn, màu xanh chống lóa, ô kẻ ngay ngắn và ích lợi truyền tải kiến thức bài giảng của cô giáo';
+    } else if (selectedObjectId === 'do_vat_khac' || selectedObjectId === 'custom') {
+      const cName = (customObjectName && customObjectName.trim()) || 'Đồ vật gần gũi';
+      mainObject = cName;
+      coreSubject = `Miêu tả đặc điểm và ích lợi của ${cName.toLowerCase()}`;
+      selectedObjectName = cName;
+      writingScope = `Đặc điểm hình dáng, màu sắc, cấu tạo nổi bật và ích lợi thiết thực của ${cName.toLowerCase()}`;
+    } else {
+      mainObject = 'Đồ vật gần gũi (Hộp bút, Chiếc cặp, Đồng hồ, Bảng lớp...)';
+      coreSubject = 'Miêu tả đặc điểm và ích lợi của một đồ vật gần gũi';
+      selectedObjectName = null;
+      writingScope = 'Hình dáng, màu sắc, đặc điểm cấu tạo nổi bật và ích lợi thiết thực của đồ vật đối với học tập và sinh hoạt';
+    }
+  }
+
+  // Xử lý khi đã chọn hướng viết (LOẠI B hoặc LOẠI C)
   const activeDirection = hasMultipleDirections
     ? detectedDirections.find(d => d.id === selectedDirectionId) || null
     : null;
@@ -540,47 +667,49 @@ export function analyzePromptSemantics(
     if (activeDirection.pointOfView) pointOfView = activeDirection.pointOfView;
     if (activeDirection.topicCode) topicCode = activeDirection.topicCode;
     if (activeDirection.topicName) topicName = activeDirection.topicName;
-  } else if (genre === 'viet_thu') {
-    if (pLower.includes('ông') || pLower.includes('bà')) {
-      mainObject = 'Ông bà kính yêu';
-      audienceOrRecipient = 'Ông bà ở quê';
-      coreSubject = 'Viết thư thăm hỏi ông bà';
-      writingScope = 'Hỏi thăm sức khỏe, đời sống ở quê và bày tỏ lòng kính yêu, nhớ thương';
-    } else if (pLower.includes('bạn thân') || pLower.includes('chuyển trường') || pLower.includes('bạn')) {
-      mainObject = 'Người bạn thân';
-      audienceOrRecipient = 'Người bạn thân chuyển trường đi xa';
-      coreSubject = 'Viết thư thăm hỏi bạn thân chuyển trường';
-      writingScope = 'Hỏi thăm trường lớp mới, bạn mới và ôn lại kỷ niệm học trò thân thương';
-    } else {
-      mainObject = 'Người nhận thư';
-      coreSubject = 'Viết thư thăm hỏi';
-      writingScope = 'Thăm hỏi sức khỏe, cuộc sống và chia sẻ tin tức của em';
+  } else if (choiceType !== 'object_selection') {
+    if (genre === 'viet_thu') {
+      if (pLower.includes('ông') || pLower.includes('bà')) {
+        mainObject = 'Ông bà kính yêu';
+        audienceOrRecipient = 'Ông bà ở quê';
+        coreSubject = 'Viết thư thăm hỏi ông bà';
+        writingScope = 'Hỏi thăm sức khỏe, đời sống ở quê và bày tỏ lòng kính yêu, nhớ thương';
+      } else if (pLower.includes('bạn thân') || pLower.includes('chuyển trường') || pLower.includes('bạn')) {
+        mainObject = 'Người bạn thân';
+        audienceOrRecipient = 'Người bạn thân chuyển trường đi xa';
+        coreSubject = 'Viết thư thăm hỏi bạn thân chuyển trường';
+        writingScope = 'Hỏi thăm trường lớp mới, bạn mới và ôn lại kỷ niệm học trò thân thương';
+      } else {
+        mainObject = 'Người nhận thư';
+        coreSubject = 'Viết thư thăm hỏi';
+        writingScope = 'Thăm hỏi sức khỏe, cuộc sống và chia sẻ tin tức của em';
+      }
+    } else if (genre === 'loi_nhan') {
+      mainObject = 'Người thân nhận lời nhắn';
+      audienceOrRecipient = 'Người thân trong gia đình (Bố, Mẹ, Ông, Bà)';
+      coreSubject = 'Viết lời nhắn cho người thân';
+      writingScope = 'Lý do, địa điểm, thời gian về và lời nhắn nhủ yêu thương để người nhà yên tâm';
+    } else if (pLower.includes('ngôi trường') && !pLower.includes('góc sân')) {
+      mainObject = 'Ngôi trường tiểu học';
+      coreSubject = 'Tả ngôi trường tiểu học của em';
+      writingScope = 'Toàn cảnh ngôi trường, dãy lớp học, sân trường và kỷ niệm gắn bó';
+    } else if (pLower.includes('góc sân trường') || (pLower.includes('góc sân') && pLower.includes('trường'))) {
+      mainObject = 'Một góc sân trường';
+      coreSubject = 'Tả một góc sân trường em yêu thích';
+      writingScope = 'Vị trí góc sân, cảnh vật xung quanh (ghế đá, bồn hoa, ánh nắng) và hoạt động giờ ra chơi';
+    } else if (pLower.includes('bản thân') || pLower.includes('giới thiệu')) {
+      mainObject = 'Bản thân học sinh';
+      coreSubject = 'Giới thiệu về bản thân em';
+      writingScope = 'Họ tên, sở thích, ước mơ và điểm đặc biệt đáng nhớ của chính em';
+    } else if (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà'))) {
+      mainObject = 'Kỷ niệm đáng nhớ với ông bà';
+      coreSubject = 'Kể lại một kỷ niệm đáng nhớ với ông bà';
+      writingScope = 'Sự việc đáng nhớ, lời dạy bảo, cử chỉ ân cần của ông bà và cảm xúc của em';
+    } else if (genre === 'neu_y_kien') {
+      mainObject = 'Việc làm tốt và ý nghĩa nhân văn';
+      coreSubject = 'Nêu ý kiến về một việc làm tốt';
+      writingScope = 'Khẳng định sự đồng tình, đưa ra lý do xác đáng và dẫn chứng câu chuyện thực tế';
     }
-  } else if (genre === 'loi_nhan') {
-    mainObject = 'Người thân nhận lời nhắn';
-    audienceOrRecipient = 'Người thân trong gia đình (Bố, Mẹ, Ông, Bà)';
-    coreSubject = 'Viết lời nhắn cho người thân';
-    writingScope = 'Lý do, địa điểm, thời gian về và lời nhắn nhủ yêu thương để người nhà yên tâm';
-  } else if (pLower.includes('ngôi trường') && !pLower.includes('góc sân')) {
-    mainObject = 'Ngôi trường tiểu học';
-    coreSubject = 'Tả ngôi trường tiểu học của em';
-    writingScope = 'Toàn cảnh ngôi trường, dãy lớp học, sân trường và kỷ niệm gắn bó';
-  } else if (pLower.includes('góc sân trường') || (pLower.includes('góc sân') && pLower.includes('trường'))) {
-    mainObject = 'Một góc sân trường';
-    coreSubject = 'Tả một góc sân trường em yêu thích';
-    writingScope = 'Vị trí góc sân, cảnh vật xung quanh (ghế đá, bồn hoa, ánh nắng) và hoạt động giờ ra chơi';
-  } else if (pLower.includes('bản thân') || pLower.includes('giới thiệu')) {
-    mainObject = 'Bản thân học sinh';
-    coreSubject = 'Giới thiệu về bản thân em';
-    writingScope = 'Họ tên, sở thích, ước mơ và điểm đặc biệt đáng nhớ của chính em';
-  } else if (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà'))) {
-    mainObject = 'Kỷ niệm đáng nhớ với ông bà';
-    coreSubject = 'Kể lại một kỷ niệm đáng nhớ với ông bà';
-    writingScope = 'Sự việc đáng nhớ, lời dạy bảo, cử chỉ ân cần của ông bà và cảm xúc của em';
-  } else if (genre === 'neu_y_kien') {
-    mainObject = 'Việc làm tốt và ý nghĩa nhân văn';
-    coreSubject = 'Nêu ý kiến về một việc làm tốt';
-    writingScope = 'Khẳng định sự đồng tình, đưa ra lý do xác đáng và dẫn chứng câu chuyện thực tế';
   }
 
   // 8. Ràng buộc bắt buộc và cấm kỵ (Tránh 100% lạc đề)
@@ -605,8 +734,14 @@ export function analyzePromptSemantics(
   }
 
   // 9. Xác định độ dài đề xuất theo khối lớp và thể loại
+  // Kiểm tra đề bài có quy định số câu bắt buộc không:
+  const lengthSpecified = /\b\d+\s*[-–]\s*\d+\s*câu\b/i.test(p) || /\b\d+\s*câu\b/i.test(p) || /từ\s*\d+\s*đến\s*\d+\s*câu/i.test(p);
   let suggestedLength = '4–6 câu hoặc 7–9 câu';
-  if (genre === 'viet_cau' || pLower.includes('2–3 câu') || pLower.includes('2-3 câu')) {
+
+  if (!lengthSpecified && (choiceType === 'object_selection' || (genre === 'mieu_ta' && pLower.includes('đoạn văn')))) {
+    // Với đề bài không quy định số câu, không được bắt buộc cố định mà đưa ra gợi ý sư phạm linh hoạt
+    suggestedLength = 'Đề bài chưa quy định số câu. Con hãy viết một đoạn văn đủ ý, phù hợp với hướng dẫn của giáo viên (Gợi ý tham khảo: khoảng 5–7 câu).';
+  } else if (genre === 'viet_cau' || pLower.includes('2–3 câu') || pLower.includes('2-3 câu')) {
     suggestedLength = '2–3 câu hoàn chỉnh';
   } else if (genre === 'viet_thu') {
     suggestedLength = 'Thư ngắn (khoảng 80–120 chữ, có đủ 5 phần chuẩn mực của thư)';
@@ -634,15 +769,22 @@ export function analyzePromptSemantics(
     detectedTaskLabels,
     audienceOrRecipient,
     pointOfView,
+    choiceType,
+    objectChoiceQuestion,
+    availableObjects,
+    selectedObjectId: selectedObjectId || null,
+    selectedObjectName,
+    customObjectName,
     hasMultipleDirections,
     detectedDirections,
     selectedDirectionId: activeDirection ? activeDirection.id : null,
     selectedDirection: activeDirection,
-    purpose: activeDirection?.purpose || 'Hỏi thăm, chia sẻ và bày tỏ tình cảm',
+    purpose: activeDirection?.purpose || 'Miêu tả đối tượng sinh động và bộc lộ tình cảm',
     isCombinedMultiTask,
     combinedTasks,
     compulsoryConstraints,
     negativeConstraints,
+    lengthSpecified,
     suggestedLength,
     difficultyLevel: difficulty
   };
@@ -676,7 +818,7 @@ export function buildGenreStructure(
   let socraticQuestions: string[] = [];
   let hoaNhoUnderstand = `Đề bài muốn con bám sát "${coreSubject}" để viết bài thật sinh động và đúng thể loại.`;
   let specificRequirements: string[] = [
-    `Nhiệm vụ: ${semantics.detectedTaskLabels[0] || 'Viết bài theo yêu cầu đề'}`,
+    `Nhiệm vụ: ${(semantics.detectedTaskLabels && semantics.detectedTaskLabels[0]) || 'Viết bài theo yêu cầu đề'}`,
     `Đối tượng: ${mainObject}`,
     `Phạm vi: ${writingScope}`
   ];
@@ -1553,11 +1695,669 @@ export function buildGenreStructure(
   // THỂ LOẠI 11: MIÊU TẢ (mieu_ta - Mặc định chuẩn quan sát)
   // -------------------------------------------------------------
   else if (genre === 'mieu_ta') {
+    const isObjectSelection = 
+      semantics.choiceType === 'object_selection' ||
+      semantics.topicCode === 'CD06' ||
+      semantics.availableObjects !== undefined;
+
     const isCornerOfYard = 
       semantics.selectedDirectionId === 'goc_san_truong' ||
       mainObject.toLowerCase().includes('góc sân');
 
-    if (isCornerOfYard) {
+    // =========================================================
+    // TRƯỜNG HỢP A: LOẠI A - LỰA CHỌN ĐỐI TƯỢNG (HỘP BÚT, CẶP, ĐỒNG HỒ, BẢNG LỚP...)
+    // =========================================================
+    if (isObjectSelection) {
+      const objId = semantics.selectedObjectId;
+
+      // 1. Khi chọn HỘP BÚT
+      if (objId === 'hop_but') {
+        hoaNhoUnderstand = 'Con đã chọn miêu tả chiếc hộp bút – người bạn nhỏ đồng hành trên mỗi trang vở! Hãy quan sát kỹ từ màu sắc, chất liệu, các ngăn đựng bút thước đến ích lợi giúp đồ dùng luôn ngăn nắp nhé.';
+        specificRequirements = [
+          'Chọn một đồ vật gần gũi, quen thuộc: Chiếc hộp bút của em.',
+          'Thể loại: Đoạn văn miêu tả sinh động, dùng từ ngữ gợi hình, so sánh gần gũi.',
+          'Nội dung 1: Giới thiệu tên, xuất xứ, hình dáng hộp chữ nhật, màu sắc tươi tắn, chất liệu vải bạt và các ngăn chứa đồ tiện ích.',
+          'Nội dung 2: Nêu rõ công dụng cất giữ bút chì, bút mực, thước kẻ, tẩy gôm; ích lợi giúp đồ dùng luôn ngăn nắp, tránh thất lạc.',
+          'Tình cảm: Bày tỏ cảm xúc yêu quý, kéo khóa nhẹ nhàng và thường xuyên giữ hộp bút sạch sẽ.'
+        ];
+        socraticQuestions = [
+          'Chiếc hộp bút của con có hình dáng gì, màu sắc và hoa văn trang trí ra sao?',
+          'Chất liệu làm nên hộp bút là vải mềm, nhựa dẻo hay kim loại chắc chắn?',
+          'Khi mở khóa kéo, bên trong hộp bút có mấy ngăn và con đựng những đồ dùng nào?',
+          'Chiếc hộp bút giúp bàn học và cặp sách của con trở nên ngăn nắp như thế nào?',
+          'Con có thói quen gì để giữ cho chiếc hộp bút luôn sạch sẽ, bền đẹp?'
+        ];
+        branches = [
+          {
+            id: 'br-1',
+            title: '🌱 Giới thiệu hộp bút',
+            icon: '🌱',
+            color: 'emerald',
+            points: [
+              'Chiếc hộp bút thân thương đồng hành cùng con mỗi ngày',
+              'Món quà mẹ mua cho con nhân dịp khai giảng năm học mới',
+              'Ấn tượng ban đầu: nhỏ nhắn, xinh xắn và rất tiện lợi'
+            ]
+          },
+          {
+            id: 'br-2',
+            title: '🎨 Hình dáng và màu sắc',
+            icon: '🎨',
+            color: 'purple',
+            points: [
+              'Dáng hình hộp chữ nhật thon dài, vừa vặn bỏ vào cặp sách',
+              'Màu xanh pastel dịu mát (hoặc hồng phấn ngọt ngào)',
+              'In hình chú mèo máy thông minh hoặc nhân vật hoạt hình ngộ nghĩnh'
+            ]
+          },
+          {
+            id: 'br-3',
+            title: '🔍 Các bộ phận và đặc điểm',
+            icon: '🔍',
+            color: 'amber',
+            points: [
+              'Đường khóa kéo trơn tru bằng kim loại sáng loáng',
+              'Chất liệu vải bạt chống thấm nước bền chắc',
+              'Bên trong chia làm hai ngăn: ngăn lớn đựng bút, ngăn lưới nhỏ đựng tẩy gôm'
+            ]
+          },
+          {
+            id: 'br-4',
+            title: '⭐ Công dụng và ích lợi',
+            icon: '⭐',
+            color: 'sky',
+            points: [
+              'Cất giữ cẩn thận bút chì, bút mực, thước kẻ, compa và tẩy',
+              'Giúp đồ dùng học tập luôn ngăn nắp, không bị va đập gãy ngòi hay thất lạc',
+              'Mỗi khi cần viết bài chỉ cần kéo khóa là lấy được ngay rất nhanh'
+            ]
+          },
+          {
+            id: 'br-5',
+            title: '💖 Tình cảm và giữ gìn',
+            icon: '💖',
+            color: 'rose',
+            points: [
+              'Con yêu quý chiếc hộp bút như một người bạn nhỏ trung thành',
+              'Luôn đóng khóa cẩn thận sau mỗi tiết học',
+              'Thường xuyên giặt sạch và lau chùi để hộp bút luôn mới tinh'
+            ]
+          }
+        ];
+
+        const sec1 = [
+          'Giới thiệu chiếc hộp bút xinh xắn mà con luôn mang theo đến trường.',
+          'Xuất xứ: Món quà mẹ tặng đầu năm học mới khiến con rất nâng niu.'
+        ];
+        const sec2 = [
+          'Hình dáng hộp chữ nhật thon dài, kích thước vừa vặn trong cặp sách.',
+          'Màu sắc tươi tắn, hoa văn trang trí ngộ nghĩnh đáng yêu.',
+          'Dây khóa kéo kim loại chắc chắn và hai ngăn chứa đồ thông minh.'
+        ];
+        const sec3 = [
+          'Nơi trú ngụ an toàn cho các bạn bút chì, bút mực, thước kẻ và tẩy gôm.',
+          'Giúp bàn học luôn gọn gàng và không bao giờ bị quên đồ dùng khi đến lớp.',
+          'Tiết kiệm thời gian tìm kiếm đồ dùng trong mỗi giờ học.'
+        ];
+        const sec4 = [
+          'Bày tỏ niềm yêu mến và gắn bó sâu đậm với chiếc hộp bút nhỏ.',
+          'Ý thức kéo khóa nhẹ tay, không vẽ bậy và lau sạch vết mực để hộp bút luôn bền đẹp.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: [...sec2, ...sec3],
+          ketDoan: sec4,
+          genre: 'mieu_ta',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Giới thiệu chiếc hộp bút thân thương', icon: '🌱', guideNote: 'Giới thiệu tên đồ vật và xuất xứ hoặc dịp có được', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Miêu tả đặc điểm nổi bật của hộp bút', icon: '🎨', guideNote: 'Tả hình dáng, màu sắc, chất liệu và các ngăn', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Nêu ích lợi và sự tiện dụng', icon: '⭐', guideNote: 'Nêu công dụng giữ đồ dùng ngăn nắp và sự tiện lợi', bulletPoints: sec3 },
+            { id: 'sec-4', title: 'Phần 4. Tình cảm và cách giữ gìn hộp bút', icon: '💖', guideNote: 'Bày tỏ tình cảm gắn bó và thói quen bảo quản', bulletPoints: sec4 }
+          ]
+        };
+      }
+      // 2. Khi chọn CHIẾC CẶP SÁCH
+      else if (objId === 'chiec_cap') {
+        hoaNhoUnderstand = 'Con đã chọn miêu tả chiếc cặp sách – người bạn trung thành ngày ngày cùng con đến trường! Hãy tả dáng vẻ chắc chắn, các ngăn rộng rãi và công dụng bảo vệ sách vở luôn phẳng phiu nhé.';
+        specificRequirements = [
+          'Chọn một đồ vật gần gũi, quen thuộc: Chiếc cặp sách của em.',
+          'Thể loại: Đoạn văn miêu tả sinh động, dùng từ ngữ gợi tả hình dáng và màu sắc.',
+          'Nội dung 1: Giới thiệu chiếc cặp, dáng hình hộp chữ nhật đứng, màu sắc nổi bật, quai đeo đệm mút và các ngăn chứa.',
+          'Nội dung 2: Nêu rõ công dụng chứa sách giáo khoa, vở bài tập, hộp bút và bình nước; ích lợi bảo vệ sách vở không bị gập mép hay ướt mưa.',
+          'Tình cảm: Bày tỏ lòng biết ơn bố mẹ đã tặng, nâng niu chiếc cặp và thói quen treo cặp cẩn thận.'
+        ];
+        socraticQuestions = [
+          'Chiếc cặp sách của con có hình dáng, màu sắc và chất liệu gì nổi bật?',
+          'Quai đeo và phần lưng của cặp được thiết kế ra sao để con đeo không bị đau vai?',
+          'Bên trong cặp có mấy ngăn và con phân chia sách vở, đồ dùng vào từng ngăn như thế nào?',
+          'Chiếc cặp giúp con bảo vệ sách vở khỏi mưa gió và bụi bẩn ra sao?',
+          'Con có cảm xúc gì mỗi khi mang cặp đến lớp và con bảo quản cặp thế nào?'
+        ];
+        branches = [
+          {
+            id: 'br-1',
+            title: '🌱 Giới thiệu chiếc cặp',
+            icon: '🌱',
+            color: 'emerald',
+            points: [
+              'Chiếc cặp sách thân thiết gắn bó mỗi buổi đến trường',
+              'Món quà ý nghĩa bố mẹ tặng con khi bước vào năm học mới',
+              'Niềm háo hức, tự hào khi được đeo chiếc cặp trên vai'
+            ]
+          },
+          {
+            id: 'br-2',
+            title: '🎨 Hình dáng và màu sắc',
+            icon: '🎨',
+            color: 'purple',
+            points: [
+              'Dáng đứng hình hộp chữ nhật vuông vắn, cứng cáp',
+              'Màu xanh than khỏe khoắn (hoặc đỏ tươi rạng rỡ)',
+              'Dải phản quang phát sáng ban đêm đảm bảo an toàn khi đi đường'
+            ]
+          },
+          {
+            id: 'br-3',
+            title: '🔍 Các bộ phận và đặc điểm',
+            icon: '🔍',
+            color: 'amber',
+            points: [
+              'Hai quai đeo to bản có lót đệm mút êm ái, không làm đau vai',
+              'Khóa bấm kim loại hoặc khóa kéo chắc chắn, đóng mở dễ dàng',
+              'Gồm ba ngăn rộng rãi và hai túi lưới tiện lợi bên hông đựng bình nước'
+            ]
+          },
+          {
+            id: 'br-4',
+            title: '⭐ Công dụng và ích lợi',
+            icon: '⭐',
+            color: 'sky',
+            points: [
+              'Đựng toàn bộ sách giáo khoa, vở bài tập, bảng con và hộp bút',
+              'Bảo vệ sách vở luôn phẳng phiu, ngay ngắn, không bị quăn mép',
+              'Đồng hành che mưa che nắng cho đồ dùng học tập suốt năm học'
+            ]
+          },
+          {
+            id: 'br-5',
+            title: '💖 Tình cảm và giữ gìn',
+            icon: '💖',
+            color: 'rose',
+            points: [
+              'Coi chiếc cặp như người bạn thân thiết, sẻ chia niềm vui đến lớp',
+              'Không ném quăng cặp xuống đất, luôn đặt nhẹ nhàng vào ngăn bàn',
+              'Mỗi cuối tuần đều lau sạch bụi bẩn và sắp xếp sách vở ngăn nắp'
+            ]
+          }
+        ];
+
+        const sec1 = [
+          'Giới thiệu chiếc cặp sách thân thiết gắn bó với con mỗi ngày đến trường.',
+          'Dịp bố mẹ mua tặng đầu năm học làm con vô cùng trân quý.'
+        ];
+        const sec2 = [
+          'Hình dáng vuông vắn, màu sắc bắt mắt và chất liệu vải chống thấm bền đẹp.',
+          'Quai đeo có đệm mút êm ái giúp con không bị mỏi lưng.',
+          'Các ngăn cặp rộng rãi, khoa học và khóa bấm chắc chắn.'
+        ];
+        const sec3 = [
+          'Chứa đựng và bảo vệ toàn bộ sách vở, bảng con, hộp bút luôn sạch sẽ.',
+          'Giúp con mang đồ dùng học tập đến lớp một cách nhẹ nhàng, gọn gàng.',
+          'Người bạn đồng hành tin cậy trên con đường đến trường mỗi sớm mai.'
+        ];
+        const sec4 = [
+          'Bộc lộ tình cảm gắn bó, yêu quý chiếc cặp như người bạn tri kỉ.',
+          'Ý thức treo cặp cẩn thận lên móc và vệ sinh cặp định kỳ để cặp luôn mới.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: [...sec2, ...sec3],
+          ketDoan: sec4,
+          genre: 'mieu_ta',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Giới thiệu chiếc cặp sách thân thương', icon: '🌱', guideNote: 'Nêu tên đối tượng và hoàn cảnh có được', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Miêu tả đặc điểm nổi bật của chiếc cặp', icon: '🎨', guideNote: 'Tả dáng đứng, màu sắc, quai đeo và các ngăn', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Nêu ích lợi và công dụng của cặp sách', icon: '⭐', guideNote: 'Nêu công dụng bảo vệ sách vở và sự gắn bó', bulletPoints: sec3 },
+            { id: 'sec-4', title: 'Phần 4. Tình cảm và cách giữ gìn cặp sách', icon: '💖', guideNote: 'Bộc lộ tình cảm gắn bó và thói quen giữ gìn', bulletPoints: sec4 }
+          ]
+        };
+      }
+      // 3. Khi chọn ĐỒNG HỒ
+      else if (objId === 'dong_ho') {
+        hoaNhoUnderstand = 'Con đã chọn miêu tả chiếc đồng hồ – sứ giả thời gian nhắc con chăm ngoan, đúng giờ! Hãy tả mặt số tròn xoe, chuyển động cần mẫn của kim giờ, kim phút và ích lợi nhắc nhở con nhé.';
+        specificRequirements = [
+          'Chọn một đồ vật gần gũi, quen thuộc: Chiếc đồng hồ của em.',
+          'Thể loại: Đoạn văn miêu tả sinh động, kết hợp quan sát hình ảnh và âm thanh tích tắc.',
+          'Nội dung 1: Giới thiệu chiếc đồng hồ, hình dáng mặt tròn, màu sắc viền, mặt kính trong suốt và 12 con số cùng các kim.',
+          'Nội dung 2: Nêu rõ công dụng báo giờ, reng chuông báo thức; ích lợi nhắc nhở con thức dậy đúng giờ, học bài và ngủ đúng giấc.',
+          'Tình cảm: Coi đồng hồ như người bạn cần mẫn, trân trọng thời gian và lau chùi mặt kính sáng bóng.'
+        ];
+        socraticQuestions = [
+          'Chiếc đồng hồ của con là đồng hồ báo thức hay đồng hồ đeo tay, có hình dáng và màu sắc gì?',
+          'Mặt đồng hồ có những chi tiết nào nổi bật (chữ số, mặt kính, các cây kim)?',
+          'Kim giờ, kim phút và kim giây chuyển động và phát ra âm thanh như thế nào?',
+          'Chiếc đồng hồ giúp ích gì cho sinh hoạt và học tập hàng ngày của con?',
+          'Con có cảm xúc gì khi nhìn chiếc đồng hồ cần mẫn chạy từng giây và con bảo quản ra sao?'
+        ];
+        branches = [
+          {
+            id: 'br-1',
+            title: '🌱 Giới thiệu chiếc đồng hồ',
+            icon: '🌱',
+            color: 'emerald',
+            points: [
+              'Chiếc đồng hồ báo thức xinh xắn đặt ngay ngắn trên bàn học',
+              'Món quà sinh nhật ý nghĩa ông bà hoặc bố mẹ tặng cho con',
+              'Ấn tượng ban đầu: nhỏ gọn, phát ra tiếng tích tắc vui tai'
+            ]
+          },
+          {
+            id: 'br-2',
+            title: '🎨 Hình dáng và màu sắc',
+            icon: '🎨',
+            color: 'purple',
+            points: [
+              'Mặt tròn xoe xinh xắn như vầng trăng rằm thu nhỏ',
+              'Vỏ ngoài viền màu xanh dương tươi sáng (hoặc trắng sứ trang nhã)',
+              'Chân đế bằng kim loại vững chãi giúp đồng hồ đứng vững trên bàn'
+            ]
+          },
+          {
+            id: 'br-3',
+            title: '🔍 Các bộ phận và đặc điểm',
+            icon: '🔍',
+            color: 'amber',
+            points: [
+              'Lớp kính trong suốt bảo vệ mặt số bên trong',
+              '12 con số học trò in đậm màu đen rõ ràng, dễ nhìn',
+              'Bộ ba kim giờ béo tròn, kim phút thon dài và kim giây đỏ thanh mảnh quay đều đặn'
+            ]
+          },
+          {
+            id: 'br-4',
+            title: '⭐ Công dụng và ích lợi',
+            icon: '⭐',
+            color: 'sky',
+            points: [
+              'Tiếng reng re re vui nhộn đánh thức con dậy sớm mỗi sáng',
+              'Nhắc nhở con ngồi vào bàn học bài đúng giờ và đi ngủ đúng giấc',
+              'Giúp con hình thành thói quen quý trọng từng phút giây quý báu'
+            ]
+          },
+          {
+            id: 'br-5',
+            title: '💖 Tình cảm và giữ gìn',
+            icon: '💖',
+            color: 'rose',
+            points: [
+              'Yêu quý chiếc đồng hồ như một người bạn chăm chỉ không bao giờ mỏi mệt',
+              'Nhẹ tay khi cài nút báo thức, không làm rơi vỡ mặt kính',
+              'Thường xuyên lau bụi và nhờ bố thay pin kịp thời để đồng hồ chạy chuẩn'
+            ]
+          }
+        ];
+
+        const sec1 = [
+          'Giới thiệu chiếc đồng hồ xinh xắn trên góc bàn học của con.',
+          'Xuất xứ: Món quà sinh nhật ý nghĩa nhắc nhở con thói quen đúng giờ.'
+        ];
+        const sec2 = [
+          'Hình dáng tròn xoe, màu sắc trang nhã và chân đế kim loại vững chắc.',
+          'Mặt kính trong veo, 12 con số rõ nét và ba kim đồng hồ hoạt bát.',
+          'Tiếng tích tắc êm đềm như nhịp bước chân cần mẫn của thời gian.'
+        ];
+        const sec3 = [
+          'Báo thức buổi sáng giúp con thức dậy đúng giờ, không bao giờ đi học muộn.',
+          'Nhắc nhở giờ học bài, giờ đọc sách và giờ đi ngủ điều độ.',
+          'Giúp con học được bài học quý giá về việc tiết kiệm và trân trọng thời gian.'
+        ];
+        const sec4 = [
+          'Bày tỏ sự yêu mến, biết ơn người bạn đồng hồ trung thành.',
+          'Ý thức bảo quản: lau mặt kính sáng bóng, thay pin đều đặn và đặt nơi an toàn.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: [...sec2, ...sec3],
+          ketDoan: sec4,
+          genre: 'mieu_ta',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Giới thiệu chiếc đồng hồ báo thức', icon: '🌱', guideNote: 'Nêu tên đồ vật và vị trí đặt trên bàn học', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Miêu tả đặc điểm nổi bật của đồng hồ', icon: '🎨', guideNote: 'Tả mặt số, các con số và bước chuyển động của các kim', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Nêu ích lợi và công dụng của đồng hồ', icon: '⭐', guideNote: 'Nêu tác dụng báo thức và nhắc nhở giờ giấc', bulletPoints: sec3 },
+            { id: 'sec-4', title: 'Phần 4. Tình cảm và cách giữ gìn đồng hồ', icon: '💖', guideNote: 'Bày tỏ tình cảm trân quý và ý thức bảo quản cẩn thận', bulletPoints: sec4 }
+          ]
+        };
+      }
+      // 4. Khi chọn BẢNG LỚP
+      else if (objId === 'bang_lop') {
+        hoaNhoUnderstand = 'Con đã chọn miêu tả chiếc bảng lớp – chứng nhân thân thương của từng bài học và nét chữ thầy cô! Hãy tả màu xanh dịu mắt, ô kẻ ngay ngắn và ích lợi mở ra chân trời tri thức nhé.';
+        specificRequirements = [
+          'Chọn một đồ vật gần gũi, quen thuộc: Chiếc bảng lớp học.',
+          'Thể loại: Đoạn văn miêu tả không gian lớp học sinh động, dùng từ ngữ gợi cảm.',
+          'Nội dung 1: Giới thiệu chiếc bảng lớp treo trang trọng ở bục giảng, hình chữ nhật rộng lớn, màu xanh chống lóa và viền nhôm.',
+          'Nội dung 2: Nêu rõ công dụng nơi cô giáo viết bài học, học sinh lên làm toán; ích lợi mở rộng kiến thức và lưu giữ bài giảng.',
+          'Tình cảm: Gắn bó với kỷ niệm lớp học, trân trọng nét chữ thầy cô và luôn lau sạch bảng sau giờ học.'
+        ];
+        socraticQuestions = [
+          'Chiếc bảng lớp được treo ở vị trí nào trong phòng học và có kích thước ra sao?',
+          'Bề mặt bảng có màu sắc gì, các đường kẻ ô vuông trên bảng trông như thế nào?',
+          'Khung bảng và máng đựng phấn ở phía dưới được làm bằng chất liệu gì?',
+          'Chiếc bảng giúp ích gì cho cô giáo trong giờ giảng bài và các bạn học sinh khi làm bài tập?',
+          'Con và các bạn có ý thức giữ gìn chiếc bảng lớp luôn sạch đẹp như thế nào?'
+        ];
+        branches = [
+          {
+            id: 'br-1',
+            title: '🌱 Giới thiệu chiếc bảng lớp',
+            icon: '🌱',
+            color: 'emerald',
+            points: [
+              'Chiếc bảng lớp thân thương gắn bó suốt những năm tháng tiểu học',
+              'Treo trang trọng ở chính giữa bức tường phía trước lớp học',
+              'Nơi đầu tiên mọi ánh mắt học trò hướng về khi bắt đầu tiết học'
+            ]
+          },
+          {
+            id: 'br-2',
+            title: '🎨 Hình dáng và màu sắc',
+            icon: '🎨',
+            color: 'purple',
+            points: [
+              'Hình chữ nhật rộng lớn, chiếm gần hết khoảng tường phía trên bục giảng',
+              'Màu xanh lá cây đậm dịu mắt, có khả năng chống lóa tốt',
+              'Khung viền bằng nhôm sáng bóng, bốn góc bo tròn an toàn'
+            ]
+          },
+          {
+            id: 'br-3',
+            title: '🔍 Các bộ phận và đặc điểm',
+            icon: '🔍',
+            color: 'amber',
+            points: [
+              'Bề mặt bảng nhẵn mịn, bám phấn rất tốt khi viết',
+              'Các đường kẻ ô vuông mờ ngay ngắn như những trang vở học trò phóng to',
+              'Mép dưới có máng nhôm dài để phấn trắng, phấn màu và khăn lau bảng'
+            ]
+          },
+          {
+            id: 'br-4',
+            title: '⭐ Công dụng và ích lợi',
+            icon: '⭐',
+            color: 'sky',
+            points: [
+              'Nơi cô giáo nắn nót viết từng dòng chữ mẫu, bài toán hay và lời giảng sâu sắc',
+              'Nơi các bạn học sinh tự tin lên bảng trình bày bài làm trước cả lớp',
+              'Giúp cả lớp dễ dàng theo dõi bài học và tiếp thu kiến thức mới mỗi ngày'
+            ]
+          },
+          {
+            id: 'br-5',
+            title: '💖 Tình cảm và giữ gìn',
+            icon: '💖',
+            color: 'rose',
+            points: [
+              'Yêu quý và coi chiếc bảng như người bạn lớn âm thầm chở che tri thức',
+              'Trân trọng từng nét phấn trắng của thầy cô in dấu trên mặt bảng',
+              'Ý thức trực nhật: giặt khăn sạch và lau bảng nhẹ nhàng sau mỗi tiết học'
+            ]
+          }
+        ];
+
+        const sec1 = [
+          'Giới thiệu chiếc bảng đen (bảng xanh) treo trang trọng trên bục giảng lớp học.',
+          'Vị trí trung tâm thu hút sự chú ý của mọi học sinh trong mỗi giờ học.'
+        ];
+        const sec2 = [
+          'Kích thước rộng lớn hình chữ nhật, màu xanh dịu mắt chống lóa.',
+          'Khung viền nhôm sáng và các đường kẻ ô vuông thẳng tắp, đều đặn.',
+          'Máng đựng phấn tiện lợi và chiếc khăn lau bảng quen thuộc.'
+        ];
+        const sec3 = [
+          'Nơi cô giáo gửi gắm những bài học hay, những phép tính kỳ diệu bằng phấn trắng.',
+          'Cầu nối tri thức giúp các bạn học sinh cùng học tập, thảo luận sôi nổi.',
+          'Chứng nhân ghi dấu bao kỷ niệm học trò và những tràng pháo tay giòn giã.'
+        ];
+        const sec4 = [
+          'Bày tỏ lòng yêu quý chiếc bảng lớp và trân trọng công ơn dạy dỗ của thầy cô.',
+          'Ý thức giữ gìn: không gõ vật cứng lên bảng, luôn lau bảng sạch bóng sau giờ học.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: [...sec2, ...sec3],
+          ketDoan: sec4,
+          genre: 'mieu_ta',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Giới thiệu chiếc bảng lớp thân thương', icon: '🌱', guideNote: 'Nêu vị trí trang trọng của bảng lớp', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Miêu tả đặc điểm nổi bật của bảng lớp', icon: '🎨', guideNote: 'Tả kích thước, màu xanh chống lóa và ô kẻ ngay ngắn', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Nêu ích lợi và công dụng của bảng lớp', icon: '⭐', guideNote: 'Nêu vai trò truyền tải bài giảng và cầu nối tri thức', bulletPoints: sec3 },
+            { id: 'sec-4', title: 'Phần 4. Tình cảm và ý thức giữ gìn bảng lớp', icon: '💖', guideNote: 'Bày tỏ lòng trân quý và ý thức lau bảng sạch bóng', bulletPoints: sec4 }
+          ]
+        };
+      }
+      // 5. Khi chọn ĐỒ VẬT KHÁC (hoặc tự nhập)
+      else if (objId === 'do_vat_khac' || objId === 'custom' || (semantics.selectedObjectName && semantics.selectedObjectName !== 'Hộp bút' && semantics.selectedObjectName !== 'Chiếc cặp' && semantics.selectedObjectName !== 'Đồng hồ' && semantics.selectedObjectName !== 'Bảng lớp')) {
+        const customName = mainObject || 'Đồ vật thân quen';
+        hoaNhoUnderstand = `Con đã chọn miêu tả món đồ vật thân thương "${customName}"! Con hãy quan sát thật tỉ mỉ màu sắc, hình dáng đặc trưng và kể lại ích lợi tuyệt vời của nó nhé.`;
+        specificRequirements = [
+          `Chọn một đồ vật gần gũi, quen thuộc: ${customName}.`,
+          'Thể loại: Đoạn văn miêu tả sinh động, dùng từ ngữ gợi hình, gợi cảm.',
+          `Nội dung 1: Giới thiệu tên, xuất xứ, hình dáng, màu sắc, đặc điểm cấu tạo nổi bật của ${customName.toLowerCase()}.`,
+          `Nội dung 2: Nêu rõ công dụng, ích lợi thiết thực và sự gắn bó của ${customName.toLowerCase()} với việc học tập/sinh hoạt.`,
+          `Tình cảm: Bày tỏ cảm xúc yêu quý, nâng niu và ý thức giữ gìn ${customName.toLowerCase()} cẩn thận.`
+        ];
+        socraticQuestions = [
+          `Món đồ ${customName} của con có hình dáng, kích thước và màu sắc chủ đạo như thế nào?`,
+          `Chất liệu làm nên ${customName} là gì và có những chi tiết nào đặc biệt khiến con yêu thích?`,
+          `Món đồ ${customName} giúp ích gì nhiều nhất cho việc học tập hoặc cuộc sống hàng ngày của con?`,
+          `Khoảnh khắc hoặc kỷ niệm nào gắn bó giữa con và ${customName} làm con nhớ nhất?`,
+          `Con có thói quen bảo quản và giữ gìn ${customName} như thế nào để luôn bền đẹp?`
+        ];
+        branches = [
+          {
+            id: 'br-1',
+            title: `🌱 Giới thiệu ${customName}`,
+            icon: '🌱',
+            color: 'emerald',
+            points: [
+              `Món đồ ${customName} gắn bó thân thiết trong học tập và sinh hoạt`,
+              'Dịp con có được món đồ (do bố mẹ tặng, người thân mua cho)',
+              'Ấn tượng yêu thích ban đầu của con'
+            ]
+          },
+          {
+            id: 'br-2',
+            title: '🎨 Hình dáng và màu sắc',
+            icon: '🎨',
+            color: 'purple',
+            points: [
+              'Kích thước vừa vặn, hình khối cân đối, đẹp mắt',
+              'Màu sắc tươi sáng, hài hòa phù hợp lứa tuổi',
+              'Hoa văn hoặc điểm nhấn trang trí thu hút ánh nhìn'
+            ]
+          },
+          {
+            id: 'br-3',
+            title: '🔍 Các bộ phận và đặc điểm',
+            icon: '🔍',
+            color: 'amber',
+            points: [
+              'Cấu tạo bên ngoài chắc chắn, bề mặt nhẵn mịn',
+              'Các chi tiết liên kết thông minh, tiện dụng',
+              'Chất liệu bền đẹp, an toàn khi sử dụng'
+            ]
+          },
+          {
+            id: 'br-4',
+            title: '⭐ Công dụng và ích lợi',
+            icon: '⭐',
+            color: 'sky',
+            points: [
+              `Công dụng chính của ${customName.toLowerCase()} trong việc học hoặc đời sống`,
+              'Mang lại sự tiện lợi, giúp con hoàn thành tốt các công việc',
+              'Người bạn đồng hành nhỏ bé mà vô cùng đắc lực'
+            ]
+          },
+          {
+            id: 'br-5',
+            title: '💖 Tình cảm và giữ gìn',
+            icon: '💖',
+            color: 'rose',
+            points: [
+              `Tình cảm yêu quý, nâng niu dành cho ${customName.toLowerCase()}`,
+              'Luôn cất đặt gọn gàng sau mỗi lần sử dụng',
+              'Thường xuyên lau chùi sạch sẽ để món đồ luôn bền đẹp'
+            ]
+          }
+        ];
+
+        const sec1 = [
+          `Giới thiệu tên món đồ gần gũi (${customName}) và thời điểm con có được.`,
+          'Cảm xúc vui mừng, yêu thích của con khi sở hữu món đồ.'
+        ];
+        const sec2 = [
+          `Miêu tả hình dáng bao quát, kích thước và màu sắc của ${customName.toLowerCase()}.`,
+          'Miêu tả các chi tiết cấu tạo bên ngoài và bên trong.',
+          'Nét nổi bật làm nên nét riêng của món đồ.'
+        ];
+        const sec3 = [
+          `Nêu rõ công dụng và ích lợi thiết thực của ${customName.toLowerCase()} mỗi ngày.`,
+          'Sự tiện lợi giúp con học tập hoặc sinh hoạt hiệu quả hơn.',
+          'Kỷ niệm đáng nhớ gắn liền với đồ vật.'
+        ];
+        const sec4 = [
+          `Bày tỏ tình cảm yêu quý, gắn bó tha thiết với ${customName.toLowerCase()}.`,
+          'Ý thức bảo quản cẩn thận, cất đặt đúng nơi quy định để đồ dùng luôn mới đẹp.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: [...sec2, ...sec3],
+          ketDoan: sec4,
+          genre: 'mieu_ta',
+          sections: [
+            { id: 'sec-1', title: `Phần 1. Giới thiệu ${customName}`, icon: '🌱', guideNote: 'Giới thiệu tên đồ vật và xuất xứ', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Miêu tả đặc điểm nổi bật', icon: '🎨', guideNote: 'Tả hình dáng, màu sắc và các bộ phận', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Nêu ích lợi hoặc công dụng', icon: '⭐', guideNote: 'Nêu công dụng và sự tiện ích hàng ngày', bulletPoints: sec3 },
+            { id: 'sec-4', title: 'Phần 4. Nêu tình cảm hoặc cách giữ gìn', icon: '💖', guideNote: 'Bày tỏ tình cảm và ý thức bảo quản', bulletPoints: sec4 }
+          ]
+        };
+      }
+      // 6. KHI CHƯA CHỌN ĐỒ VẬT (Unselected state) - ĐẦY ĐỦ 100%, KHÔNG ĐƯỢC ĐỂ TRỐNG!
+      else {
+        hoaNhoUnderstand = 'Đề bài muốn con chọn một đồ vật quen thuộc để giới thiệu đặc điểm và ích lợi của nó. Con hãy chọn đồ vật mình hiểu rõ nhất, quan sát thật kỹ rồi cùng Hoa Nhỏ tìm những ý hay nhé!';
+        specificRequirements = [
+          'Chọn một đồ vật gần gũi, quen thuộc (hộp bút, chiếc cặp, đồng hồ, bảng lớp...).',
+          'Thể loại: Đoạn văn miêu tả sinh động, dùng từ ngữ gợi hình, gợi cảm.',
+          'Nội dung 1: Giới thiệu tên, xuất xứ, hình dáng, màu sắc, đặc điểm cấu tạo nổi bật của đồ vật.',
+          'Nội dung 2: Nêu rõ công dụng, ích lợi thiết thực và sự gắn bó của đồ vật với việc học tập/sinh hoạt.',
+          'Tình cảm: Bày tỏ cảm xúc yêu quý, nâng niu và ý thức giữ gìn đồ vật cẩn thận.'
+        ];
+        socraticQuestions = [
+          'Con muốn chọn đồ vật nào gần gũi nhất với mình (hộp bút, chiếc cặp, đồng hồ, bảng lớp hay món đồ nào khác)?',
+          'Đồ vật đó có hình dáng, màu sắc và những bộ phận nổi bật nào khiến con chú ý nhất?',
+          'Đồ vật ấy giúp ích gì cho con hoặc các bạn trong học tập và sinh hoạt mỗi ngày?',
+          'Kỷ niệm hoặc khoảnh khắc gắn bó nào làm con thấy món đồ thật gần gũi, tiện lợi?',
+          'Con có cảm xúc gì và làm thế nào để luôn giữ gìn đồ vật bền đẹp, sạch sẽ?'
+        ];
+        branches = [
+          {
+            id: 'br-1',
+            title: '🌱 Giới thiệu đồ vật',
+            icon: '🌱',
+            color: 'emerald',
+            points: [
+              'Tên đồ vật con chọn là gì?',
+              'Con có đồ vật đó từ khi nào, do ai tặng hoặc mua cho?',
+              'Cảm nhận đầu tiên của con về món đồ'
+            ]
+          },
+          {
+            id: 'br-2',
+            title: '🎨 Hình dáng và màu sắc',
+            icon: '🎨',
+            color: 'purple',
+            points: [
+              'Đồ vật có hình khối gì (chữ nhật, tròn, thon dài)?',
+              'Kích thước to hay nhỏ, vừa vặn ra sao?',
+              'Màu sắc chủ đạo và hoa văn trang trí'
+            ]
+          },
+          {
+            id: 'br-3',
+            title: '🔍 Các bộ phận và đặc điểm',
+            icon: '🔍',
+            color: 'amber',
+            points: [
+              'Bên ngoài gồm những bộ phận nào (nắp, quai, mặt số, đường viền)?',
+              'Bên trong có cấu tạo ra sao (các ngăn, chi tiết chuyển động)?',
+              'Chất liệu làm nên đồ vật (vải, nhựa, kim loại, gỗ)'
+            ]
+          },
+          {
+            id: 'br-4',
+            title: '⭐ Công dụng và ích lợi',
+            icon: '⭐',
+            color: 'sky',
+            points: [
+              'Đồ vật giúp ích gì cho việc học tập hoặc sinh hoạt của con?',
+              'Con sử dụng món đồ như thế nào mỗi ngày?',
+              'Lợi ích đặc biệt khiến con thấy tiện lợi và yêu thích'
+            ]
+          },
+          {
+            id: 'br-5',
+            title: '💖 Tình cảm và giữ gìn',
+            icon: '💖',
+            color: 'rose',
+            points: [
+              'Tình cảm yêu quý, gắn bó của con với đồ vật',
+              'Con coi đồ vật như người bạn đồng hành chăm chỉ',
+              'Cách con lau chùi, cất giữ và bảo quản cẩn thận'
+            ]
+          }
+        ];
+
+        const sec1 = [
+          'Giới thiệu tên đồ vật gần gũi mà con chọn để miêu tả.',
+          'Xuất xứ hoặc thời điểm con có được đồ vật (được tặng, mua đầu năm học).'
+        ];
+        const sec2 = [
+          'Miêu tả hình dáng bao quát, kích thước và màu sắc bắt mắt của đồ vật.',
+          'Miêu tả các bộ phận chính bên ngoài và bên trong.',
+          'Nét đặc sắc hoặc hoa văn trang trí ấn tượng nhất.'
+        ];
+        const sec3 = [
+          'Nêu rõ công dụng chính của đồ vật trong học tập hoặc sinh hoạt hàng ngày.',
+          'Lợi ích thiết thực mà đồ vật mang lại giúp con học tập tốt hơn.',
+          'Sự tiện lợi và gắn bó quen thuộc mỗi ngày đến lớp.'
+        ];
+        const sec4 = [
+          'Bày tỏ tình cảm yêu mến, nâng niu dành cho đồ vật.',
+          'Ý thức giữ gìn, lau chùi cẩn thận để đồ vật luôn bền đẹp.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: [...sec2, ...sec3],
+          ketDoan: sec4,
+          genre: 'mieu_ta',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Giới thiệu đồ vật', icon: '🌱', guideNote: 'Giới thiệu tên đồ vật và xuất xứ hoặc dịp có được', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Miêu tả đặc điểm nổi bật', icon: '🎨', guideNote: 'Tả hình dáng, màu sắc, chất liệu và các bộ phận', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Nêu ích lợi hoặc công dụng', icon: '⭐', guideNote: 'Nêu ích lợi thiết thực và sự gắn bó hàng ngày', bulletPoints: sec3 },
+            { id: 'sec-4', title: 'Phần 4. Nêu tình cảm hoặc cách giữ gìn', icon: '💖', guideNote: 'Bày tỏ tình cảm yêu mến và ý thức bảo quản', bulletPoints: sec4 }
+          ]
+        };
+      }
+    }
+    // =========================================================
+    // TRƯỜNG HỢP B: TẢ GÓC SÂN TRƯỜNG
+    // =========================================================
+    else if (isCornerOfYard) {
       hoaNhoUnderstand = 'Con sẽ viết đoạn văn miêu tả một góc sân trường em yêu thích. Hãy chọn một góc sân thân thuộc (hàng ghế đá dưới bóng mát, bồn hoa rực rỡ, hay góc thư viện xanh ngoài trời) để tả chi tiết cảnh vật và hoạt động của con cùng bạn bè trong giờ ra chơi nhé!';
       specificRequirements = [
         'Nhiệm vụ: Viết đoạn văn miêu tả một góc sân trường em yêu thích',
@@ -1600,7 +2400,11 @@ export function buildGenreStructure(
           { id: 'sec-3', title: 'Phần 3. Kết đoạn - Tình cảm gắn bó & Giữ gìn', icon: '💖', guideNote: 'Bộc lộ tình cảm và ý thức bảo vệ góc sân sạch đẹp', bulletPoints: sec3 }
         ]
       };
-    } else {
+    }
+    // =========================================================
+    // TRƯỜNG HỢP C: MIÊU TẢ SỰ VẬT / CẢNH VẬT TỔNG QUÁT KHÁC
+    // =========================================================
+    else {
       hoaNhoUnderstand = `Đề bài muốn con miêu tả ${mainObject} thật sinh động: từ đặc điểm bao quát đến các chi tiết nổi bật theo trình tự quan sát hợp lý.`;
       specificRequirements = [
         'Nhiệm vụ: Viết đoạn văn miêu tả sự vật / cảnh vật',
@@ -1867,6 +2671,29 @@ export function validatePromptAnalysisResult(
       directionSeparationNote = 'LỖI: Hướng góc sân trường bị lẫn sang tả toàn cảnh trường';
     } else {
       directionSeparationNote = '100% nội dung tập trung vào góc sân trường yêu thích trong giờ ra chơi';
+    }
+  }
+
+  // Kiểm tra cách ly đối tượng (LOẠI A) - Tránh 100% nhiễm chéo giữa các đồ vật
+  if (analysis.selectedObjectId === 'dong_ho') {
+    if (allAnalysisText.includes('hộp bút') || allAnalysisText.includes('chiếc cặp') || allAnalysisText.includes('bảng lớp')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tả đồng hồ bị lẫn chi tiết hộp bút/chiếc cặp/bảng lớp';
+    }
+  } else if (analysis.selectedObjectId === 'hop_but') {
+    if (allAnalysisText.includes('kim giờ') || allAnalysisText.includes('mặt số tròn') || allAnalysisText.includes('bảng lớp')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tả hộp bút bị lẫn chi tiết đồng hồ/bảng lớp';
+    }
+  } else if (analysis.selectedObjectId === 'bang_lop') {
+    if (allAnalysisText.includes('quai đeo') || allAnalysisText.includes('khóa kéo') || allAnalysisText.includes('báo thức')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tả bảng lớp bị lẫn chi tiết cặp sách/đồng hồ';
+    }
+  } else if (analysis.selectedObjectId === 'chiec_cap') {
+    if (allAnalysisText.includes('kim đồng hồ') || allAnalysisText.includes('phấn trắng') || allAnalysisText.includes('máng nhôm')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tả chiếc cặp bị lẫn chi tiết đồng hồ/bảng lớp';
     }
   }
 

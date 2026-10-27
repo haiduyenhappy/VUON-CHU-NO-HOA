@@ -1,6 +1,6 @@
 {
-  "name": "",
-  "description": "",
+  "name": "Vườn Chữ Nở Hoa - Lớp 3 Lê Đức Thọ",
+  "description": "Ứng dụng AI sư phạm đồng hành cùng học sinh lớp 3 Trường Tiểu học Lê Đức Thọ rèn luyện kỹ năng viết đoạn văn Tiếng Việt 3.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

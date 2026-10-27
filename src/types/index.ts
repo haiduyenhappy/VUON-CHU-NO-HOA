@@ -439,6 +439,15 @@ export interface MindMapBranch {
   items?: string[];
 }
 
+export type PromptChoiceType = 'object_selection' | 'direction_selection' | 'task_selection' | 'none';
+
+export interface ObjectChoiceItem {
+  id: string;
+  name: string;
+  icon?: string;
+  isCustom?: boolean;
+}
+
 export interface PromptAnalysisData {
   originalPrompt: string;
   grade: number;
@@ -455,6 +464,13 @@ export interface PromptAnalysisData {
   detectedDirections?: PromptDirection[];
   selectedDirectionId?: string | null;
   selectedDirectionTitle?: string;
+  // LOẠI A - Lựa chọn đối tượng
+  choiceType?: PromptChoiceType;
+  objectChoiceQuestion?: string;
+  availableObjects?: ObjectChoiceItem[];
+  selectedObjectId?: string | null;
+  selectedObjectName?: string | null;
+  customObjectName?: string;
   coreSubject: string;
   mainObject?: string;
   writingScope?: string;
