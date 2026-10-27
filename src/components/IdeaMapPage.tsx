@@ -749,19 +749,26 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       setWritingScope(dir.scope || '');
     }
 
-    // 2. Nếu đã có bản nháp trước đó -> Khôi phục toàn bộ, giữ lại thành quả của con
+    // 2. Nếu đã có bản nháp trước đó -> Kiểm tra sạch dữ liệu, không bị nhiễm chéo rồi mới khôi phục
     const cached = directionDraftsRef.current[directionId];
     if (cached) {
-      setMindMapBranches(cached.mindMapBranches);
-      setDetailedOutline(cached.detailedOutline);
-      setActiveOutline(cached.activeOutline);
-      setVocabBank(cached.vocabBank);
-      setUnderstanding(cached.understanding);
-      setSocraticQuestion(cached.socraticQuestion);
-      return;
+      const cachedStr = JSON.stringify(cached).toLowerCase();
+      const isContaminated = 
+        (directionId === 'thu_ban_than' && (cachedStr.includes('ông bà') || cachedStr.includes('cháu ngoan') || cachedStr.includes('kính yêu'))) ||
+        (directionId === 'thu_ong_ba' && (cachedStr.includes('chuyển trường') || cachedStr.includes('bạn thân')));
+
+      if (!isContaminated && cached.mindMapBranches && cached.mindMapBranches.length === 5) {
+        setMindMapBranches(cached.mindMapBranches);
+        setDetailedOutline(cached.detailedOutline);
+        setActiveOutline(cached.activeOutline);
+        setVocabBank(cached.vocabBank);
+        setUnderstanding(cached.understanding);
+        setSocraticQuestion(cached.socraticQuestion);
+        return;
+      }
     }
 
-    // 3. Chưa có bản nháp -> Gọi tạo mới theo đúng hướng được chọn
+    // 3. Chưa có bản nháp hoặc bản nháp cũ không hợp lệ -> Gọi tạo mới theo đúng hướng được chọn
     handleGenerateIdeaMap(directionId);
   };
 

@@ -1,4 +1,4 @@
-import { Student } from '../types';
+import type { Student } from '../types/index.ts';
 
 export const INITIAL_STUDENTS: Student[] = [
   { id: 'HS001', name: 'Phạm Đăng Tuệ An', demoName: 'Tuệ An', avatar: '🌸', pin: '2016', parentCode: 'PH001', treeLevel: 3, flowersEarned: 8, starsEarned: 24 },

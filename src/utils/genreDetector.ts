@@ -1,4 +1,4 @@
-import { EssayGenre } from '../types';
+import type { EssayGenre } from '../types/index.ts';
 
 /**
  * Hàm phân loại chính xác thể loại bài viết học sinh tiểu học theo Chương trình GDPT 2018

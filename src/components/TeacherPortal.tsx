@@ -85,6 +85,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [newAssignGenre, setNewAssignGenre] = useState<string>('Tả đồ vật');
   const [newAssignPrompt, setNewAssignPrompt] = useState('');
   const [newAssignIsExam, setNewAssignIsExam] = useState(false);
+  const [newAssignDueDate, setNewAssignDueDate] = useState('');
   const [newAssignTopicCode, setNewAssignTopicCode] = useState<string>('CD06');
   const [newAssignDifficulty, setNewAssignDifficulty] = useState<DifficultyLevel>('co_ban');
   const [aiPreviewData, setAiPreviewData] = useState<PromptAnalysisData | null>(null);
@@ -304,6 +305,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         setAssignmentActionMsg('✓ Đã giao bài tập thành công cho học sinh!');
         setNewAssignTitle('');
         setNewAssignPrompt('');
+        setNewAssignDueDate('');
         setAiPreviewData(null);
         setIsCreateAssignmentOpen(false);
         fetchAssignments();
@@ -2459,6 +2461,18 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   </p>
                 </div>
               )}
+
+              <div>
+                <label className="text-xs font-bold text-stone-700 block mb-1">
+                  Hạn nộp bài (tùy chọn):
+                </label>
+                <input
+                  type="date"
+                  value={newAssignDueDate}
+                  onChange={e => setNewAssignDueDate(e.target.value)}
+                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white focus:border-emerald-500 focus:outline-hidden"
+                />
+              </div>
 
               {/* Mode Selection */}
               <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">

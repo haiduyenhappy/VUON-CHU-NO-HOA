@@ -1,4 +1,4 @@
-import { 
+import type { 
   EssayGenre, 
   TopicGroupInfo, 
   WritingTaskDefinition, 
@@ -11,7 +11,7 @@ import {
   VocabularyImageryBank,
   DifficultyLevel,
   PromptAnalysisData
-} from '../types';
+} from '../types/index.ts';
 
 // =========================================================================
 // I. HỆ THỐNG 25 NHÓM CHỦ ĐỀ MỞ (CD01 - CD25) CHUẨN GDPT 2018
@@ -134,6 +134,9 @@ export interface SemanticAnalysisResult {
   pointOfView: string;
   hasMultipleDirections: boolean;
   detectedDirections: PromptDirection[];
+  selectedDirectionId?: string | null;
+  selectedDirection?: PromptDirection | null;
+  purpose?: string;
   isCombinedMultiTask: boolean;
   combinedTasks: string[];
   compulsoryConstraints: string[];
@@ -193,27 +196,48 @@ export function analyzePromptSemantics(
     }
   }
 
-  // 2. Nhận diện đề có nhiều hướng ("hoặc" / "hay là" / "chọn một")
-  const hasAlternative = pLower.includes('hoặc') || pLower.includes('hay là') || (pLower.includes(' hay ') && !pLower.includes('hay ho'));
+  // 2. Nhận diện đề có nhiều hướng ("hoặc" / "hay là" / "chọn một" / "một trong các" / "có thể viết về" / "tùy chọn")
+  const hasAlternative = 
+    pLower.includes('hoặc') || 
+    pLower.includes('hay là') || 
+    (pLower.includes(' hay ') && !pLower.includes('hay ho') && !pLower.includes('điều hay')) ||
+    pLower.includes('một trong các') ||
+    pLower.includes('chọn một') ||
+    pLower.includes('có thể viết về') ||
+    pLower.includes('tùy chọn');
   const hasMultipleDirections = hasAlternative && !pLower.includes('bản thân') && !pLower.includes('giới thiệu bản thân');
 
   const detectedDirections: PromptDirection[] = [];
 
   if (hasMultipleDirections) {
-    // Trường hợp 1: Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường
-    if (pLower.includes('thư') && (pLower.includes('ông') || pLower.includes('bà')) && pLower.includes('bạn')) {
+    // Trường hợp 1: Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường đi xa (Đề kiểm thử trọng tâm)
+    if (
+      (pLower.includes('thư') || pLower.includes('bức thư')) && 
+      (pLower.includes('ông') || pLower.includes('bà')) && 
+      (pLower.includes('bạn thân') || pLower.includes('chuyển trường') || pLower.includes('bạn'))
+    ) {
       detectedDirections.push({
         id: 'thu_ong_ba',
-        title: 'Viết thư thăm hỏi ông bà',
-        mainObject: 'Ông bà kính yêu',
-        scope: 'Thăm hỏi sức khỏe, cuộc sống của ông bà ở quê và bày tỏ lòng kính yêu, thương nhớ',
+        title: 'Viết thư ngắn thăm hỏi ông bà',
+        mainObject: 'Ông hoặc bà',
+        scope: 'Thăm hỏi sức khỏe, sinh hoạt, chuyện gia đình, kỷ niệm và bày tỏ lòng kính yêu, biết ơn',
+        recipient: 'Ông hoặc bà',
+        purpose: 'Hỏi thăm, chia sẻ và bày tỏ tình cảm',
+        pointOfView: 'Cháu – ông/bà',
+        topicCode: 'CD02',
+        topicName: 'Gia đình',
         icon: '👵👴'
       });
       detectedDirections.push({
         id: 'thu_ban_than',
-        title: 'Viết thư thăm hỏi bạn thân chuyển trường đi xa',
-        mainObject: 'Người bạn thân chuyển trường',
-        scope: 'Hỏi thăm trường lớp mới, thầy cô, bạn bè mới và gìn giữ kỷ niệm tình bạn tuổi học trò',
+        title: 'Viết thư ngắn thăm hỏi một người bạn thân chuyển trường đi xa',
+        mainObject: 'Bạn thân đã chuyển trường',
+        scope: 'Hỏi thăm trường mới, lớp mới, bạn bè mới, việc học, kỷ niệm và giữ gìn tình bạn',
+        recipient: 'Bạn thân đã chuyển trường',
+        purpose: 'Hỏi thăm và giữ gìn tình bạn',
+        pointOfView: 'Mình – bạn hoặc tớ – cậu',
+        topicCode: 'CD03',
+        topicName: 'Bạn bè',
         icon: '🎒'
       });
     }
@@ -221,40 +245,114 @@ export function analyzePromptSemantics(
     else if ((pLower.includes('ngôi trường') || pLower.includes('trường')) && (pLower.includes('góc sân') || pLower.includes('sân trường'))) {
       detectedDirections.push({
         id: 'ngoi_truong',
-        title: 'Tả ngôi trường tiểu học của em',
-        mainObject: 'Ngôi trường tiểu học thân yêu',
+        title: 'Tả ngôi trường của em',
+        mainObject: 'Ngôi trường tiểu học của em',
         scope: 'Toàn cảnh ngôi trường, cổng trường, dãy lớp học, sân trường rợp bóng cây và hoạt động học tập',
+        recipient: 'Người đọc',
+        purpose: 'Miêu tả toàn cảnh ngôi trường thân yêu và bộc lộ tình cảm gắn bó',
+        pointOfView: 'Em',
+        topicCode: 'CD05',
+        topicName: 'Trường lớp',
         icon: '🏫'
       });
       detectedDirections.push({
         id: 'goc_san_truong',
         title: 'Tả một góc sân trường em yêu thích',
-        mainObject: 'Góc sân trường thân thuộc',
+        mainObject: 'Một góc sân trường em yêu thích',
         scope: 'Một góc sân cụ thể (hàng ghế đá, bồn hoa, gốc cây che mát) gắn với những giờ ra chơi vui vẻ',
+        recipient: 'Người đọc',
+        purpose: 'Miêu tả một góc sân trường thân thuộc và kỷ niệm giờ ra chơi',
+        pointOfView: 'Em',
+        topicCode: 'CD05',
+        topicName: 'Trường lớp',
         icon: '🌿'
       });
     }
     // Trường hợp 3: Kỷ niệm với ông HOẶC bà
-    else if (pLower.includes('kỷ niệm') && pLower.includes('ông') && pLower.includes('bà')) {
+    else if (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà')) && (pLower.includes(' hoặc ') || pLower.includes(' hay '))) {
       detectedDirections.push({
         id: 'ong',
         title: 'Kể lại kỷ niệm đáng nhớ với ông',
-        mainObject: 'Kỷ niệm sâu sắc với ông',
+        mainObject: 'Kỷ niệm đáng nhớ với ông',
         scope: 'Lời dạy bảo ân cần, cử chỉ ấm áp của ông và bài học đạo đức con luôn ghi nhớ',
+        recipient: 'Người đọc',
+        purpose: 'Kể lại kỷ niệm sâu sắc với ông và bộc lộ lòng biết ơn',
+        pointOfView: 'Cháu – ông',
+        topicCode: 'CD02',
+        topicName: 'Gia đình',
         icon: '👴'
       });
       detectedDirections.push({
         id: 'ba',
         title: 'Kể lại kỷ niệm đáng nhớ với bà',
-        mainObject: 'Kỷ niệm sâu sắc với bà',
+        mainObject: 'Kỷ niệm đáng nhớ với bà',
         scope: 'Lời ru, câu chuyện cổ tích, sự chăm sóc chu đáo của bà và lòng biết ơn của cháu',
+        recipient: 'Người đọc',
+        purpose: 'Kể lại kỷ niệm sâu sắc với bà và bộc lộ lòng biết ơn',
+        pointOfView: 'Cháu – bà',
+        topicCode: 'CD02',
+        topicName: 'Gia đình',
         icon: '👵'
       });
     }
-    // Phân tách tự động tổng quát cho mọi đề chứa "hoặc"
+    // Trường hợp 4: Viết thư cho người thân HOẶC bạn ở xa
+    else if ((pLower.includes('thư') || pLower.includes('bức thư')) && pLower.includes('người thân') && (pLower.includes('bạn ở xa') || pLower.includes('bạn'))) {
+      detectedDirections.push({
+        id: 'thu_nguoi_than',
+        title: 'Viết thư thăm hỏi người thân',
+        mainObject: 'Người thân trong gia đình',
+        scope: 'Hỏi thăm sức khỏe, đời sống và bày tỏ tình cảm yêu thương ruột thịt',
+        recipient: 'Người thân trong gia đình',
+        purpose: 'Thăm hỏi và chia sẻ tình cảm',
+        pointOfView: 'Cháu / Con',
+        topicCode: 'CD02',
+        topicName: 'Gia đình',
+        icon: '🏡'
+      });
+      detectedDirections.push({
+        id: 'thu_ban_o_xa',
+        title: 'Viết thư thăm hỏi một người bạn ở xa',
+        mainObject: 'Người bạn ở xa',
+        scope: 'Hỏi thăm việc học tập, cuộc sống ở nơi xa và gìn giữ tình bạn',
+        recipient: 'Người bạn ở xa',
+        purpose: 'Hỏi thăm và gìn giữ tình bạn',
+        pointOfView: 'Mình – bạn hoặc tớ – cậu',
+        topicCode: 'CD03',
+        topicName: 'Bạn bè',
+        icon: '🤝'
+      });
+    }
+    // Trường hợp 5: Giới thiệu cuốn sách HOẶC nhân vật em yêu thích
+    else if (pLower.includes('sách') && pLower.includes('nhân vật')) {
+      detectedDirections.push({
+        id: 'gioi_thieu_sach',
+        title: 'Giới thiệu cuốn sách em yêu thích',
+        mainObject: 'Cuốn sách em yêu thích',
+        scope: 'Tên sách, tác giả, nội dung chính, bài học bổ ích và lý do em yêu thích cuốn sách',
+        recipient: 'Thầy cô và các bạn cùng lớp',
+        purpose: 'Giới thiệu cuốn sách hay và lan tỏa niềm yêu thích đọc sách',
+        pointOfView: 'Em',
+        topicCode: 'CD15',
+        topicName: 'Sách và truyện',
+        icon: '📖'
+      });
+      detectedDirections.push({
+        id: 'gioi_thieu_nhan_vat',
+        title: 'Giới thiệu một nhân vật em yêu thích',
+        mainObject: 'Nhân vật em yêu thích',
+        scope: 'Ngoại hình, tính cách, hành động nổi bật và phẩm chất đáng quý của nhân vật',
+        recipient: 'Thầy cô và các bạn cùng lớp',
+        purpose: 'Giới thiệu nhân vật ấn tượng và nêu cảm nghĩ của em',
+        pointOfView: 'Em',
+        topicCode: 'CD15',
+        topicName: 'Sách và truyện',
+        icon: '✨'
+      });
+    }
+    // Phân tách tự động tổng quát cho mọi đề chứa "hoặc" / "hay là"
     else {
       const parts = p.split(/\bhoặc\b|\bhay là\b/i);
-      if (parts.length >= 2 && parts[0].trim().length > 6 && parts[1].trim().length > 6) {
+      if (parts.length >= 2 && parts[0].trim().length > 4 && parts[1].trim().length > 4) {
         const clean1 = parts[0].replace(/^viết\s*(một\s*)?(đoạn\s*văn)?\s*(kể|tả|nêu|về)?/i, '').trim();
         const clean2 = parts[1].replace(/mà\s*em\s*(yêu\s*thích|thích\s*nhất|nhớ\s*nhất).*/i, '').trim();
         const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
@@ -263,6 +361,9 @@ export function analyzePromptSemantics(
           title: cap(clean1.length > 50 ? clean1.slice(0, 48) + '...' : clean1),
           mainObject: cap(clean1.slice(0, 30)),
           scope: 'Nội dung và chi tiết bám sát theo cách viết thứ nhất',
+          recipient: 'Người đọc',
+          purpose: 'Viết bài theo hướng thứ nhất',
+          pointOfView: 'Ngôi thứ nhất (Em / Con)',
           icon: '✨'
         });
         detectedDirections.push({
@@ -270,6 +371,9 @@ export function analyzePromptSemantics(
           title: cap(clean2.length > 50 ? clean2.slice(0, 48) + '...' : clean2),
           mainObject: cap(clean2.slice(0, 30)),
           scope: 'Nội dung và chi tiết bám sát theo cách viết thứ hai',
+          recipient: 'Người đọc',
+          purpose: 'Viết bài theo hướng thứ hai',
+          pointOfView: 'Ngôi thứ nhất (Em / Con)',
           icon: '🌟'
         });
       }
@@ -432,6 +536,10 @@ export function analyzePromptSemantics(
     coreSubject = activeDirection.title;
     mainObject = activeDirection.mainObject;
     writingScope = activeDirection.scope;
+    if (activeDirection.recipient) audienceOrRecipient = activeDirection.recipient;
+    if (activeDirection.pointOfView) pointOfView = activeDirection.pointOfView;
+    if (activeDirection.topicCode) topicCode = activeDirection.topicCode;
+    if (activeDirection.topicName) topicName = activeDirection.topicName;
   } else if (genre === 'viet_thu') {
     if (pLower.includes('ông') || pLower.includes('bà')) {
       mainObject = 'Ông bà kính yêu';
@@ -528,6 +636,9 @@ export function analyzePromptSemantics(
     pointOfView,
     hasMultipleDirections,
     detectedDirections,
+    selectedDirectionId: activeDirection ? activeDirection.id : null,
+    selectedDirection: activeDirection,
+    purpose: activeDirection?.purpose || 'Hỏi thăm, chia sẻ và bày tỏ tình cảm',
     isCombinedMultiTask,
     combinedTasks,
     compulsoryConstraints,
@@ -569,60 +680,366 @@ export function buildGenreStructure(
     `Đối tượng: ${mainObject}`,
     `Phạm vi: ${writingScope}`
   ];
+  let vocabularySuggestions: VocabularyImageryBank | null = null;
 
   // -------------------------------------------------------------
   // THỂ LOẠI 1: VIẾT THƯ (viet_thu)
   // -------------------------------------------------------------
   if (genre === 'viet_thu') {
-    hoaNhoUnderstand = `Con sẽ viết một bức thư ngắn để gửi tới ${mainObject}. Hoa Nhỏ sẽ hướng dẫn con trình bày đầy đủ 5 phần chuẩn mực của một bức thư theo đúng chuẩn GDPT 2018 nhé!`;
-    specificRequirements = [
-      'Nhiệm vụ: Viết một bức thư ngắn chuẩn GDPT 2018',
-      `Người nhận: ${mainObject}`,
-      'Cấu trúc 5 phần bắt buộc: Địa điểm/ngày/chào, Mở đầu thư, Nội dung chính, Lời kết, Chữ ký',
-      'Cách xưng hô: Lễ phép hoặc thân mật phù hợp với người nhận',
-      'Tình cảm: Chân thành, ấm áp, xuất phát từ tình cảm thật của con'
-    ];
-    socraticQuestions = [
-      `Con viết thư cho ${mainObject}, con muốn xưng hô như thế nào cho thật ấm áp và đúng mực?`,
-      'Vì sao hôm nay con cầm bút viết bức thư này gửi người ấy (đã bao lâu con chưa gặp)?',
-      'Dạo này sức khỏe, sinh hoạt hoặc trường lớp của người nhận ra sao, con muốn hỏi thăm điều gì?',
-      'Con có tin vui nào trong học tập hay việc làm ngoan muốn khoe để người ấy an lòng?',
-      'Con muốn gửi lời chúc tốt đẹp nhất và lời hẹn ước gì ở phần kết thư?'
-    ];
-    branches = [
-      { id: 'br-1', title: '💌 Người nhận & Lời chào', icon: '💌', color: 'emerald', points: [`Gửi ${mainObject}`, 'Lời xưng hô trân trọng hoặc thân mật', 'Địa điểm và ngày tháng viết thư'] },
-      { id: 'br-2', title: '✍️ Lý do viết thư', icon: '✍️', color: 'purple', points: ['Vì sao hôm nay con viết thư?', 'Cảm xúc nhớ thương, mong ngóng khi đặt bút', 'Lời thăm hỏi mở đầu thân thương'] },
-      { id: 'br-3', title: '📖 Những điều con muốn kể', icon: '📖', color: 'amber', points: ['Tin vui học tập của con', 'Việc tốt con vừa làm được', 'Kỷ niệm đẹp con muốn tâm sự'] },
-      { id: 'br-4', title: '💖 Lời thăm hỏi & Tình cảm', icon: '💖', color: 'sky', points: ['Hỏi thăm sức khỏe và cuộc sống người nhận', 'Bày tỏ lòng biết ơn và yêu mến chân thành', 'Mong ước người nhận luôn an vui'] },
-      { id: 'br-5', title: '🌸 Lời chúc & Kết thư', icon: '🌸', color: 'rose', points: ['Lời chúc sức khỏe và bình an', 'Lời hứa chăm ngoan, hẹn ngày gặp lại', 'Ký tên và ghi rõ họ tên nắn nót'] }
-    ];
+    const isFriendLetter = 
+      semantics.selectedDirectionId === 'thu_ban_than' || 
+      semantics.selectedDirectionId === 'thu_ban_o_xa' ||
+      mainObject.toLowerCase().includes('bạn thân') ||
+      (mainObject.toLowerCase().includes('bạn') && !mainObject.toLowerCase().includes('ông') && !mainObject.toLowerCase().includes('bà'));
 
-    const sec1 = ['Địa điểm và ngày tháng viết thư (Ví dụ: Hà Nội, ngày ... tháng ... năm ...)', `Lời xưng hô phù hợp: Gửi ${mainObject} thân thương!`];
-    const sec2 = ['Nêu lý do viết thư: Bày tỏ nỗi nhớ mong và cảm xúc bồi hồi khi cầm bút viết thư.'];
-    const sec3 = [
-      'Thăm hỏi sức khỏe, cuộc sống thường ngày và công việc/học tập của người nhận.',
-      'Báo tin về tình hình học tập chăm ngoan, những điểm tốt và niềm vui mới của con.',
-      'Chia sẻ một kỷ niệm gắn bó hoặc một câu chuyện ấm áp giữa con và người nhận.'
-    ];
-    const sec4 = [
-      'Gửi lời kính chúc dồi dào sức khỏe, niềm vui và bình an trong cuộc sống.',
-      'Gửi lời hứa chăm ngoan học giỏi và lời hẹn ngày sớm được hội ngộ thăm nhau.'
-    ];
-    const sec5 = ['Lời kết thân thương (Cháu ngoan của ông bà / Bạn thân của cậu...)', 'Ký tên và ghi rõ họ tên nắn nót ở góc phải bên dưới bức thư.'];
+    const isGrandparentsLetter = 
+      semantics.selectedDirectionId === 'thu_ong_ba' || 
+      mainObject.toLowerCase().includes('ông') || 
+      mainObject.toLowerCase().includes('bà');
 
-    outline = {
-      moDoan: [...sec1, ...sec2],
-      phatTrienDoan: sec3,
-      ketDoan: [...sec4, ...sec5],
-      genre: 'viet_thu',
-      sections: [
-        { id: 'sec-1', title: 'Phần 1. Địa điểm, ngày tháng và lời chào', icon: '📍', guideNote: 'Ghi rõ địa danh, ngày tháng và lời chào trang trọng hoặc thân mật', bulletPoints: sec1 },
-        { id: 'sec-2', title: 'Phần 2. Mở đầu bức thư', icon: '✍️', guideNote: 'Nêu lý do viết thư và cảm xúc nhớ thương', bulletPoints: sec2 },
-        { id: 'sec-3', title: 'Phần 3. Nội dung chính', icon: '📜', guideNote: 'Thăm hỏi sức khỏe, đời sống và báo tin vui của con', bulletPoints: sec3 },
-        { id: 'sec-4', title: 'Phần 4. Lời kết', icon: '💖', guideNote: 'Gửi lời chúc tốt lành, lời hứa hẹn và chào tạm biệt', bulletPoints: sec4 },
-        { id: 'sec-5', title: 'Phần 5. Chữ ký', icon: '✒️', guideNote: 'Lời xưng hô kết thúc và chữ ký nắn nót', bulletPoints: sec5 }
-      ]
-    };
+    // HƯỚNG 2: VIẾT THƯ THĂM HỎI BẠN THÂN CHUYỂN TRƯỜNG ĐI XA (Mục 5)
+    if (isFriendLetter) {
+      hoaNhoUnderstand = 'Con sẽ viết một bức thư ngắn gửi người bạn thân đã chuyển sang trường khác. Con hãy nghĩ xem mình muốn hỏi thăm cuộc sống ở trường mới, kể chuyện lớp cũ và gửi lời chúc gì đến bạn nhé!';
+      specificRequirements = [
+        'Thể loại: Viết thư thăm hỏi',
+        'Người nhận: Bạn thân đã chuyển trường',
+        'Mục đích: Hỏi thăm và giữ gìn tình bạn',
+        'Xưng hô: Mình – bạn hoặc tớ – cậu',
+        'Nội dung: Trường mới, lớp mới, bạn bè mới, việc học, kỷ niệm',
+        'Tình cảm: Nhớ bạn, quý mến, mong gặp lại'
+      ];
+      socraticQuestions = [
+        'Bạn thân con muốn viết thư là ai, con thường gọi bạn bằng tên gì?',
+        'Bạn đã chuyển trường được bao lâu, con có nhớ bạn không?',
+        'Trường mới của bạn thế nào, bạn đã quen thầy cô và các bạn mới chưa?',
+        'Việc học của bạn có thuận lợi không, bạn có tham gia hoạt động nào thú vị không?',
+        'Con nhớ nhất kỷ niệm nào với bạn ở lớp cũ, có chuyện vui gì ở lớp con muốn kể?',
+        'Con muốn chúc bạn điều gì ở trường mới và con có muốn hẹn gặp lại bạn không?'
+      ];
+      branches = [
+        {
+          id: 'br-1',
+          title: '💌 Người nhận và lời chào',
+          icon: '💌',
+          color: 'emerald',
+          points: [
+            'Bạn thân con muốn viết thư là ai?',
+            'Con thường gọi bạn bằng tên gì?',
+            'Con muốn mở đầu thư thế nào?',
+            'Ý mẫu: Gửi bạn thân yêu quý của mình',
+            'Ý mẫu: Bạn thân mến!'
+          ]
+        },
+        {
+          id: 'br-2',
+          title: '✍️ Lý do viết thư',
+          icon: '✍️',
+          color: 'purple',
+          points: [
+            'Bạn đã chuyển trường được bao lâu?',
+            'Con có nhớ bạn không? Vì sao con muốn viết thư hôm nay?',
+            'Ý mẫu: Từ ngày bạn chuyển trường, mình rất nhớ bạn',
+            'Ý mẫu: Mình muốn biết bạn đã quen với trường mới chưa'
+          ]
+        },
+        {
+          id: 'br-3',
+          title: '🏫 Hỏi thăm trường mới',
+          icon: '🏫',
+          color: 'amber',
+          points: [
+            'Trường mới của bạn thế nào?',
+            'Bạn đã quen thầy cô và các bạn mới chưa?',
+            'Việc học của bạn có thuận lợi không?',
+            'Ý mẫu: Thầy cô và các bạn ở trường mới có thân thiện không?',
+            'Ý mẫu: Bạn thích điều gì nhất ở trường mới?'
+          ]
+        },
+        {
+          id: 'br-4',
+          title: '🤝 Kỷ niệm và tình bạn',
+          icon: '🤝',
+          color: 'sky',
+          points: [
+            'Con nhớ nhất kỷ niệm nào với bạn?',
+            'Ở lớp cũ có điều gì con muốn kể?',
+            'Con muốn chia sẻ chuyện vui gì với bạn?',
+            'Ý mẫu: Mình vẫn nhớ những giờ ra chơi chúng mình cùng nhau',
+            'Ý mẫu: Các bạn trong lớp vẫn thường nhắc đến bạn'
+          ]
+        },
+        {
+          id: 'br-5',
+          title: '🌸 Lời chúc và kết thư',
+          icon: '🌸',
+          color: 'rose',
+          points: [
+            'Con muốn chúc bạn điều gì?',
+            'Con có muốn hẹn gặp lại bạn không?',
+            'Ý mẫu: Chúc bạn học thật tốt ở trường mới',
+            'Ý mẫu: Mong bạn sớm có thêm nhiều người bạn tốt',
+            'Ý mẫu: Bạn thân của cậu... / Ký tên'
+          ]
+        }
+      ];
+
+      const sec1 = [
+        'Địa điểm và ngày tháng viết thư (Ví dụ: Hà Nội, ngày ... tháng ... năm ...)',
+        'Lời chào thân mật: Bạn thân mến! hoặc Cậu bạn thân yêu quý của mình!'
+      ];
+      const sec2 = [
+        'Nói lý do viết thư: Bày tỏ nỗi nhớ bạn từ ngày bạn chuyển sang trường mới.',
+        'Kể cảm xúc vui vẻ, mong ngóng khi ngồi nắn nót viết thư cho bạn.'
+      ];
+      const sec3 = [
+        'Hỏi thăm trường mới: Bạn đã quen với ngôi trường mới, lớp mới và bạn bè mới chưa?',
+        'Hỏi thăm thầy cô giáo ở trường mới có ân cần, việc học của bạn có thuận lợi không?',
+        'Hỏi bạn thích điều gì nhất ở ngôi trường mới.'
+      ];
+      const sec4 = [
+        'Kể chuyện lớp cũ hoặc kỷ niệm tình bạn: Thầy cô và các bạn ở lớp cũ vẫn thường nhắc đến bạn.',
+        'Nhắc lại kỷ niệm vui những giờ ra chơi chúng mình cùng học, cùng chơi dưới bóng mát sân trường.',
+        'Bày tỏ mong muốn gìn giữ tình bạn thân thiết dài lâu.'
+      ];
+      const sec5 = [
+        'Chúc bạn học tốt và kết thư: Chúc bạn luôn mạnh khỏe, học thật giỏi và sớm có thêm nhiều bạn tốt ở trường mới.',
+        'Lời hẹn ước: Mong sớm nhận được thư hồi âm hoặc hẹn kỳ nghỉ hè gặp lại.',
+        'Lời kết thân thương: Bạn thân của cậu',
+        'Ký tên và ghi rõ họ tên nắn nót.'
+      ];
+
+      outline = {
+        moDoan: [...sec1, ...sec2],
+        phatTrienDoan: [...sec3, ...sec4],
+        ketDoan: sec5,
+        genre: 'viet_thu',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Địa điểm, ngày tháng và lời chào bạn thân', icon: '📍', guideNote: 'Ghi rõ địa danh, ngày tháng và lời chào thân mật với bạn bè', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Nói lý do viết thư và nỗi nhớ bạn', icon: '✍️', guideNote: 'Nêu lý do viết thư tự nhiên, chân thành', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Hỏi thăm trường mới', icon: '🏫', guideNote: 'Hỏi thăm chi tiết về môi trường học tập mới của bạn', bulletPoints: sec3 },
+          { id: 'sec-4', title: 'Phần 4. Kể chuyện lớp cũ hoặc kỷ niệm tình bạn', icon: '🤝', guideNote: 'Chia sẻ chuyện lớp cũ và nhắc kỷ niệm gắn bó', bulletPoints: sec4 },
+          { id: 'sec-5', title: 'Phần 5. Chúc bạn học tốt và kết thư', icon: '🌸', guideNote: 'Gửi lời chúc học tốt, lời hẹn và chữ ký', bulletPoints: sec5 }
+        ]
+      };
+
+      vocabularySuggestions = {
+        goodWords: [
+          { word: 'thân thiết', meaningAndUsage: 'Gần gũi, gắn bó và tin cậy lẫn nhau' },
+          { word: 'gắn bó', meaningAndUsage: 'Khăng khít bên nhau trong học tập và vui chơi' },
+          { word: 'bỡ ngỡ', meaningAndUsage: 'Cảm giác mới lạ ban đầu khi chuyển tới trường mới' },
+          { word: 'chan hòa', meaningAndUsage: 'Hòa đồng, thân thiện với bạn bè xung quanh' },
+          { word: 'kỷ niệm', meaningAndUsage: 'Những khoảnh khắc đẹp đẽ không thể nào quên' }
+        ],
+        imageries: [
+          { type: 'So sánh', example: 'Cánh thư nhỏ như chiếc cầu nối dài tình bạn của chúng mình', explanation: 'Gợi sự kết nối thân thiết dù ở xa' },
+          { type: 'Gợi tả', example: 'Giờ ra chơi rộn rã tiếng cười dưới vòm cây xanh mát', explanation: 'Gợi nhớ không khí quen thuộc ở lớp cũ' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Mở đầu thân mật', sentence: 'Từ ngày cậu chuyển sang trường mới, mình và các bạn ở lớp cũ rất nhớ cậu.', whyItIsGood: 'Bày tỏ ngay nỗi nhớ và sự gắn bó.' },
+          { type: 'mieu_ta', label: 'Hỏi thăm trường mới', sentence: 'Cậu đã quen với thầy cô giáo mới và những người bạn đáng yêu ở lớp chưa?', whyItIsGood: 'Lời hỏi thăm chân thành, tự nhiên.' },
+          { type: 'ket_bai', label: 'Lời chúc và hẹn ước', sentence: 'Mình chúc cậu luôn vui vẻ, học thật giỏi và mong sớm nhận được thư hồi âm của cậu.', whyItIsGood: 'Khép lại đầy tình cảm và mong ngóng.' }
+        ],
+        creativeIdeas: [
+          'Kể cho bạn nghe một mẩu chuyện vui ở lớp cũ vừa diễn ra tuần trước',
+          'Gửi kèm một bông hoa ép hoặc bức vẽ nhỏ để bạn nhớ về tình bạn của hai đứa'
+        ]
+      };
+    }
+    // HƯỚNG 1: VIẾT THƯ THĂM HỎI ÔNG BÀ (Mục 4)
+    else if (isGrandparentsLetter) {
+      hoaNhoUnderstand = 'Con sẽ viết một bức thư ngắn để hỏi thăm ông hoặc bà. Con hãy nghĩ xem mình muốn hỏi thăm điều gì và muốn kể chuyện gì để ông bà vui nhé!';
+      specificRequirements = [
+        'Thể loại: Viết thư thăm hỏi',
+        'Người nhận: Ông hoặc bà',
+        'Mục đích: Hỏi thăm, chia sẻ và bày tỏ tình cảm',
+        'Xưng hô: Cháu – ông/bà',
+        'Nội dung: Sức khỏe, sinh hoạt, chuyện gia đình, kỷ niệm',
+        'Tình cảm: Yêu thương, kính trọng, biết ơn'
+      ];
+      socraticQuestions = [
+        'Con viết thư cho ông hay bà, con muốn xưng hô như thế nào cho lễ phép và ấm áp?',
+        'Vì sao hôm nay con muốn viết thư, con có nhớ ông bà ở quê nhiều không?',
+        'Ông bà có khỏe không, con muốn hỏi thăm sức khỏe và sinh hoạt của ông bà ra sao?',
+        'Việc học của con gần đây thế nào, gia đình có chuyện gì vui?',
+        'Con nhớ nhất điều gì về ông bà, con muốn nói lời yêu thương nào?',
+        'Con muốn gửi lời chúc sức khỏe gì và hẹn ngày về thăm ông bà ra sao?'
+      ];
+      branches = [
+        {
+          id: 'br-1',
+          title: '💌 Người nhận và lời chào',
+          icon: '💌',
+          color: 'emerald',
+          points: [
+            'Con viết thư cho ông hay bà?',
+            'Con muốn xưng hô thế nào?',
+            'Con sẽ mở đầu bức thư ra sao?',
+            'Kính gửi ông bà kính yêu!'
+          ]
+        },
+        {
+          id: 'br-2',
+          title: '✍️ Lý do viết thư',
+          icon: '✍️',
+          color: 'purple',
+          points: [
+            'Vì sao hôm nay con muốn viết thư?',
+            'Con có nhớ ông bà không?',
+            'Con muốn hỏi thăm điều gì?',
+            'Bày tỏ nỗi nhớ mong ông bà ở quê'
+          ]
+        },
+        {
+          id: 'br-3',
+          title: '📖 Những điều con muốn kể',
+          icon: '📖',
+          color: 'amber',
+          points: [
+            'Việc học của con gần đây thế nào?',
+            'Gia đình có chuyện gì vui?',
+            'Con muốn kể kỷ niệm nào cho ông bà?',
+            'Khoe điểm tốt và việc ngoan con vừa làm'
+          ]
+        },
+        {
+          id: 'br-4',
+          title: '💖 Lời thăm hỏi và tình cảm',
+          icon: '💖',
+          color: 'sky',
+          points: [
+            'Ông bà có khỏe không?',
+            'Hỏi thăm sinh hoạt và vườn cây ở quê',
+            'Con nhớ nhất điều gì về ông bà?',
+            'Con muốn nói lời yêu thương nào?'
+          ]
+        },
+        {
+          id: 'br-5',
+          title: '🌸 Lời chúc và kết thư',
+          icon: '🌸',
+          color: 'rose',
+          points: [
+            'Chúc ông bà mạnh khỏe',
+            'Hẹn ngày về thăm',
+            'Lời chào cuối thư',
+            'Cháu ngoan của ông bà / Ký tên'
+          ]
+        }
+      ];
+
+      const sec1 = [
+        'Địa điểm và ngày tháng viết thư (Ví dụ: Hà Nội, ngày ... tháng ... năm ...)',
+        'Lời chào kính cẩn, lễ phép: Kính gửi ông bà kính yêu!'
+      ];
+      const sec2 = [
+        'Nêu lý do viết thư: Bày tỏ nỗi nhớ thương tha thiết đối với ông bà ở quê.',
+        'Cảm xúc bồi hồi, ấm áp khi cầm bút nắn nót viết thư cho ông bà.'
+      ];
+      const sec3 = [
+        'Hỏi thăm ông bà: Dạo này ông bà có khỏe không, thời tiết giao mùa ông bà có bị mỏi mệt không?',
+        'Hỏi thăm sinh hoạt thường ngày, luống rau và vườn cây sum suê hoa trái ở quê.'
+      ];
+      const sec4 = [
+        'Kể chuyện của con: Kể việc học tập chăm ngoan, những bông hoa điểm tốt cháu vừa đạt được.',
+        'Kể chuyện gia đình: Bố mẹ và cháu dạo này luôn nhắc về ông bà và mong ngày sum họp.',
+        'Bày tỏ tình cảm với ông bà: Nhắc lại kỷ niệm ấm áp như bữa cơm quê hay lời dạy bảo ân cần.'
+      ];
+      const sec5 = [
+        'Chúc sức khỏe và kết thư: Kính chúc ông bà luôn luôn mạnh khỏe, sống lâu trăm tuổi và nhiều niềm vui.',
+        'Lời hứa chăm ngoan, học giỏi và hẹn kỳ nghỉ hè cả nhà sẽ về quê thăm ông bà.',
+        'Lời kết thân thương: Cháu ngoan của ông bà',
+        'Ký tên và ghi rõ họ tên nắn nót.'
+      ];
+
+      outline = {
+        moDoan: [...sec1, ...sec2],
+        phatTrienDoan: [...sec3, ...sec4],
+        ketDoan: sec5,
+        genre: 'viet_thu',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Địa điểm, ngày tháng và lời chào ông bà', icon: '📍', guideNote: 'Ghi rõ địa danh, ngày tháng và lời chào kính cẩn với ông bà', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Lý do viết thư và nỗi nhớ ông bà', icon: '✍️', guideNote: 'Bày tỏ lý do viết thư và tình cảm nhớ thương', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Hỏi thăm ông bà', icon: '📜', guideNote: 'Hỏi thăm sức khỏe và cuộc sống sinh hoạt ở quê', bulletPoints: sec3 },
+          { id: 'sec-4', title: 'Phần 4. Kể chuyện của con và bày tỏ tình cảm với ông bà', icon: '💖', guideNote: 'Khoe việc học ngoan và bộc lộ tình cảm gắn bó', bulletPoints: sec4 },
+          { id: 'sec-5', title: 'Phần 5. Chúc sức khỏe và kết thư', icon: '🌸', guideNote: 'Gửi lời chúc thọ, lời hứa hẹn về thăm và chữ ký', bulletPoints: sec5 }
+        ]
+      };
+
+      vocabularySuggestions = {
+        goodWords: [
+          { word: 'kính yêu', meaningAndUsage: 'Tình cảm kính trọng và thương yêu sâu sắc của con cháu' },
+          { word: 'khỏe mạnh', meaningAndUsage: 'Sức khỏe dồi dào, an khang' },
+          { word: 'ân cần', meaningAndUsage: 'Chu đáo, dịu dàng chăm sóc từng li từng tí' },
+          { word: 'sum vầy', meaningAndUsage: 'Cả gia đình quây quần ấm cúng bên nhau' },
+          { word: 'hiếu thảo', meaningAndUsage: 'Biết vâng lời, chăm ngoan và làm ông bà vui lòng' }
+        ],
+        imageries: [
+          { type: 'Hình ảnh đẹp', example: 'Mái tóc bạc phơ như mây trắng và nụ cười hiền hậu của ông bà', explanation: 'Gợi vẻ đẹp phúc hậu, ấm áp' },
+          { type: 'Gợi cảm', example: 'Khu vườn ở quê luôn sum suê hoa trái và rộn rã tiếng chim', explanation: 'Gợi không gian bình yên nơi quê nhà' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Lời chào kính cẩn', sentence: 'Hôm nay cháu ngồi nắn nót viết lá thư này để gửi gắm nỗi nhớ thương đến ông bà.', whyItIsGood: 'Trang trọng và dạt dào tình cảm.' },
+          { type: 'mieu_ta', label: 'Hỏi thăm sức khỏe', sentence: 'Dạo này thời tiết giao mùa, chân tay ông bà có bị đau nhức hay mỏi mệt không ạ?', whyItIsGood: 'Sự quan tâm hiếu thảo, chu đáo.' },
+          { type: 'ket_bai', label: 'Kính chúc sức khỏe', sentence: 'Cháu kính chúc ông bà luôn luôn mạnh khỏe, sống lâu trăm tuổi và an vui bên con cháu.', whyItIsGood: 'Lời chúc thọ truyền thống đầy ý nghĩa.' }
+        ],
+        creativeIdeas: [
+          'Khoe với ông bà bông hoa điểm 10 môn Tiếng Việt cháu vừa đạt được',
+          'Hứa hè này được nghỉ sẽ xin bố mẹ về quê thăm ông bà thật lâu'
+        ]
+      };
+    }
+    // TRƯỜNG HỢP CHUNG CHO CÁC ĐỐI TƯỢNG KHÁC (Người thân, thầy cô, bạn ở xa...)
+    else {
+      hoaNhoUnderstand = `Con sẽ viết một bức thư ngắn để gửi tới ${mainObject}. Hoa Nhỏ sẽ hướng dẫn con trình bày đầy đủ các phần chuẩn mực của một bức thư theo đúng chuẩn GDPT 2018 nhé!`;
+      specificRequirements = [
+        'Thể loại: Viết thư thăm hỏi',
+        `Người nhận: ${mainObject}`,
+        'Mục đích: Thăm hỏi sức khỏe, cuộc sống và chia sẻ tin tức',
+        `Cách xưng hô: Phù hợp với người nhận (${semantics.pointOfView})`,
+        'Cấu trúc: Địa điểm ngày tháng, lời chào, lý do viết thư, nội dung thăm hỏi, lời chúc và ký tên'
+      ];
+      socraticQuestions = [
+        `Con viết thư cho ${mainObject}, con muốn xưng hô như thế nào cho thật ấm áp và đúng mực?`,
+        'Vì sao hôm nay con cầm bút viết bức thư này gửi người ấy?',
+        'Dạo này sức khỏe, sinh hoạt hoặc công việc/học tập của người nhận ra sao, con muốn hỏi thăm điều gì?',
+        'Con có tin vui nào trong học tập hay việc làm ngoan muốn chia sẻ?',
+        'Con muốn gửi lời chúc tốt đẹp nhất và lời hẹn ước gì ở phần kết thư?'
+      ];
+      branches = [
+        { id: 'br-1', title: '💌 Người nhận & Lời chào', icon: '💌', color: 'emerald', points: [`Gửi ${mainObject}`, 'Lời xưng hô trân trọng hoặc thân mật', 'Địa điểm và ngày tháng viết thư'] },
+        { id: 'br-2', title: '✍️ Lý do viết thư', icon: '✍️', color: 'purple', points: ['Vì sao hôm nay con viết thư?', 'Cảm xúc nhớ thương, mong ngóng khi đặt bút', 'Lời thăm hỏi mở đầu thân thương'] },
+        { id: 'br-3', title: '📖 Những điều con muốn kể', icon: '📖', color: 'amber', points: ['Tin vui học tập của con', 'Việc tốt con vừa làm được', 'Kỷ niệm đẹp con muốn tâm sự'] },
+        { id: 'br-4', title: '💖 Lời thăm hỏi & Tình cảm', icon: '💖', color: 'sky', points: ['Hỏi thăm sức khỏe và cuộc sống người nhận', 'Bày tỏ lòng yêu mến chân thành', 'Mong ước người nhận luôn an vui'] },
+        { id: 'br-5', title: '🌸 Lời chúc & Kết thư', icon: '🌸', color: 'rose', points: ['Lời chúc sức khỏe và bình an', 'Lời hứa chăm ngoan, hẹn ngày gặp lại', 'Ký tên và ghi rõ họ tên nắn nót'] }
+      ];
+
+      const sec1 = ['Địa điểm và ngày tháng viết thư (Ví dụ: Hà Nội, ngày ... tháng ... năm ...)', `Lời xưng hô phù hợp: Gửi ${mainObject} thân thương!`];
+      const sec2 = ['Nêu lý do viết thư: Bày tỏ nỗi nhớ mong và cảm xúc bồi hồi khi cầm bút viết thư.'];
+      const sec3 = [
+        'Thăm hỏi sức khỏe, cuộc sống thường ngày và công việc/học tập của người nhận.',
+        'Báo tin về tình hình học tập chăm ngoan, những điểm tốt và niềm vui mới của con.',
+        'Chia sẻ một kỷ niệm gắn bó hoặc một câu chuyện ấm áp giữa con và người nhận.'
+      ];
+      const sec4 = [
+        'Gửi lời kính chúc dồi dào sức khỏe, niềm vui và bình an trong cuộc sống.',
+        'Gửi lời hứa chăm ngoan học giỏi và lời hẹn ngày sớm được hội ngộ thăm nhau.'
+      ];
+      const sec5 = ['Lời kết thân thương', 'Ký tên và ghi rõ họ tên nắn nót ở góc phải bên dưới bức thư.'];
+
+      outline = {
+        moDoan: [...sec1, ...sec2],
+        phatTrienDoan: sec3,
+        ketDoan: [...sec4, ...sec5],
+        genre: 'viet_thu',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Địa điểm, ngày tháng và lời chào', icon: '📍', guideNote: 'Ghi rõ địa danh, ngày tháng và lời chào phù hợp', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Mở đầu bức thư', icon: '✍️', guideNote: 'Nêu lý do viết thư và cảm xúc nhớ thương', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Nội dung chính', icon: '📜', guideNote: 'Thăm hỏi sức khỏe, đời sống và báo tin vui của con', bulletPoints: sec3 },
+          { id: 'sec-4', title: 'Phần 4. Lời kết', icon: '💖', guideNote: 'Gửi lời chúc tốt lành, lời hứa hẹn và chào tạm biệt', bulletPoints: sec4 },
+          { id: 'sec-5', title: 'Phần 5. Chữ ký', icon: '✒️', guideNote: 'Lời xưng hô kết thúc và chữ ký nắn nót', bulletPoints: sec5 }
+        ]
+      };
+    }
   }
 
   // -------------------------------------------------------------
@@ -815,47 +1232,136 @@ export function buildGenreStructure(
   // THỂ LOẠI 6: KỂ CHUYỆN / SỰ VIỆC / KỶ NIỆM (ke_chuyen)
   // -------------------------------------------------------------
   else if (genre === 'ke_chuyen' || genre === 'thuat_lai') {
-    hoaNhoUnderstand = `Đề bài muốn con kể lại một câu chuyện hoặc sự việc theo đúng trình tự thời gian: có mở đầu, diễn biến các sự việc và kết thúc giàu ý nghĩa.`;
-    specificRequirements = [
-      'Nhiệm vụ: Kể lại câu chuyện hoặc sự việc theo trình tự hợp lý',
-      'Nhân vật & Hoàn cảnh: Giới thiệu rõ ràng nhân vật, thời gian, địa điểm',
-      'Diễn biến: Kể các sự việc nối tiếp nhau (mở đầu, phát triển, cao trào, kết thúc)',
-      'Ý nghĩa: Rút ra bài học hoặc cảm xúc đáng nhớ'
-    ];
-    socraticQuestions = [
-      'Câu chuyện hoặc sự việc đó xảy ra khi nào, ở đâu?',
-      'Có những nhân vật nào tham gia cùng con?',
-      'Sự việc mở đầu ra sao khiến con chú ý?',
-      'Diễn biến tiếp theo diễn ra như thế nào, có chi tiết nào gay cấn hoặc bất ngờ?',
-      'Kết quả câu chuyện ra sao và con có cảm xúc hoặc bài học gì sâu sắc?'
-    ];
-    branches = [
-      { id: 'br-1', title: '⏰ Thời gian & Địa điểm', icon: '⏰', color: 'emerald', points: ['Sự việc diễn ra khi nào?', 'Không gian ở đâu?', 'Hoàn cảnh bắt đầu'] },
-      { id: 'br-2', title: '👥 Nhân vật tham gia', icon: '👥', color: 'purple', points: ['Có những ai cùng tham gia?', 'Lời nói, hành động của nhân vật', 'Nét mặt, cử chỉ'] },
-      { id: 'br-3', title: '⚡ Mở đầu & Diễn biến', icon: '⚡', color: 'amber', points: ['Sự việc mở đầu thế nào?', 'Các hành động diễn ra liên tiếp', 'Chi tiết gay cấn, đáng nhớ nhất'] },
-      { id: 'br-4', title: '🏁 Kết quả sự việc', icon: '🏁', color: 'sky', points: ['Sự việc kết thúc ra sao?', 'Mọi người cảm thấy thế nào?', 'Niềm vui hoặc sự nhẹ nhõm'] },
-      { id: 'br-5', title: '💖 Cảm xúc & Bài học', icon: '💖', color: 'rose', points: ['Cảm xúc đọng lại trong lòng em', 'Bài học ý nghĩa em rút ra được', 'Kỷ niệm khó phai mờ'] }
-    ];
+    const isGrandfatherMemory = semantics.selectedDirectionId === 'ong' || (mainObject.toLowerCase().includes('ông') && !mainObject.toLowerCase().includes('bà'));
+    const isGrandmotherMemory = semantics.selectedDirectionId === 'ba' || (mainObject.toLowerCase().includes('bà') && !mainObject.toLowerCase().includes('ông'));
 
-    const sec1 = ['Giới thiệu thời gian, địa điểm và sự việc/kỷ niệm đáng nhớ mà em sắp kể.'];
-    const sec2 = [
-      'Kể lại sự việc mở đầu: Hoàn cảnh dẫn đến sự việc và những người cùng tham gia.',
-      'Kể lại diễn biến chính: Những hành động, lời nói nối tiếp nhau và chi tiết cao trào đáng nhớ.',
-      'Kể lại kết thúc: Sự việc khép lại ra sao và mọi người cảm thấy thế nào.'
-    ];
-    const sec3 = ['Bày tỏ cảm xúc của em về câu chuyện và bài học quý giá mà em rút ra được.'];
+    if (isGrandfatherMemory) {
+      hoaNhoUnderstand = 'Đề bài muốn con kể lại một kỷ niệm đáng nhớ và sâu sắc với ông. Con hãy nhớ lại một lần được ông dạy bảo ân cần, cùng ông tỉa cây làm vườn, chơi cờ hoặc một việc làm của ông khiến con xúc động nhé!';
+      specificRequirements = [
+        'Nhiệm vụ: Kể lại một kỷ niệm đáng nhớ với ông',
+        'Đối tượng: Ông của em (ông nội hoặc ông ngoại)',
+        'Diễn biến: Kể rõ hoàn cảnh, hành động cử chỉ của ông và cảm xúc của cháu',
+        'Ý nghĩa: Lòng biết ơn, kính yêu và bài học quý từ ông'
+      ];
+      socraticQuestions = [
+        'Kỷ niệm đáng nhớ nhất giữa con và ông xảy ra vào dịp nào, ở đâu?',
+        'Lúc đó ông đã làm gì, nói gì với con bằng cử chỉ ân cần như thế nào?',
+        'Con đã làm việc gì cùng ông (tưới cây, đọc báo, nghe ông kể chuyện xưa)?',
+        'Khoảnh khắc nào trong câu chuyện làm con cảm động và nhớ mãi?',
+        'Qua kỷ niệm ấy, con cảm nhận được tình thương của ông và rút ra bài học gì?'
+      ];
+      branches = [
+        { id: 'br-1', title: '⏰ Thời gian & Dịp kỷ niệm', icon: '⏰', color: 'emerald', points: ['Kỷ niệm diễn ra khi nào?', 'Ở quê hay tại nhà con?', 'Hoàn cảnh bắt đầu câu chuyện'] },
+        { id: 'br-2', title: '👴 Hình bóng & Cử chỉ của ông', icon: '👴', color: 'purple', points: ['Mái tóc bạc, nụ cười hiền hậu', 'Ánh mắt ấm áp, bàn tay gầy gầy', 'Giọng nói trầm ấm khuyên bảo'] },
+        { id: 'br-3', title: '⚡ Việc làm & Kỷ niệm xúc động', icon: '⚡', color: 'amber', points: ['Cùng ông chăm sóc vườn cây', 'Được ông kiên nhẫn dạy dỗ khi mắc lỗi', 'Chi tiết làm con nhớ nhất'] },
+        { id: 'br-4', title: '💖 Lời dặn dò quý giá', icon: '💖', color: 'sky', points: ['Lời ông dạy về lòng trung thực, chăm ngoan', 'Tình yêu thương vô bờ của ông dành cho cháu'] },
+        { id: 'br-5', title: '🌸 Lòng biết ơn & Tình cảm', icon: '🌸', color: 'rose', points: ['Cảm xúc kính yêu, tự hào về ông', 'Hứa luôn chăm ngoan để ông vui lòng'] }
+      ];
 
-    outline = {
-      moDoan: sec1,
-      phatTrienDoan: sec2,
-      ketDoan: sec3,
-      genre: 'ke_chuyen',
-      sections: [
-        { id: 'sec-1', title: 'Phần 1. Mở đầu - Hoàn cảnh sự việc', icon: '🌱', guideNote: 'Nêu thời gian, địa điểm và nhân vật tham gia', bulletPoints: sec1 },
-        { id: 'sec-2', title: 'Phần 2. Diễn biến - Các sự việc nối tiếp', icon: '📖', guideNote: 'Kể rõ đầu đuôi sự việc và chi tiết đáng nhớ nhất', bulletPoints: sec2 },
-        { id: 'sec-3', title: 'Phần 3. Kết thúc - Cảm xúc & Ý nghĩa', icon: '🌸', guideNote: 'Kết quả sự việc và cảm xúc lắng đọng của em', bulletPoints: sec3 }
-      ]
-    };
+      const sec1 = ['Mở đầu: Giới thiệu kỷ niệm đáng nhớ nhất với ông và ấn tượng sâu đậm trong lòng em.'];
+      const sec2 = [
+        'Kể lại hoàn cảnh diễn ra kỷ niệm: Thời gian, không gian ấm áp bên ông.',
+        'Kể diễn biến sự việc: Cử chỉ ân cần, lời dạy bảo nhẹ nhàng của ông và việc làm hai ông cháu cùng thực hiện.',
+        'Chi tiết xúc động nhất: Ánh mắt trìu mến của ông khi nhìn cháu.'
+      ];
+      const sec3 = ['Kết thúc: Bày tỏ tình cảm kính yêu tha thiết đối với ông và lời hứa luôn khắc ghi lời ông dạy.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'ke_chuyen',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đầu - Giới thiệu kỷ niệm với ông', icon: '🌱', guideNote: 'Nêu thời gian và ấn tượng về kỷ niệm với ông', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Diễn biến - Câu chuyện và cử chỉ ấm áp của ông', icon: '📖', guideNote: 'Kể chi tiết hành động và lời khuyên ân cần của ông', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết thúc - Tình cảm kính yêu & Lời hứa', icon: '🌸', guideNote: 'Lòng biết ơn và mong ước ông luôn mạnh khỏe', bulletPoints: sec3 }
+        ]
+      };
+    } else if (isGrandmotherMemory) {
+      hoaNhoUnderstand = 'Đề bài muốn con kể lại một kỷ niệm ấm áp và ngọt ngào với bà. Con hãy nhớ lại lời ru, câu chuyện cổ tích bà kể, món ăn thơm lừng bà nấu, hoặc sự chăm sóc dịu dàng của bà nhé!';
+      specificRequirements = [
+        'Nhiệm vụ: Kể lại một kỷ niệm đáng nhớ với bà',
+        'Đối tượng: Bà của em (bà nội hoặc bà ngoại)',
+        'Diễn biến: Kể rõ hoàn cảnh, câu chuyện cổ tích hoặc sự chăm sóc ân cần của bà',
+        'Ý nghĩa: Lòng biết ơn, kính yêu và tình cảm gắn bó thiêng liêng'
+      ];
+      socraticQuestions = [
+        'Kỷ niệm đáng nhớ nhất giữa con và bà diễn ra vào lúc nào (buổi trưa hè, đêm trăng, hay dịp nghỉ hè)?',
+        'Bà đã dành cho con sự chăm sóc dịu dàng nào (quạt mát, kể chuyện cổ tích, nấu món ngon)?',
+        'Hình ảnh của bà lúc đó hiện lên ra sao (lưng còng, nụ cười móm mém, bàn tay chai sần ấm áp)?',
+        'Điều gì bà làm khiến con cảm động nhất?',
+        'Con muốn gửi gắm tình cảm yêu thương và lời hứa gì đến bà?'
+      ];
+      branches = [
+        { id: 'br-1', title: '⏰ Thời gian & Không gian ấm áp', icon: '⏰', color: 'emerald', points: ['Kỷ niệm diễn ra vào dịp nào?', 'Chiếc chõng tre trưa hè / Gian bếp ấm cúng', 'Không khí êm đềm bên bà'] },
+        { id: 'br-2', title: '👵 Nụ cười & Bàn tay của bà', icon: '👵', color: 'purple', points: ['Mái tóc như mây trắng', 'Bàn tay chai sần dịu dàng xoa đầu', 'Nụ cười phúc hậu, hiền từ'] },
+        { id: 'br-3', title: '⚡ Câu chuyện / Việc làm của bà', icon: '⚡', color: 'amber', points: ['Tiếng quạt nan đưa gió mát lành', 'Câu chuyện cổ tích bà thì thầm bên tai', 'Món bánh thơm phức bà dành riêng cho cháu'] },
+        { id: 'br-4', title: '💖 Tình thương bao la của bà', icon: '💖', color: 'sky', points: ['Sự chăm sóc chu đáo từng giấc ngủ, bữa ăn', 'Tình yêu thương dung dị mà sâu nặng'] },
+        { id: 'br-5', title: '🌸 Lòng biết ơn & Lời hứa', icon: '🌸', color: 'rose', points: ['Yêu quý và kính trọng bà sâu sắc', 'Mong bà sống thật lâu, luôn mạnh khỏe bình an'] }
+      ];
+
+      const sec1 = ['Mở đầu: Giới thiệu kỷ niệm ấm áp với bà và cảm xúc yêu thương đong đầy.'];
+      const sec2 = [
+        'Kể lại hoàn cảnh kỷ niệm: Buổi trưa hè trên chiếc chõng tre hoặc gian bếp ấm áp bên bà.',
+        'Kể diễn biến câu chuyện: Tiếng quạt nan phe phẩy, giọng kể cổ tích ngọt ngào hoặc sự chăm sóc dịu dàng của bà.',
+        'Chi tiết cảm động nhất: Tình yêu thương lặng thầm của bà dành trọn cho cháu.'
+      ];
+      const sec3 = ['Kết thúc: Bày tỏ tình cảm kính yêu tha thiết đối với bà và mong ước bà sống vui khỏe bên con cháu.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'ke_chuyen',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đầu - Giới thiệu kỷ niệm với bà', icon: '🌱', guideNote: 'Nêu thời gian và ấn tượng ấm áp về bà', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Diễn biến - Kỷ niệm và sự chăm sóc dịu dàng của bà', icon: '📖', guideNote: 'Kể chi tiết hành động yêu thương và lời dặn dò của bà', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết thúc - Tình cảm kính yêu & Lời hứa', icon: '🌸', guideNote: 'Lòng biết ơn và mong ước bà luôn mạnh khỏe bình an', bulletPoints: sec3 }
+        ]
+      };
+    } else {
+      hoaNhoUnderstand = `Đề bài muốn con kể lại một câu chuyện hoặc sự việc theo đúng trình tự thời gian: có mở đầu, diễn biến các sự việc và kết thúc giàu ý nghĩa.`;
+      specificRequirements = [
+        'Nhiệm vụ: Kể lại câu chuyện hoặc sự việc theo trình tự hợp lý',
+        'Nhân vật & Hoàn cảnh: Giới thiệu rõ ràng nhân vật, thời gian, địa điểm',
+        'Diễn biến: Kể các sự việc nối tiếp nhau (mở đầu, phát triển, cao trào, kết thúc)',
+        'Ý nghĩa: Rút ra bài học hoặc cảm xúc đáng nhớ'
+      ];
+      socraticQuestions = [
+        'Câu chuyện hoặc sự việc đó xảy ra khi nào, ở đâu?',
+        'Có những nhân vật nào tham gia cùng con?',
+        'Sự việc mở đầu ra sao khiến con chú ý?',
+        'Diễn biến tiếp theo diễn ra như thế nào, có chi tiết nào gay cấn hoặc bất ngờ?',
+        'Kết quả câu chuyện ra sao và con có cảm xúc hoặc bài học gì sâu sắc?'
+      ];
+      branches = [
+        { id: 'br-1', title: '⏰ Thời gian & Địa điểm', icon: '⏰', color: 'emerald', points: ['Sự việc diễn ra khi nào?', 'Không gian ở đâu?', 'Hoàn cảnh bắt đầu'] },
+        { id: 'br-2', title: '👥 Nhân vật tham gia', icon: '👥', color: 'purple', points: ['Có những ai cùng tham gia?', 'Lời nói, hành động của nhân vật', 'Nét mặt, cử chỉ'] },
+        { id: 'br-3', title: '⚡ Mở đầu & Diễn biến', icon: '⚡', color: 'amber', points: ['Sự việc mở đầu thế nào?', 'Các hành động diễn ra liên tiếp', 'Chi tiết gay cấn, đáng nhớ nhất'] },
+        { id: 'br-4', title: '🏁 Kết quả sự việc', icon: '🏁', color: 'sky', points: ['Sự việc kết thúc ra sao?', 'Mọi người cảm thấy thế nào?', 'Niềm vui hoặc sự nhẹ nhõm'] },
+        { id: 'br-5', title: '💖 Cảm xúc & Bài học', icon: '💖', color: 'rose', points: ['Cảm xúc đọng lại trong lòng em', 'Bài học ý nghĩa em rút ra được', 'Kỷ niệm khó phai mờ'] }
+      ];
+
+      const sec1 = ['Giới thiệu thời gian, địa điểm và sự việc/kỷ niệm đáng nhớ mà em sắp kể.'];
+      const sec2 = [
+        'Kể lại sự việc mở đầu: Hoàn cảnh dẫn đến sự việc và những người cùng tham gia.',
+        'Kể lại diễn biến chính: Những hành động, lời nói nối tiếp nhau và chi tiết cao trào đáng nhớ.',
+        'Kể lại kết thúc: Sự việc khép lại ra sao và mọi người cảm thấy thế nào.'
+      ];
+      const sec3 = ['Bày tỏ cảm xúc của em về câu chuyện và bài học quý giá mà em rút ra được.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'ke_chuyen',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đầu - Hoàn cảnh sự việc', icon: '🌱', guideNote: 'Nêu thời gian, địa điểm và nhân vật tham gia', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Diễn biến - Các sự việc nối tiếp', icon: '📖', guideNote: 'Kể rõ đầu đuôi sự việc và chi tiết đáng nhớ nhất', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết thúc - Cảm xúc & Ý nghĩa', icon: '🌸', guideNote: 'Kết quả sự việc và cảm xúc lắng đọng của em', bulletPoints: sec3 }
+        ]
+      };
+    }
   }
 
   // -------------------------------------------------------------
@@ -1047,91 +1553,229 @@ export function buildGenreStructure(
   // THỂ LOẠI 11: MIÊU TẢ (mieu_ta - Mặc định chuẩn quan sát)
   // -------------------------------------------------------------
   else if (genre === 'mieu_ta') {
-    hoaNhoUnderstand = `Đề bài muốn con miêu tả ${mainObject} thật sinh động: từ đặc điểm bao quát đến các chi tiết nổi bật theo trình tự quan sát hợp lý.`;
-    specificRequirements = [
-      'Nhiệm vụ: Viết đoạn văn miêu tả sự vật / cảnh vật',
-      `Đối tượng miêu tả: ${mainObject}`,
-      'Trình tự quan sát: Từ bao quát đến chi tiết, kết hợp các giác quan',
-      'Cảm xúc: Gắn với tình cảm yêu mến, gắn bó của em'
-    ];
-    socraticQuestions = [
-      `Đối tượng con muốn miêu tả là gì (${mainObject})?`,
-      'Nhìn từ xa, đối tượng có hình dáng, màu sắc và kích thước bao quát như thế nào?',
-      'Lại gần quan sát, những chi tiết nào nổi bật và đáng yêu nhất khiến con chú ý?',
-      'Đối tượng gắn bó với hoạt động hoặc kỷ niệm nào của con?',
-      'Con có cảm xúc gì và muốn gìn giữ, nâng niu đối tượng như thế nào?'
-    ];
-    branches = [
-      { id: 'br-1', title: '🌱 Giới thiệu đối tượng', icon: '🌱', color: 'emerald', points: [`Tên gọi ${mainObject}`, 'Vị trí hoặc dịp con có được', 'Cảm nhận ban đầu'] },
-      { id: 'br-2', title: '👀 Đặc điểm bao quát', icon: '👀', color: 'purple', points: ['Kích thước, hình dáng', 'Màu sắc chủ đạo', 'Chất liệu / dáng vẻ bên ngoài'] },
-      { id: 'br-3', title: '🔍 Chi tiết nổi bật', icon: '🔍', color: 'amber', points: ['Từng bộ phận đặc sắc', 'Đường nét, hoa văn', 'Mùi hương, âm thanh nếu có'] },
-      { id: 'br-4', title: '🏃 Hoạt động gắn bó', icon: '🏃', color: 'sky', points: ['Sự vật gắn với hoạt động của em', 'Những kỷ niệm vui vẻ', 'Lợi ích mang lại'] },
-      { id: 'br-5', title: '💖 Tình cảm & Giữ gìn', icon: '💖', color: 'rose', points: ['Coi như người bạn thân', 'Ý thức giữ gìn, bảo vệ', 'Cảm xúc yêu mến dài lâu'] }
-    ];
+    const isCornerOfYard = 
+      semantics.selectedDirectionId === 'goc_san_truong' ||
+      mainObject.toLowerCase().includes('góc sân');
 
-    const sec1 = [`Giới thiệu đối tượng miêu tả (${mainObject}) và ấn tượng sâu sắc ban đầu của em.`];
-    const sec2 = [
-      'Tả bao quát: Hình dáng, kích thước và màu sắc tươi tắn khi nhìn từ xa.',
-      'Tả chi tiết nổi bật: Từng bộ phận đặc sắc, đường nét tinh tế và nét đẹp riêng biệt.',
-      'Tả hoạt động gắn bó: Những khoảnh khắc đối tượng đồng hành cùng em trong học tập, vui chơi.'
-    ];
-    const sec3 = ['Khẳng định tình cảm yêu quý, gắn bó và lời hứa luôn gìn giữ, nâng niu cẩn thận.'];
+    if (isCornerOfYard) {
+      hoaNhoUnderstand = 'Con sẽ viết đoạn văn miêu tả một góc sân trường em yêu thích. Hãy chọn một góc sân thân thuộc (hàng ghế đá dưới bóng mát, bồn hoa rực rỡ, hay góc thư viện xanh ngoài trời) để tả chi tiết cảnh vật và hoạt động của con cùng bạn bè trong giờ ra chơi nhé!';
+      specificRequirements = [
+        'Nhiệm vụ: Viết đoạn văn miêu tả một góc sân trường em yêu thích',
+        'Đối tượng: Một góc sân trường cụ thể (ghế đá, bồn hoa, tán cây che mát)',
+        'Phạm vi: Cảnh vật ở góc sân và hoạt động vui tươi trong giờ ra chơi',
+        'Lưu ý: Bám sát góc sân trường, TUYỆT ĐỐI KHÔNG chuyển thành tả toàn cảnh ngôi trường hay chỉ tả một cái cây đơn lẻ',
+        'Tình cảm: Yêu quý góc sân trường và ý thức giữ gìn vệ sinh sạch đẹp'
+      ];
+      socraticQuestions = [
+        'Góc sân trường con yêu thích nhất nằm ở vị trí nào (dưới tán bàng, cạnh bồn hoa, trước cửa lớp)?',
+        'Nhìn từ xa, góc sân ấy có nét gì nổi bật khiến con luôn muốn đến đó mỗi giờ ra chơi?',
+        'Ở góc sân có những cảnh vật gì: Hàng ghế đá, luống hoa khoe sắc, ánh nắng xuyên qua kẽ lá ra sao?',
+        'Con và các bạn thường làm gì ở góc sân ấy (đọc sách, nhảy dây, trò chuyện)?',
+        'Con có cảm nghĩ gì và muốn làm gì để góc sân trường luôn xanh, sạch, đẹp?'
+      ];
+      branches = [
+        { id: 'br-1', title: '📍 Vị trí góc sân', icon: '📍', color: 'emerald', points: ['Vị trí góc sân ở đâu?', 'Tên gọi góc sân thân thương', 'Dịp em thường đến đó'] },
+        { id: 'br-2', title: '🌿 Cảnh vật nổi bật', icon: '🌿', color: 'purple', points: ['Hàng ghế đá mát rượi', 'Bồn hoa muôn sắc', 'Tán cây xòe bóng râm', 'Những vệt nắng le lói'] },
+        { id: 'br-3', title: '☀️ Âm thanh & Không khí', icon: '☀️', color: 'amber', points: ['Gió thổi xào xạc', 'Tiếng chim hót ríu rít', 'Không khí trong lành, mát mẻ'] },
+        { id: 'br-4', title: '🏃 Hoạt động giờ ra chơi', icon: '🏃', color: 'sky', points: ['Cùng bạn đọc truyện, tâm sự', 'Chơi trò chơi học trò vui vẻ', 'Tiếng cười rộn rã'] },
+        { id: 'br-5', title: '💖 Cảm nghĩ & Giữ gìn', icon: '💖', color: 'rose', points: ['Yêu quý góc sân trường', 'Nơi lưu giữ kỷ niệm tuổi thơ', 'Không vứt rác, chăm sóc bồn hoa'] }
+      ];
 
-    outline = {
-      moDoan: sec1,
-      phatTrienDoan: sec2,
-      ketDoan: sec3,
-      genre: 'mieu_ta',
-      sections: [
-        { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu đối tượng', icon: '🌱', guideNote: 'Nêu tên đối tượng và ấn tượng chung ban đầu', bulletPoints: sec1 },
-        { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Bao quát & Chi tiết nổi bật', icon: '👀', guideNote: 'Tả hình dáng, màu sắc, chi tiết đặc sắc và hoạt động', bulletPoints: sec2 },
-        { id: 'sec-3', title: 'Phần 3. Kết đoạn - Tình cảm gắn bó & Giữ gìn', icon: '💖', guideNote: 'Bày tỏ tình cảm yêu mến và ý thức trân trọng', bulletPoints: sec3 }
-      ]
-    };
+      const sec1 = ['Mở đoạn: Giới thiệu góc sân trường em yêu thích nhất (vị trí và lý do em gắn bó với góc sân ấy).'];
+      const sec2 = [
+        'Tả cảnh vật góc sân: Tán cây che bóng râm mát, hàng ghế đá quen thuộc và bồn hoa rực rỡ sắc màu.',
+        'Tả không khí & âm thanh: Ánh nắng nhảy nhót qua kẽ lá, tiếng chim chuyền cành và làn gió mát lành.',
+        'Tả hoạt động: Mỗi giờ ra chơi, em và các bạn lại quây quần nơi đây để đọc sách, tâm sự và vui đùa.'
+      ];
+      const sec3 = ['Kết đoạn: Bày tỏ tình cảm yêu mến góc sân trường và ý thức giữ gìn nơi đây luôn xanh, sạch, đẹp.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'mieu_ta',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu góc sân trường yêu thích', icon: '📍', guideNote: 'Nêu vị trí và ấn tượng về góc sân trường', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Tả cảnh vật & Hoạt động giờ ra chơi', icon: '🌿', guideNote: 'Tả cảnh vật chi tiết và hoạt động vui tươi', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Tình cảm gắn bó & Giữ gìn', icon: '💖', guideNote: 'Bộc lộ tình cảm và ý thức bảo vệ góc sân sạch đẹp', bulletPoints: sec3 }
+        ]
+      };
+    } else {
+      hoaNhoUnderstand = `Đề bài muốn con miêu tả ${mainObject} thật sinh động: từ đặc điểm bao quát đến các chi tiết nổi bật theo trình tự quan sát hợp lý.`;
+      specificRequirements = [
+        'Nhiệm vụ: Viết đoạn văn miêu tả sự vật / cảnh vật',
+        `Đối tượng miêu tả: ${mainObject}`,
+        'Trình tự quan sát: Từ bao quát đến chi tiết, kết hợp các giác quan',
+        'Cảm xúc: Gắn với tình cảm yêu mến, gắn bó của em'
+      ];
+      socraticQuestions = [
+        `Đối tượng con muốn miêu tả là gì (${mainObject})?`,
+        'Nhìn từ xa, đối tượng có hình dáng, màu sắc và kích thước bao quát như thế nào?',
+        'Lại gần quan sát, những chi tiết nào nổi bật và đáng yêu nhất khiến con chú ý?',
+        'Đối tượng gắn bó với hoạt động hoặc kỷ niệm nào của con?',
+        'Con có cảm xúc gì và muốn gìn giữ, nâng niu đối tượng như thế nào?'
+      ];
+      branches = [
+        { id: 'br-1', title: '🌱 Giới thiệu đối tượng', icon: '🌱', color: 'emerald', points: [`Tên gọi ${mainObject}`, 'Vị trí hoặc dịp con có được', 'Cảm nhận ban đầu'] },
+        { id: 'br-2', title: '👀 Đặc điểm bao quát', icon: '👀', color: 'purple', points: ['Kích thước, hình dáng', 'Màu sắc chủ đạo', 'Chất liệu / dáng vẻ bên ngoài'] },
+        { id: 'br-3', title: '🔍 Chi tiết nổi bật', icon: '🔍', color: 'amber', points: ['Từng bộ phận đặc sắc', 'Đường nét, hoa văn', 'Mùi hương, âm thanh nếu có'] },
+        { id: 'br-4', title: '🏃 Hoạt động gắn bó', icon: '🏃', color: 'sky', points: ['Sự vật gắn với hoạt động của em', 'Những kỷ niệm vui vẻ', 'Lợi ích mang lại'] },
+        { id: 'br-5', title: '💖 Tình cảm & Giữ gìn', icon: '💖', color: 'rose', points: ['Coi như người bạn thân', 'Ý thức giữ gìn, bảo vệ', 'Cảm xúc yêu mến dài lâu'] }
+      ];
+
+      const sec1 = [`Giới thiệu đối tượng miêu tả (${mainObject}) và ấn tượng sâu sắc ban đầu của em.`];
+      const sec2 = [
+        'Tả bao quát: Hình dáng, kích thước và màu sắc tươi tắn khi nhìn từ xa.',
+        'Tả chi tiết nổi bật: Từng bộ phận đặc sắc, đường nét tinh tế và nét đẹp riêng biệt.',
+        'Tả hoạt động gắn bó: Những khoảnh khắc đối tượng đồng hành cùng em trong học tập, vui chơi.'
+      ];
+      const sec3 = ['Khẳng định tình cảm yêu quý, gắn bó và lời hứa luôn gìn giữ, nâng niu cẩn thận.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'mieu_ta',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu đối tượng', icon: '🌱', guideNote: 'Nêu tên đối tượng và ấn tượng chung ban đầu', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Bao quát & Chi tiết nổi bật', icon: '👀', guideNote: 'Tả hình dáng, màu sắc, chi tiết đặc sắc và hoạt động', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Tình cảm gắn bó & Giữ gìn', icon: '💖', guideNote: 'Bày tỏ tình cảm yêu mến và ý thức trân trọng', bulletPoints: sec3 }
+        ]
+      };
+    }
   }
 
   // -------------------------------------------------------------
   // THỂ LOẠI 12 & 13: VIẾT ĐOẠN VĂN / DẠNG BÀI MỚI (viet_doan_van, khac)
   // -------------------------------------------------------------
   else {
-    hoaNhoUnderstand = `Đề bài muốn con viết đoạn văn bám sát chủ đề "${coreSubject}" một cách tự nhiên, chân thật và giàu cảm xúc.`;
-    specificRequirements = [
-      `Nhiệm vụ: Viết đoạn văn về ${coreSubject}`,
-      `Đối tượng: ${mainObject}`,
-      'Bố cục: Mở đầu rõ ràng, triển khai chi tiết và kết lại lắng đọng'
-    ];
-    socraticQuestions = [
-      `Khi nghĩ về "${coreSubject}", điều gì hiện lên đầu tiên trong lòng con?`,
-      'Chi tiết nào làm con cảm thấy gắn bó hoặc ấn tượng sâu sắc nhất?',
-      'Con có cảm xúc hoặc mong ước gì khi hoàn thành bài viết này?'
-    ];
-    branches = [
-      { id: 'br-1', title: '📍 Mở đầu & Giới thiệu', icon: '📍', color: 'emerald', points: [`Nêu ${mainObject}`, 'Ấn tượng ban đầu của em'] },
-      { id: 'br-2', title: '🌿 Chi tiết đặc sắc 1', icon: '🌿', color: 'purple', points: ['Nét nổi bật nhất con muốn nói', 'Hình ảnh cụ thể, sinh động'] },
-      { id: 'br-3', title: '☀️ Chi tiết đặc sắc 2', icon: '☀️', color: 'amber', points: ['Kỷ niệm hoặc việc làm gắn bó', 'Điều làm con thấy đáng nhớ'] },
-      { id: 'br-4', title: '📖 Hoạt động hoặc trải nghiệm', icon: '📖', color: 'sky', points: ['Những việc em thường làm', 'Khoảnh khắc vui vẻ'] },
-      { id: 'br-5', title: '💖 Cảm xúc & Mong ước', icon: '💖', color: 'rose', points: ['Tình cảm chân thành của con', 'Mong ước tốt đẹp mai sau'] }
-    ];
+    const isBookIntro = semantics.selectedDirectionId === 'gioi_thieu_sach' || (mainObject.toLowerCase().includes('sách') && !mainObject.toLowerCase().includes('nhân vật'));
+    const isCharacterIntro = semantics.selectedDirectionId === 'gioi_thieu_nhan_vat' || (mainObject.toLowerCase().includes('nhân vật') && !mainObject.toLowerCase().includes('sách'));
 
-    const sec1 = [`Giới thiệu trực tiếp đối tượng (${mainObject}) theo đúng yêu cầu đề bài.`];
-    const sec2 = [
-      'Triển khai các chi tiết nổi bật theo trình tự hợp lý.',
-      'Đưa vào chi tiết chân thật từ trải nghiệm của chính con.',
-      'Sử dụng một hình ảnh so sánh hoặc từ ngữ gợi cảm để câu văn thêm sinh động.'
-    ];
-    const sec3 = ['Bày tỏ cảm xúc chân thành và mong ước tốt đẹp của con.'];
+    if (isBookIntro) {
+      hoaNhoUnderstand = 'Đề bài muốn con giới thiệu một cuốn sách hay mà con yêu thích. Con hãy nêu tên cuốn sách, tác giả, hình ảnh trang bìa hoặc tóm tắt nội dung hấp dẫn, và bài học bổ ích mà cuốn sách mang lại nhé!';
+      specificRequirements = [
+        'Nhiệm vụ: Viết đoạn văn giới thiệu cuốn sách em yêu thích',
+        'Đối tượng: Một cuốn sách cụ thể (tên sách, tác giả, nhà xuất bản)',
+        'Nội dung: Bìa sách, câu chuyện hấp dẫn và chi tiết ấn tượng nhất',
+        'Ý nghĩa: Bài học sâu sắc và lý do khuyên các bạn cùng đọc'
+      ];
+      socraticQuestions = [
+        'Cuốn sách con muốn giới thiệu có tên là gì, do ai sáng tác?',
+        'Trang bìa và hình vẽ minh họa của cuốn sách có gì bắt mắt khiến con chú ý?',
+        'Nội dung cuốn sách kể về câu chuyện hoặc kiến thức thú vị nào?',
+        'Chi tiết hoặc câu nói nào trong sách làm con nhớ nhất?',
+        'Cuốn sách giúp con học được điều gì và con muốn nhắn nhủ gì tới bạn bè?'
+      ];
+      branches = [
+        { id: 'br-1', title: '📖 Tên sách & Tác giả', icon: '📖', color: 'emerald', points: ['Tên cuốn sách yêu thích', 'Tác giả và nhà xuất bản', 'Dịp con có được cuốn sách'] },
+        { id: 'br-2', title: '🎨 Bìa sách & Hình minh họa', icon: '🎨', color: 'purple', points: ['Màu sắc trang bìa', 'Hình vẽ sinh động, bắt mắt', 'Độ dày và cách trình bày'] },
+        { id: 'br-3', title: '📜 Nội dung câu chuyện', icon: '📜', color: 'amber', points: ['Nhân vật hoặc chủ đề chính', 'Diễn biến câu chuyện hấp dẫn', 'Chi tiết làm con nhớ nhất'] },
+        { id: 'br-4', title: '💡 Bài học bổ ích', icon: '💡', color: 'sky', points: ['Điều hay con học được từ sách', 'Giúp ích cho học tập và cuộc sống'] },
+        { id: 'br-5', title: '🌟 Cảm nghĩ & Khuyên đọc', icon: '🌟', color: 'rose', points: ['Coi sách như người bạn quý', 'Khuyên các bạn cùng tìm đọc'] }
+      ];
 
-    outline = {
-      moDoan: sec1,
-      phatTrienDoan: sec2,
-      ketDoan: sec3,
-      genre: 'viet_doan_van',
-      sections: [
-        { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu', icon: '🌱', guideNote: 'Nêu đối tượng và cảm xúc ban đầu', bulletPoints: sec1 },
-        { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Chi tiết sinh động', icon: '📝', guideNote: 'Miêu tả và kể các chi tiết cụ thể từ trải nghiệm thật', bulletPoints: sec2 },
-        { id: 'sec-3', title: 'Phần 3. Kết đoạn - Cảm xúc & Mong ước', icon: '🌸', guideNote: 'Khẳng định tình cảm và khép lại lắng đọng', bulletPoints: sec3 }
-      ]
-    };
+      const sec1 = ['Mở đoạn: Giới thiệu tên cuốn sách, tác giả và lý do cuốn sách thu hút con.'];
+      const sec2 = [
+        'Hình thức & Nội dung: Trang bìa rực rỡ, hình vẽ minh họa sinh động và tóm tắt ngắn gọn câu chuyện hấp dẫn.',
+        'Chi tiết đặc sắc: Kể lại chi tiết hoặc tình huống trong sách khiến con ấn tượng và xúc động nhất.',
+        'Bài học rút ra: Giá trị đạo đức hoặc kiến thức bổ ích mà cuốn sách mang lại cho con.'
+      ];
+      const sec3 = ['Kết đoạn: Khẳng định tình cảm yêu quý cuốn sách và lời khuyên bạn bè cùng tìm đọc để mở rộng hiểu biết.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'viet_doan_van',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu cuốn sách yêu thích', icon: '📖', guideNote: 'Nêu tên cuốn sách, tác giả và cảm xúc ban đầu', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Nội dung & Chi tiết ấn tượng', icon: '📝', guideNote: 'Giới thiệu nội dung, bìa sách và bài học sâu sắc', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Khẳng định tình cảm & Lan tỏa', icon: '🌟', guideNote: 'Khuyên bạn bè cùng đọc và trân trọng cuốn sách', bulletPoints: sec3 }
+        ]
+      };
+    } else if (isCharacterIntro) {
+      hoaNhoUnderstand = 'Đề bài muốn con giới thiệu một nhân vật mà con yêu thích trong cuốn sách hay bộ phim hoạt hình. Con hãy miêu tả dáng vẻ, tính cách, hành động dũng cảm hoặc tốt bụng và bài học mà con học tập từ nhân vật ấy nhé!';
+      specificRequirements = [
+        'Nhiệm vụ: Viết đoạn văn giới thiệu nhân vật em yêu thích',
+        'Đối tượng: Một nhân vật trong tác phẩm văn học hoặc truyện thiếu nhi',
+        'Nội dung: Ngoại hình, tính cách, hành động nổi bật và phẩm chất đáng quý',
+        'Cảm xúc: Sự ngưỡng mộ, yêu mến và bài học noi gương'
+      ];
+      socraticQuestions = [
+        'Nhân vật con yêu thích tên là gì, xuất hiện trong tác phẩm hoặc câu chuyện nào?',
+        'Nhân vật có ngoại hình hoặc trang phục gì đặc biệt khiến con ấn tượng?',
+        'Nhân vật có những nét tính cách hoặc phẩm chất tốt đẹp nào (dũng cảm, nhân hậu, thông minh)?',
+        'Hành động hoặc việc làm nào của nhân vật làm con khâm phục nhất?',
+        'Con học tập được điều gì từ nhân vật đó và con muốn trở thành người như thế nào?'
+      ];
+      branches = [
+        { id: 'br-1', title: '✨ Nhân vật & Tác phẩm', icon: '✨', color: 'emerald', points: ['Tên nhân vật em yêu thích', 'Xuất hiện trong cuốn sách nào', 'Ấn tượng ban đầu của em'] },
+        { id: 'br-2', title: '👀 Ngoại hình & Trang phục', icon: '👀', color: 'purple', points: ['Dáng vẻ, nụ cười, ánh mắt', 'Trang phục hoặc bảo bối đặc biệt'] },
+        { id: 'br-3', title: '⚡ Hành động & Phẩm chất', icon: '⚡', color: 'amber', points: ['Hành động dũng cảm, tốt bụng', 'Biết giúp đỡ mọi người', 'Thông minh vượt qua thử thách'] },
+        { id: 'br-4', title: '💖 Khoảnh khắc đáng nhớ', icon: '💖', color: 'sky', points: ['Chi tiết gay cấn hoặc xúc động nhất', 'Cách nhân vật chiến thắng khó khăn'] },
+        { id: 'br-5', title: '🌸 Cảm nghĩ & Bài học noi gương', icon: '🌸', color: 'rose', points: ['Khâm phục và yêu quý nhân vật', 'Noi gương những đức tính tốt đẹp'] }
+      ];
+
+      const sec1 = ['Mở đoạn: Giới thiệu tên nhân vật và câu chuyện/cuốn sách mà nhân vật xuất hiện.'];
+      const sec2 = [
+        'Ngoại hình & Tính cách: Miêu tả nét đặc trưng về diện mạo và những đức tính nổi bật (tốt bụng, dũng cảm, thông minh).',
+        'Hành động đáng nhớ: Kể lại một việc làm nghĩa hiệp hoặc tình huống nhân vật vượt qua thử thách.',
+        'Chi tiết con yêu thích nhất về nhân vật.'
+      ];
+      const sec3 = ['Kết đoạn: Bày tỏ tình cảm khâm phục, yêu mến nhân vật và bài học quý giá con nguyện noi theo.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'viet_doan_van',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu nhân vật', icon: '✨', guideNote: 'Nêu tên nhân vật và tác phẩm', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Ngoại hình, Tính cách & Hành động', icon: '📝', guideNote: 'Nêu các phẩm chất và việc làm nổi bật', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Cảm nghĩ & Bài học noi gương', icon: '🌸', guideNote: 'Bày tỏ sự khâm phục và bài học noi theo', bulletPoints: sec3 }
+        ]
+      };
+    } else {
+      hoaNhoUnderstand = `Đề bài muốn con viết đoạn văn bám sát chủ đề "${coreSubject}" một cách tự nhiên, chân thật và giàu cảm xúc.`;
+      specificRequirements = [
+        `Nhiệm vụ: Viết đoạn văn về ${coreSubject}`,
+        `Đối tượng: ${mainObject}`,
+        'Bố cục: Mở đầu rõ ràng, triển khai chi tiết và kết lại lắng đọng'
+      ];
+      socraticQuestions = [
+        `Khi nghĩ về "${coreSubject}", điều gì hiện lên đầu tiên trong lòng con?`,
+        'Chi tiết nào làm con cảm thấy gắn bó hoặc ấn tượng sâu sắc nhất?',
+        'Con có cảm xúc hoặc mong ước gì khi hoàn thành bài viết này?'
+      ];
+      branches = [
+        { id: 'br-1', title: '📍 Mở đầu & Giới thiệu', icon: '📍', color: 'emerald', points: [`Nêu ${mainObject}`, 'Ấn tượng ban đầu của em'] },
+        { id: 'br-2', title: '🌿 Chi tiết đặc sắc 1', icon: '🌿', color: 'purple', points: ['Nét nổi bật nhất con muốn nói', 'Hình ảnh cụ thể, sinh động'] },
+        { id: 'br-3', title: '☀️ Chi tiết đặc sắc 2', icon: '☀️', color: 'amber', points: ['Kỷ niệm hoặc việc làm gắn bó', 'Điều làm con thấy đáng nhớ'] },
+        { id: 'br-4', title: '📖 Hoạt động hoặc trải nghiệm', icon: '📖', color: 'sky', points: ['Những việc em thường làm', 'Khoảnh khắc vui vẻ'] },
+        { id: 'br-5', title: '💖 Cảm xúc & Mong ước', icon: '💖', color: 'rose', points: ['Tình cảm chân thành của con', 'Mong ước tốt đẹp mai sau'] }
+      ];
+
+      const sec1 = [`Giới thiệu trực tiếp đối tượng (${mainObject}) theo đúng yêu cầu đề bài.`];
+      const sec2 = [
+        'Triển khai các chi tiết nổi bật theo trình tự hợp lý.',
+        'Đưa vào chi tiết chân thật từ trải nghiệm của chính con.',
+        'Sử dụng một hình ảnh so sánh hoặc từ ngữ gợi cảm để câu văn thêm sinh động.'
+      ];
+      const sec3 = ['Bày tỏ cảm xúc chân thành và mong ước tốt đẹp của con.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'viet_doan_van',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu', icon: '🌱', guideNote: 'Nêu đối tượng và cảm xúc ban đầu', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Chi tiết sinh động', icon: '📝', guideNote: 'Miêu tả và kể các chi tiết cụ thể từ trải nghiệm thật', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Cảm xúc & Mong ước', icon: '🌸', guideNote: 'Khẳng định tình cảm và khép lại lắng đọng', bulletPoints: sec3 }
+        ]
+      };
+    }
   }
 
   // -------------------------------------------------------------
@@ -1148,28 +1792,30 @@ export function buildGenreStructure(
   // -------------------------------------------------------------
   // TẠO KHO TỪ NGỮ VÀ HÌNH ẢNH SÁNG TẠO ĐẶC THÙ THEO ĐỀ
   // -------------------------------------------------------------
-  const vocabularySuggestions: VocabularyImageryBank = {
-    goodWords: [
-      { word: 'thân thương', meaningAndUsage: 'Gần gũi và chan chứa yêu thương' },
-      { word: 'rạng rỡ', meaningAndUsage: 'Tươi vui, bừng sáng và tràn đầy năng lượng' },
-      { word: 'ấm áp', meaningAndUsage: 'Gợi cảm giác che chở, bình an và hạnh phúc' },
-      { word: 'gắn bó', meaningAndUsage: 'Tình cảm bền chặt, khăng khít qua năm tháng' },
-      { word: 'chân thành', meaningAndUsage: 'Thật thà, xuất phát từ đáy lòng' }
-    ],
-    imageries: [
-      { type: 'So sánh', example: 'Gần gũi như một người bạn thân thiết luôn sẻ chia niềm vui', explanation: 'Gợi sự gắn bó thân thương' },
-      { type: 'Nhân hóa', example: 'Biết mỉm cười đón nhận tình yêu thương của em', explanation: 'Làm câu văn sinh động và có hồn' }
-    ],
-    sampleSentences: [
-      { type: 'mo_bai', label: 'Gợi ý câu mở đầu tự nhiên', sentence: `Trong lòng em, ${mainObject.toLowerCase()} luôn chiếm một vị trí vô cùng đặc biệt.`, whyItIsGood: 'Nêu ngay đối tượng và tình cảm chân thật.' },
-      { type: 'mieu_ta', label: 'Gợi ý câu văn giàu hình ảnh', sentence: 'Từng kỷ niệm gắn bó nơi đây như những trang sách tuổi thơ ngọt ngào in đậm trong tâm trí em.', whyItIsGood: 'Gợi cảm xúc lắng đọng và liên tưởng đẹp.' },
-      { type: 'ket_bai', label: 'Gợi ý câu kết ý nghĩa', sentence: 'Em luôn thầm nhủ sẽ trân trọng và lưu giữ những khoảnh khắc quý báu này trong tim.', whyItIsGood: 'Khép lại bằng lòng trân trọng bền lâu.' }
-    ],
-    creativeIdeas: [
-      'Gắn với một kỷ niệm thật của chính con',
-      'Dùng từ ngữ giản dị, trong sáng của lứa tuổi học trò'
-    ]
-  };
+  if (!vocabularySuggestions) {
+    vocabularySuggestions = {
+      goodWords: [
+        { word: 'thân thương', meaningAndUsage: 'Gần gũi và chan chứa yêu thương' },
+        { word: 'rạng rỡ', meaningAndUsage: 'Tươi vui, bừng sáng và tràn đầy năng lượng' },
+        { word: 'ấm áp', meaningAndUsage: 'Gợi cảm giác che chở, bình an và hạnh phúc' },
+        { word: 'gắn bó', meaningAndUsage: 'Tình cảm bền chặt, khăng khít qua năm tháng' },
+        { word: 'chân thành', meaningAndUsage: 'Thật thà, xuất phát từ đáy lòng' }
+      ],
+      imageries: [
+        { type: 'So sánh', example: 'Gần gũi như một người bạn thân thiết luôn sẻ chia niềm vui', explanation: 'Gợi sự gắn bó thân thương' },
+        { type: 'Nhân hóa', example: 'Biết mỉm cười đón nhận tình yêu thương của em', explanation: 'Làm câu văn sinh động và có hồn' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý câu mở đầu tự nhiên', sentence: `Trong lòng em, ${mainObject.toLowerCase()} luôn chiếm một vị trí vô cùng đặc biệt.`, whyItIsGood: 'Nêu ngay đối tượng và tình cảm chân thật.' },
+        { type: 'mieu_ta', label: 'Gợi ý câu văn giàu hình ảnh', sentence: 'Từng kỷ niệm gắn bó nơi đây như những trang sách tuổi thơ ngọt ngào in đậm trong tâm trí em.', whyItIsGood: 'Gợi cảm xúc lắng đọng và liên tưởng đẹp.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết ý nghĩa', sentence: 'Em luôn thầm nhủ sẽ trân trọng và lưu giữ những khoảnh khắc quý báu này trong tim.', whyItIsGood: 'Khép lại bằng lòng trân trọng bền lâu.' }
+      ],
+      creativeIdeas: [
+        'Gắn với một kỷ niệm thật của chính con',
+        'Dùng từ ngữ giản dị, trong sáng của lứa tuổi học trò'
+      ]
+    };
+  }
 
   return {
     branches,
@@ -1190,6 +1836,40 @@ export function validatePromptAnalysisResult(
   analysis: PromptAnalysisData,
   semantics: SemanticAnalysisResult
 ): PromptValidationReport {
+  // Kiểm tra chống nhiễm chéo đối tượng giữa các hướng viết (Section 1 & 3)
+  const allAnalysisText = (
+    (analysis.hoaNhoUnderstand || '') + ' ' +
+    (analysis.specificRequirements || []).join(' ') + ' ' +
+    (analysis.branches || []).map(b => (b.title || '') + ' ' + (b.points || []).join(' ')).join(' ') + ' ' +
+    JSON.stringify(analysis.outline || '')
+  ).toLowerCase();
+
+  let directionSeparationCheck = true;
+  let directionSeparationNote = 'Đồng bộ chính xác nội dung hướng viết';
+
+  if (analysis.selectedDirectionId === 'thu_ban_than') {
+    if (allAnalysisText.includes('ông bà') || allAnalysisText.includes('cháu ngoan') || allAnalysisText.includes('kính yêu') || allAnalysisText.includes('ông hoặc bà')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Hướng bạn thân bị lẫn nội dung thư gửi ông bà';
+    } else {
+      directionSeparationNote = '100% nội dung thư gửi bạn thân chuyển trường, xưng hô tớ-cậu/mình-bạn, không lẫn ông bà';
+    }
+  } else if (analysis.selectedDirectionId === 'thu_ong_ba') {
+    if (allAnalysisText.includes('chuyển trường') || allAnalysisText.includes('bạn thân')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Hướng ông bà bị lẫn nội dung bạn thân chuyển trường';
+    } else {
+      directionSeparationNote = '100% nội dung thư gửi ông bà, kính yêu, cháu ngoan, không lẫn bạn thân chuyển trường';
+    }
+  } else if (analysis.selectedDirectionId === 'goc_san_truong') {
+    if (allAnalysisText.includes('toàn cảnh ngôi trường')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Hướng góc sân trường bị lẫn sang tả toàn cảnh trường';
+    } else {
+      directionSeparationNote = '100% nội dung tập trung vào góc sân trường yêu thích trong giờ ra chơi';
+    }
+  }
+
   const checks: ValidationCheckItem[] = [
     {
       id: 'CHECK 01',
@@ -1206,8 +1886,10 @@ export function validatePromptAnalysisResult(
     {
       id: 'CHECK 03',
       title: 'Đối tượng viết có đúng không?',
-      passed: Boolean(analysis.mainObject && analysis.mainObject.trim().length > 0),
-      note: `Đối tượng xác định: "${analysis.mainObject || semantics.mainObject}"`
+      passed: Boolean(analysis.mainObject && analysis.mainObject.trim().length > 0) && directionSeparationCheck,
+      note: directionSeparationCheck 
+        ? `Đối tượng xác định: "${analysis.mainObject || semantics.mainObject}"`
+        : directionSeparationNote
     },
     {
       id: 'CHECK 04',
@@ -1218,8 +1900,14 @@ export function validatePromptAnalysisResult(
     {
       id: 'CHECK 05',
       title: 'Hướng viết đã chọn có đúng không?',
-      passed: semantics.hasMultipleDirections ? Boolean(analysis.hasMultipleDirections) : true,
-      note: semantics.hasMultipleDirections ? 'Phát hiện chính xác đề có nhiều hướng lựa chọn' : 'Đề đơn nhất một hướng viết'
+      passed: semantics.hasMultipleDirections 
+        ? Boolean(analysis.hasMultipleDirections) && directionSeparationCheck 
+        : true,
+      note: semantics.hasMultipleDirections 
+        ? (directionSeparationCheck 
+            ? `Đã phân tích chính xác hướng viết "${analysis.selectedDirectionTitle || analysis.selectedDirectionId || 'đã chọn'}", tách biệt hoàn toàn 100%` 
+            : directionSeparationNote)
+        : 'Đề đơn nhất một hướng viết'
     },
     {
       id: 'CHECK 06',
@@ -1242,8 +1930,10 @@ export function validatePromptAnalysisResult(
     {
       id: 'CHECK 09',
       title: 'Sơ đồ tư duy có đúng chủ đề không?',
-      passed: Boolean(analysis.branches && analysis.branches.length === 5),
-      note: 'Sơ đồ tư duy 5 nhánh bám sát chặt chẽ chủ đề đề bài'
+      passed: Boolean(analysis.branches && analysis.branches.length === 5) && directionSeparationCheck,
+      note: directionSeparationCheck 
+        ? 'Sơ đồ tư duy 5 nhánh bám sát chặt chẽ chủ đề và hướng viết' 
+        : directionSeparationNote
     },
     {
       id: 'CHECK 10',
@@ -1290,8 +1980,10 @@ export function validatePromptAnalysisResult(
     {
       id: 'CHECK 17',
       title: 'Có chuyển sai đối tượng hoặc phạm vi không?',
-      passed: true,
-      note: `Đối tượng "${analysis.mainObject}" khớp đúng với phạm vi đề bài`
+      passed: directionSeparationCheck,
+      note: directionSeparationCheck 
+        ? `Đối tượng "${analysis.mainObject}" khớp đúng với phạm vi đề bài và hướng viết đã chọn` 
+        : directionSeparationNote
     },
     {
       id: 'CHECK 18',

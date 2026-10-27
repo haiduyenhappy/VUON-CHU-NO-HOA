@@ -422,6 +422,11 @@ export interface PromptDirection {
   scope: string;
   description?: string;
   icon?: string;
+  recipient?: string;
+  purpose?: string;
+  pointOfView?: string;
+  topicCode?: string;
+  topicName?: string;
 }
 
 export interface MindMapBranch {
