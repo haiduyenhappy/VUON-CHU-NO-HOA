@@ -17,6 +17,7 @@ import {
   PromptDirection,
   PromptChoiceType,
   ObjectChoiceItem,
+  FormatChoiceItem,
   MindMapBranch,
   PromptAnalysisData,
   DifficultyLevel,
@@ -138,6 +139,11 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const [customObjectName, setCustomObjectName] = useState<string>('');
   const [isEnteringCustomObject, setIsEnteringCustomObject] = useState<boolean>(false);
   const objectDraftsRef = useRef<Record<string, DirectionDraft>>({});
+
+  // Choice types & Format selection states (LOẠI D: Đoạn văn vs Bài văn ngắn)
+  const [formatChoiceQuestion, setFormatChoiceQuestion] = useState<string>('Con muốn kể câu chuyện theo hình thức nào?');
+  const [availableFormats, setAvailableFormats] = useState<FormatChoiceItem[]>([]);
+  const [selectedFormatId, setSelectedFormatId] = useState<string | null>(null);
   // Multi-tier prompt analysis, 25 topic groups & GDPT 2018 validation states
   const [difficultyLevel, setDifficultyLevel] = useState<DifficultyLevel>('co_ban');
   const [topicCode, setTopicCode] = useState<string>('');
@@ -579,7 +585,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     forceDirectionId?: string,
     forceObjectId?: string,
     forceObjectName?: string,
-    forceCustomName?: string
+    forceCustomName?: string,
+    forceFormatId?: string
   ) => {
     if (!promptText.trim()) return;
 
@@ -591,6 +598,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     const objIdToSend = forceObjectId !== undefined ? forceObjectId : selectedObjectId;
     const objNameToSend = forceObjectName !== undefined ? forceObjectName : selectedObjectName;
     const customNameToUse = forceCustomName !== undefined ? forceCustomName : customObjectName;
+    const formatIdToSend = forceFormatId !== undefined ? forceFormatId : selectedFormatId;
     const currentVersion = ++promptVersionRef.current;
 
     // XÓA SẠCH DỮ LIỆU CŨ CỦA ĐỀ TRƯỚC - KHÔNG ĐỂ DỮ LIỆU CŨ LƯU LẠI
@@ -612,6 +620,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           selectedObjectId: objIdToSend,
           selectedObjectName: objNameToSend,
           customObjectName: customNameToUse,
+          selectedFormatId: formatIdToSend,
           difficultyLevel
         })
       });
@@ -637,6 +646,16 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           setCustomObjectName(deepData.customObjectName);
         }
 
+        if (deepData.formatChoiceQuestion) {
+          setFormatChoiceQuestion(deepData.formatChoiceQuestion);
+        }
+        if (deepData.availableFormats) {
+          setAvailableFormats(deepData.availableFormats);
+        }
+        if (deepData.selectedFormatId) {
+          setSelectedFormatId(deepData.selectedFormatId);
+        }
+
         setMainObject(deepData.mainObject || '');
         setWritingScope(deepData.writingScope || '');
         setTopicCode(deepData.topicCode || '');
@@ -650,7 +669,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
         const detectedWType = (deepData.writingType as EssayGenre) || detectGenre(promptText.trim());
         setGenre(detectedWType);
-        const isLetter = detectedWType === 'viet_thu' || Boolean(deepData.outline?.sections && deepData.outline.sections.length > 0);
+        // SỬA TRIỆT ĐỂ: Chỉ khi kiểu bài đúng là viet_thu mới tính là isLetter
+        const isLetter = detectedWType === 'viet_thu';
 
         if (deepData.coreSubject) {
           setCoreSubject(deepData.coreSubject);
@@ -836,6 +856,19 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     setSelectedObjectName(null);
     setIsEnteringCustomObject(false);
     handleGenerateIdeaMap(selectedDirectionId || undefined, '', '', '');
+  };
+
+  // Chọn hình thức bài viết (LOẠI D: Viết đoạn văn vs Viết bài văn ngắn)
+  const handleSelectFormat = (formatId: string) => {
+    playPop(settings.soundEnabled);
+    setSelectedFormatId(formatId);
+    handleGenerateIdeaMap(
+      selectedDirectionId || undefined,
+      selectedObjectId || undefined,
+      selectedObjectName || undefined,
+      customObjectName || undefined,
+      formatId
+    );
   };
 
   // Chọn hướng viết khi đề bài có 2 cách viết - CÓ LƯU VÀ KHÔI PHỤC BẢN NHÁP
@@ -1947,7 +1980,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                     title="Bấm để xem chi tiết 20 tiêu chuẩn kiểm định GDPT 2018"
                   >
                     <span>✓</span>
-                    <span>Đạt 20/20 tiêu chí GDPT 2018</span>
+                    <span>Đạt 20/20 tiêu chuẩn kiểm định đề bài & dàn ý</span>
                     <span className="underline text-[10px] ml-0.5">🔍 Xem</span>
                   </button>
                 )}
@@ -1955,108 +1988,252 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             </div>
           </div>
 
-          {/* LOẠI A: Lựa chọn đối tượng miêu tả (Hộp bút, Chiếc cặp, Đồng hồ, Bảng lớp, Đồ vật khác) */}
-          {choiceType === 'object_selection' ? (
+          {/* LOẠI C / HÌNH THỨC: Lựa chọn hình thức viết (Đoạn văn vs Bài văn ngắn) */}
+          {choiceType === 'format_selection' ? (
             <div className="space-y-4">
               <div className="p-4 bg-white/95 rounded-2xl border-2 border-purple-200 shadow-2xs space-y-3">
                 <div className="flex flex-wrap items-center justify-between gap-2">
                   <div className="flex items-center gap-2">
-                    <span className="text-xl">🎒</span>
+                    <span className="text-xl">✍️</span>
                     <span className="font-extrabold text-purple-950 font-display text-sm sm:text-base">
-                      {objectChoiceQuestion || 'Con muốn tả đồ vật nào?'}
+                      {formatChoiceQuestion || 'Con muốn kể câu chuyện theo hình thức nào?'}
                     </span>
                   </div>
-                  {selectedObjectId && (
-                    <button
-                      onClick={handleResetObject}
-                      className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition-colors flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>🔄 Chọn đồ vật khác</span>
-                    </button>
+                  {selectedFormatId && (
+                    <div className="text-xs font-bold text-purple-700 bg-purple-50 px-3 py-1.5 rounded-xl border border-purple-200 flex items-center gap-1">
+                      <span>✓ Đã chọn hình thức</span>
+                    </div>
                   )}
                 </div>
 
-                {/* 5 lựa chọn đồ vật */}
-                <div className="flex flex-wrap gap-2.5 pt-1">
-                  {(availableObjects && availableObjects.length > 0 ? availableObjects : [
-                    { id: 'hop_but', name: 'Hộp bút', icon: '✏️' },
-                    { id: 'chiec_cap', name: 'Chiếc cặp', icon: '🎒' },
-                    { id: 'dong_ho', name: 'Đồng hồ', icon: '⏰' },
-                    { id: 'bang_lop', name: 'Bảng lớp', icon: '📋' },
-                    { id: 'do_vat_khac', name: 'Đồ vật khác', icon: '✨', isCustom: true }
-                  ]).map((obj) => {
-                    const isSelected = selectedObjectId === obj.id;
+                {/* 2 lựa chọn hình thức: Đoạn văn hoặc Bài văn ngắn */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                  {(availableFormats && availableFormats.length > 0 ? availableFormats : [
+                    { id: 'doan_van', name: 'Viết một đoạn văn', description: 'Kể liền mạch từ 7 - 12 câu, tập trung vào khoảnh khắc đùm bọc, yêu thương', icon: '📄' },
+                    { id: 'bai_van_ngan', name: 'Viết một bài văn ngắn', description: 'Đầy đủ 3 phần rõ ràng: Mở bài, Thân bài (diễn biến cụ thể), Kết bài (bài học)', icon: '📖' }
+                  ]).map((fmt) => {
+                    const isSelected = selectedFormatId === fmt.id;
                     return (
                       <button
-                        key={obj.id}
+                        key={fmt.id}
                         type="button"
-                        onClick={() => {
-                          if (obj.isCustom) {
-                            setIsEnteringCustomObject(true);
-                          } else {
-                            setIsEnteringCustomObject(false);
-                            handleSelectObject(obj.id, obj.name);
-                          }
-                        }}
+                        onClick={() => handleSelectFormat(fmt.id)}
                         disabled={isUnderstandingLoading}
-                        className={`px-4 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm border-2 transition-all flex items-center gap-2 cursor-pointer shadow-2xs ${
+                        className={`p-3.5 rounded-xl font-extrabold text-left border-2 transition-all flex flex-col gap-1 cursor-pointer shadow-2xs ${
                           isSelected
                             ? 'bg-purple-600 text-white border-purple-700 shadow-sm ring-2 ring-purple-300'
                             : 'bg-white hover:bg-purple-50 text-purple-950 border-purple-200 hover:border-purple-300'
                         }`}
                       >
-                        <span>{obj.icon || '🌸'}</span>
-                        <span>{obj.name}</span>
-                        {isSelected && <span className="ml-1 text-xs">✓ Đang chọn</span>}
+                        <div className="flex items-center justify-between w-full">
+                          <div className="flex items-center gap-2 text-sm sm:text-base font-bold">
+                            <span>{fmt.icon || '✍️'}</span>
+                            <span>{fmt.name}</span>
+                          </div>
+                          {isSelected && <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md font-bold">✓ Đang chọn</span>}
+                        </div>
+                        {fmt.description && (
+                          <p className={`text-xs font-normal mt-0.5 leading-relaxed ${isSelected ? 'text-purple-100' : 'text-stone-600'}`}>
+                            {fmt.description}
+                          </p>
+                        )}
                       </button>
                     );
                   })}
                 </div>
 
-                {/* Nhập tên đồ vật khác */}
-                {isEnteringCustomObject && (
-                  <div className="flex flex-wrap items-center gap-2 pt-2 p-3 bg-purple-50/70 rounded-xl border border-purple-200">
-                    <span className="text-xs font-bold text-purple-900">Tên đồ vật của con:</span>
-                    <input
-                      type="text"
-                      value={customObjectName}
-                      onChange={(e) => setCustomObjectName(e.target.value)}
-                      placeholder="Ví dụ: Thước kẻ, Bình nước, Gấu bông..."
-                      className="flex-1 min-w-[200px] px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg text-stone-800 focus:outline-none focus:ring-2 focus:ring-purple-400 font-medium"
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') handleConfirmCustomObject();
-                      }}
-                      autoFocus
-                    />
-                    <button
-                      type="button"
-                      onClick={handleConfirmCustomObject}
-                      disabled={!customObjectName.trim() || isUnderstandingLoading}
-                      className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
-                    >
-                      ✓ Đồng ý chọn
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setIsEnteringCustomObject(false)}
-                      className="px-2.5 py-1.5 rounded-lg text-stone-500 hover:text-stone-700 text-xs font-semibold cursor-pointer"
-                    >
-                      Hủy
-                    </button>
-                  </div>
-                )}
-
-                {selectedObjectId && (
+                {selectedFormatId && (
                   <div className="flex items-center gap-2 pt-1 text-xs font-bold text-purple-900">
                     <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
-                      ⭐ Đồ vật con đang chọn: <strong className="font-extrabold text-purple-950">{selectedObjectName || 'Đồ vật của con'}</strong>
+                      ⭐ Hình thức đang chọn: <strong className="font-extrabold text-purple-950">
+                        {availableFormats.find(f => f.id === selectedFormatId)?.name || (selectedFormatId === 'bai_van_ngan' ? 'Bài văn ngắn (3 phần)' : 'Đoạn văn')}
+                      </strong>
                     </span>
-                    <span className="text-stone-500 font-normal">Sơ đồ và dàn ý bên dưới đã được chuẩn hóa riêng cho {selectedObjectName || 'đồ vật này'}.</span>
+                    <span className="text-stone-500 font-normal">Sơ đồ và dàn ý bên dưới được tối ưu riêng theo hình thức này.</span>
                   </div>
                 )}
               </div>
 
-              {/* Các nội dung bắt buộc: Lời khuyên, Yêu cầu cụ thể (5 ý), Dung lượng (gợi ý linh hoạt) */}
+              {understanding && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm text-stone-700 font-medium">
+                  <div className="p-4 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5 md:col-span-2">
+                    <strong className="text-purple-950 block font-bold text-sm sm:text-base flex items-center gap-1.5 font-display">
+                      <span>💬</span>
+                      <span>Lời khuyên của Hoa Nhỏ:</span>
+                    </strong>
+                    <p className="text-stone-800 leading-relaxed font-semibold italic bg-purple-50/60 p-3 rounded-xl border border-purple-100">
+                      "{understanding.genreEvaluation}"
+                    </p>
+                  </div>
+
+                  <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5">
+                    <strong className="text-purple-900 block font-bold">1. Các yêu cầu cụ thể trong đề bài:</strong>
+                    <ul className="space-y-1.5 pt-1">
+                      {understanding.contentRequirements && understanding.contentRequirements.length > 0 ? (
+                        understanding.contentRequirements.map((r, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span className="text-stone-800 leading-snug">{r}</span>
+                          </li>
+                        ))
+                      ) : (
+                        [
+                          'Xác định rõ câu chuyện cảm động về tình yêu thương, đùm bọc giữa người với người',
+                          'Giới thiệu thời gian, địa điểm và những nhân vật tham gia',
+                          'Kể lại diễn biến câu chuyện theo trình tự hợp lý (mở đầu, diễn biến, cao trào)',
+                          'Tập trung làm nổi bật chi tiết/hành động thể hiện sự giúp đỡ, sẻ chia ấm áp',
+                          'Cảm xúc của người trong cuộc và bài học sâu sắc rút ra cho bản thân'
+                        ].map((r, i) => (
+                          <li key={i} className="flex items-start gap-1.5">
+                            <span className="text-emerald-600 font-black">✓</span>
+                            <span className="text-stone-800 leading-snug">{r}</span>
+                          </li>
+                        ))
+                      )}
+                    </ul>
+                  </div>
+
+                  <div className="p-3.5 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-2">
+                    <div>
+                      <strong className="text-purple-900 block font-bold">2. Dung lượng & lưu ý:</strong>
+                      <p className="text-stone-800 mt-0.5">• Dung lượng: <span className="font-extrabold text-sky-800">{understanding.suggestedSentenceCount}</span></p>
+                      <p className="text-stone-600 text-xs mt-1">• {understanding.advice}</p>
+                    </div>
+
+                    {understanding.specialWishesNoted && understanding.specialWishesNoted.length > 0 && (
+                      <div className="pt-2 border-t border-purple-100">
+                        <span className="text-[11px] font-bold text-pink-900 block">Yêu cầu bổ sung của con:</span>
+                        <div className="flex flex-wrap gap-1 mt-1">
+                          {understanding.specialWishesNoted.map((w, idx) => (
+                            <span key={idx} className="px-2 py-0.5 bg-pink-50 text-pink-800 text-[11px] font-semibold rounded-md border border-pink-200">
+                              ⭐ {w}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : choiceType === 'object_selection' ? (
+            <div className="space-y-4">
+              {(() => {
+                const isPersonObject = Boolean(
+                  (availableObjects && availableObjects.some(o => o.id === 'bo' || o.id === 'me' || o.id === 'ong' || o.id === 'ba')) ||
+                  (objectChoiceQuestion && /người thân|ai|bố|mẹ/i.test(objectChoiceQuestion))
+                );
+                const isTreeObject = !isPersonObject && Boolean(
+                  (availableObjects && availableObjects.some(o => o.id === 'cay_bang' || o.id === 'cay_phuong_vi' || o.id === 'cay_da')) ||
+                  (objectChoiceQuestion && /cây/i.test(objectChoiceQuestion))
+                );
+                const objectCategoryTitle = isPersonObject ? 'người thân' : (isTreeObject ? 'cây bóng mát' : 'đồ vật');
+                const objectCategoryIcon = isPersonObject ? '👨‍👩‍👧‍👦' : (isTreeObject ? '🌳' : '🎒');
+
+                return (
+                  <div className="p-4 bg-white/95 rounded-2xl border-2 border-purple-200 shadow-2xs space-y-3">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xl">{objectCategoryIcon}</span>
+                        <span className="font-extrabold text-purple-950 font-display text-sm sm:text-base">
+                          {objectChoiceQuestion || (isPersonObject ? 'Con muốn bày tỏ tình cảm yêu thương với ai?' : isTreeObject ? 'Con muốn miêu tả cây bóng mát nào?' : 'Con muốn tả đồ vật nào?')}
+                        </span>
+                      </div>
+                      {selectedObjectId && (
+                        <button
+                          onClick={handleResetObject}
+                          className="text-xs font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl border border-purple-200 transition-colors flex items-center gap-1 cursor-pointer"
+                        >
+                          <span>🔄 Chọn {objectCategoryTitle} khác</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Danh sách lựa chọn đối tượng */}
+                    <div className="flex flex-wrap gap-2.5 pt-1">
+                      {(availableObjects && availableObjects.length > 0 ? availableObjects : [
+                        { id: 'hop_but', name: 'Hộp bút', icon: '✏️' },
+                        { id: 'chiec_cap', name: 'Chiếc cặp', icon: '🎒' },
+                        { id: 'dong_ho', name: 'Đồng hồ', icon: '⏰' },
+                        { id: 'bang_lop', name: 'Bảng lớp', icon: '📋' },
+                        { id: 'do_vat_khac', name: 'Đồ vật khác', icon: '✨', isCustom: true }
+                      ]).map((obj) => {
+                        const isSelected = selectedObjectId === obj.id;
+                        return (
+                          <button
+                            key={obj.id}
+                            type="button"
+                            onClick={() => {
+                              if (obj.isCustom) {
+                                setIsEnteringCustomObject(true);
+                              } else {
+                                setIsEnteringCustomObject(false);
+                                handleSelectObject(obj.id, obj.name);
+                              }
+                            }}
+                            disabled={isUnderstandingLoading}
+                            className={`px-4 py-2.5 rounded-xl font-extrabold text-xs sm:text-sm border-2 transition-all flex items-center gap-2 cursor-pointer shadow-2xs ${
+                              isSelected
+                                ? 'bg-purple-600 text-white border-purple-700 shadow-sm ring-2 ring-purple-300'
+                                : 'bg-white hover:bg-purple-50 text-purple-950 border-purple-200 hover:border-purple-300'
+                            }`}
+                          >
+                            <span>{obj.icon || objectCategoryIcon}</span>
+                            <span>{obj.name}</span>
+                            {isSelected && <span className="ml-1 text-xs">✓ Đang chọn</span>}
+                          </button>
+                        );
+                      })}
+                    </div>
+
+                    {/* Nhập tên đối tượng khác */}
+                    {isEnteringCustomObject && (
+                      <div className="flex flex-wrap items-center gap-2 pt-2 p-3 bg-purple-50/70 rounded-xl border border-purple-200">
+                        <span className="text-xs font-bold text-purple-900">
+                          Tên {objectCategoryTitle} của con:
+                        </span>
+                        <input
+                          type="text"
+                          value={customObjectName}
+                          onChange={(e) => setCustomObjectName(e.target.value)}
+                          placeholder={isPersonObject ? 'Ví dụ: Anh trai, Chị gái, Bác, Cô...' : isTreeObject ? 'Ví dụ: Cây xà cừ, Cây bàng vuông, Cây hoa sữa...' : 'Ví dụ: Thước kẻ, Bình nước, Gấu bông...'}
+                          className="flex-1 min-w-[200px] px-3 py-1.5 text-xs bg-white border border-purple-300 rounded-lg text-stone-800 focus:outline-none focus:ring-2 focus:ring-purple-400 font-medium"
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') handleConfirmCustomObject();
+                          }}
+                          autoFocus
+                        />
+                        <button
+                          type="button"
+                          onClick={handleConfirmCustomObject}
+                          disabled={!customObjectName.trim() || isUnderstandingLoading}
+                          className="px-3.5 py-1.5 rounded-lg bg-purple-600 hover:bg-purple-700 text-white font-extrabold text-xs shadow-2xs transition-colors cursor-pointer disabled:opacity-50"
+                        >
+                          ✓ Đồng ý chọn
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setIsEnteringCustomObject(false)}
+                          className="px-2.5 py-1.5 rounded-lg text-stone-500 hover:text-stone-700 text-xs font-semibold cursor-pointer"
+                        >
+                          Hủy
+                        </button>
+                      </div>
+                    )}
+
+                    {selectedObjectId && (
+                      <div className="flex items-center gap-2 pt-1 text-xs font-bold text-purple-900">
+                        <span className="px-2.5 py-0.5 rounded-full bg-purple-100 text-purple-800 border border-purple-200">
+                          ⭐ {isPersonObject ? 'Người thân con đang chọn:' : (isTreeObject ? 'Cây bóng mát con đang chọn:' : 'Đồ vật con đang chọn:')} <strong className="font-extrabold text-purple-950">{selectedObjectName || `${objectCategoryTitle} của con`}</strong>
+                        </span>
+                        <span className="text-stone-500 font-normal">Sơ đồ và dàn ý bên dưới đã được chuẩn hóa riêng cho {selectedObjectName || `đối tượng này`}.</span>
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
+
+              {/* Các nội dung bắt buộc: Lời khuyên, Yêu cầu cụ thể, Dung lượng */}
               {understanding && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs sm:text-sm text-stone-700 font-medium">
                   <div className="p-4 bg-white/95 rounded-2xl border border-purple-200 shadow-2xs space-y-1.5 md:col-span-2">
@@ -3154,16 +3331,16 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               </div>
               <div>
                 <span className="text-xs font-bold text-emerald-800 uppercase tracking-wide">
-                  Hệ thống kiểm định chất lượng GDPT 2018
+                  Bộ kiểm định chất lượng phân tích đề của ứng dụng (20 tiêu chí kiểm tra)
                 </span>
                 <h3 className="text-lg font-black text-emerald-950 font-display">
-                  Bảng 20 Tiêu Chuẩn Kiểm Định Đề Bài & Dàn Ý
+                  Bảng 20 Tiêu Chuẩn Kiểm Tra Đề Bài & Dàn Ý
                 </h3>
               </div>
             </div>
 
             <p className="text-xs text-stone-600 leading-relaxed">
-              Mỗi đề bài khi học sinh bấm "Tạo bản đồ ý tưởng" đều được hệ thống đối chiếu tự động với 20 tiêu chuẩn sư phạm nghiêm ngặt, đảm bảo đúng thể loại, đúng đối tượng và không tự viết bài thay học sinh:
+              Mỗi đề bài khi học sinh bấm "Tạo bản đồ ý tưởng" đều được hệ thống tự động kiểm tra đối chiếu qua 20 tiêu chí sư phạm nghiêm ngặt của ứng dụng, đảm bảo đúng thể loại, bám sát đối tượng và không tự viết bài thay học sinh:
             </p>
 
             <div className="space-y-2 max-h-[50vh] overflow-y-auto pr-1">

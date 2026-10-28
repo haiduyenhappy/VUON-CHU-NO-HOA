@@ -12,7 +12,11 @@ import type {
   DifficultyLevel,
   PromptAnalysisData,
   PromptChoiceType,
-  ObjectChoiceItem
+  ObjectChoiceItem,
+  FormatChoiceItem,
+  WritingTaskAnalysis,
+  WritingTaskLength,
+  WritingTaskAlternative
 } from '../types/index.ts';
 
 // =========================================================================
@@ -134,13 +138,17 @@ export interface SemanticAnalysisResult {
   detectedTaskLabels: string[];
   audienceOrRecipient: string;
   pointOfView: string;
-  // Phân loại 3 nhóm lựa chọn: LOẠI A (đối tượng), LOẠI B (hướng viết), LOẠI C (nhiệm vụ)
+  // Phân loại 4 nhóm lựa chọn: LOẠI A (đối tượng), LOẠI B (hướng viết), LOẠI C (nhiệm vụ), LOẠI D (hình thức)
   choiceType: PromptChoiceType;
   objectChoiceQuestion?: string;
   availableObjects?: ObjectChoiceItem[];
   selectedObjectId?: string | null;
   selectedObjectName?: string | null;
   customObjectName?: string;
+  // Lựa chọn hình thức bài viết (Đoạn văn vs Bài văn ngắn)
+  formatChoiceQuestion?: string;
+  availableFormats?: FormatChoiceItem[];
+  selectedFormatId?: string | null;
   hasMultipleDirections: boolean;
   detectedDirections: PromptDirection[];
   selectedDirectionId?: string | null;
@@ -152,7 +160,222 @@ export interface SemanticAnalysisResult {
   negativeConstraints: string[];
   lengthSpecified: boolean;
   suggestedLength: string;
+  writingFormat: string;
+  needsImageObservation: boolean;
+  lengthConstraint: WritingTaskLength;
+  taskAnalysis?: WritingTaskAnalysis;
   difficultyLevel: DifficultyLevel;
+}
+
+/**
+ * Kiểm tra từ độc lập với ranh giới từ Unicode chính xác
+ */
+export function hasWord(text: string, word: string): boolean {
+  if (!text || !word) return false;
+  const escaped = word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const regex = new RegExp(`(?:^|[^\\p{L}])${escaped}(?:[^\\p{L}]|$)`, 'u');
+  return regex.test(text.toLowerCase());
+}
+
+/**
+ * Kiểm tra xem văn bản có thực sự nói về Bà hay không (loại bỏ bài văn, đề bài, cây bàng, bảng lớp...)
+ */
+export function isAboutGrandmother(text: string): boolean {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  if (!hasWord(t, 'bà')) return false;
+  const cleaned = t
+    .replace(/\bcây bàng\b/gu, '')
+    .replace(/\bbàng\b/gu, '')
+    .replace(/\bbảng lớp\b/gu, '')
+    .replace(/\bbảng con\b/gu, '')
+    .replace(/\bbảng\b/gu, '')
+    .replace(/\bđề bài\b/gu, '')
+    .replace(/\bbài văn\b/gu, '')
+    .replace(/\bbài tập\b/gu, '')
+    .replace(/\bbài học\b/gu, '')
+    .replace(/\bbài thơ\b/gu, '')
+    .replace(/\bbài ca\b/gu, '')
+    .replace(/\bbài hát\b/gu, '')
+    .replace(/\bbàn học\b/gu, '')
+    .replace(/\bbàn ghế\b/gu, '')
+    .replace(/\bbản thân\b/gu, '');
+  return hasWord(cleaned, 'bà');
+}
+
+/**
+ * Kiểm tra xem văn bản có thực sự nói về Ông hay không (loại bỏ dòng sông, cánh đồng, không...)
+ */
+export function isAboutGrandfather(text: string): boolean {
+  if (!text) return false;
+  const t = text.toLowerCase();
+  if (!hasWord(t, 'ông')) return false;
+  const cleaned = t
+    .replace(/\bdòng sông\b/gu, '')
+    .replace(/\bcánh đồng\b/gu, '')
+    .replace(/\bkhông\b/gu, '');
+  return hasWord(cleaned, 'ông');
+}
+
+/**
+ * Kiểm tra đề Bài 1 Lớp 1: Viết 1–2 câu tình cảm dành cho bố, mẹ, ông hoặc bà
+ */
+export function isFamilyLoveGrade1Prompt(text: string, grade: number = 1): boolean {
+  const pLower = (text || '').toLowerCase();
+  return (grade === 1 || pLower.includes('1–2 câu') || pLower.includes('1-2 câu')) &&
+    (pLower.includes('tình cảm') || pLower.includes('yêu thương')) &&
+    (pLower.includes('bố') || pLower.includes('mẹ')) &&
+    (isAboutGrandfather(pLower) || isAboutGrandmother(pLower) || pLower.includes('ông') || pLower.includes('bà'));
+}
+
+/**
+ * Kiểm tra đề Bài 2 Lớp 1: Giới thiệu bản thân (họ tên, lớp, sở thích)
+ */
+export function isSelfIntroGrade1Prompt(text: string, grade: number = 1): boolean {
+  const pLower = (text || '').toLowerCase();
+  return (grade === 1 || pLower.includes('1–2 câu') || pLower.includes('1-2 câu')) &&
+    pLower.includes('giới thiệu') &&
+    (pLower.includes('họ tên') || pLower.includes('tên')) &&
+    (pLower.includes('lớp') || pLower.includes('sở thích'));
+}
+
+/**
+ * Kiểm tra đề Bài 3 Lớp 1: Quan sát tranh mèo con (hình dáng hoặc hành động)
+ */
+export function isCatObservationGrade1Prompt(text: string): boolean {
+  const pLower = (text || '').toLowerCase();
+  return (pLower.includes('mèo') || pLower.includes('mèo con')) &&
+    (pLower.includes('tranh') || pLower.includes('hình dáng') || pLower.includes('hành động'));
+}
+
+/**
+ * Kiểm tra đề Bài 4 Lớp 2: Tin nhắn ngắn cảm ơn hoặc xin lỗi bạn
+ */
+export function isMessageThanksOrApologyGrade2Prompt(text: string): boolean {
+  const pLower = (text || '').toLowerCase();
+  return (pLower.includes('tin nhắn') || pLower.includes('lời nhắn')) &&
+    pLower.includes('cảm ơn') &&
+    pLower.includes('xin lỗi');
+}
+
+/**
+ * Kiểm tra đề Bài 5 Lớp 2: Đoạn văn ngắn 3 đến 5 câu nói lên tình cảm với ông hoặc bà
+ */
+export function isGrandparentLoveGrade2Prompt(text: string, grade: number = 2): boolean {
+  const pLower = (text || '').toLowerCase();
+  return !isFamilyLoveGrade1Prompt(text, grade) &&
+    (isAboutGrandmother(pLower) || isAboutGrandfather(pLower)) &&
+    (pLower.includes('kính trọng') || pLower.includes('yêu mến') || (pLower.includes('tình cảm') && (pLower.includes('đoạn văn') || pLower.includes('3 đến 5 câu') || pLower.includes('3-5 câu') || pLower.includes('3–5 câu'))));
+}
+
+/**
+ * Kiểm tra đề Bài 6 Lớp 5: Kể lại kỷ niệm sâu sắc với thầy giáo hoặc cô giáo
+ */
+export function isTeacherMemoryGrade5Prompt(text: string): boolean {
+  const pLower = (text || '').toLowerCase();
+  return (pLower.includes('thầy giáo') || pLower.includes('cô giáo') || pLower.includes('thầy cô') || (hasWord(pLower, 'thầy') && hasWord(pLower, 'cô'))) &&
+    (pLower.includes('kỷ niệm') || pLower.includes('dạy dỗ') || pLower.includes('nâng đỡ') || pLower.includes('tiến bộ'));
+}
+
+/**
+ * Tách chuỗi theo dấu ngăn cách nhưng BỎ QUA nếu dấu ngăn cách nằm trong dấu ngoặc đơn (...)
+ */
+export function splitOutsideParentheses(text: string, separatorRegex: RegExp = /\s*(?:hoặc|hay|hay là)\s*/i): string[] {
+  const result: string[] = [];
+  let parenDepth = 0;
+  let lastIndex = 0;
+  
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (char === '(' || char === '[' || char === '{') {
+      parenDepth++;
+    } else if (char === ')' || char === ']' || char === '}') {
+      if (parenDepth > 0) parenDepth--;
+    } else if (parenDepth === 0) {
+      const sub = text.slice(i);
+      const match = sub.match(separatorRegex);
+      if (match && match.index === 0) {
+        result.push(text.slice(lastIndex, i).trim());
+        i += match[0].length - 1;
+        lastIndex = i + 1;
+      }
+    }
+  }
+  result.push(text.slice(lastIndex).trim());
+  return result.filter(s => s.length > 0);
+}
+
+/**
+ * Phân tích độ dài chính xác từ đề gốc (câu, đoạn, từ, bài văn)
+ */
+export function parsePromptLength(
+  prompt: string, 
+  grade: number, 
+  genre: EssayGenre, 
+  formatId?: string | null
+): {
+  unit: 'sentence' | 'paragraph' | 'word' | 'unspecified';
+  min?: number;
+  max?: number;
+  display: string;
+  isExplicit: boolean;
+} {
+  const pLower = prompt.toLowerCase();
+  
+  if (pLower.includes('1–2 câu') || pLower.includes('1-2 câu') || /từ\s*1\s*(đến|-|–)\s*2\s*câu/i.test(pLower) || /\b1\s*đến\s*2\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 1, max: 2, display: '1–2 câu hoàn chỉnh', isExplicit: true };
+  }
+  if (pLower.includes('2–3 câu') || pLower.includes('2-3 câu') || /từ\s*2\s*(đến|-|–)\s*3\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 2, max: 3, display: '2–3 câu hoàn chỉnh', isExplicit: true };
+  }
+  if (pLower.includes('3–4 câu') || pLower.includes('3-4 câu') || /từ\s*3\s*(đến|-|–)\s*4\s*câu/i.test(pLower) || /\b3\s*đến\s*4\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 3, max: 4, display: '3–4 câu ngắn gọn', isExplicit: true };
+  }
+  if (pLower.includes('3–5 câu') || pLower.includes('3-5 câu') || /từ\s*3\s*(đến|-|–)\s*5\s*câu/i.test(pLower) || /3\s*đến\s*5\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 3, max: 5, display: '3–5 câu ngắn gọn', isExplicit: true };
+  }
+  if (pLower.includes('4–6 câu') || pLower.includes('4-6 câu') || /từ\s*4\s*(đến|-|–)\s*6\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 4, max: 6, display: '4–6 câu', isExplicit: true };
+  }
+  if (pLower.includes('5–7 câu') || pLower.includes('5-7 câu') || /từ\s*5\s*(đến|-|–)\s*7\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 5, max: 7, display: '5–7 câu', isExplicit: true };
+  }
+  if (pLower.includes('7–9 câu') || pLower.includes('7-9 câu') || /từ\s*7\s*(đến|-|–)\s*9\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 7, max: 9, display: '7–9 câu', isExplicit: true };
+  }
+  if (pLower.includes('8–12 câu') || pLower.includes('8-12 câu') || /từ\s*8\s*(đến|-|–)\s*12\s*câu/i.test(pLower)) {
+    return { unit: 'sentence', min: 8, max: 12, display: '8–12 câu', isExplicit: true };
+  }
+
+  // Hình thức bài văn
+  if (pLower.includes('bài văn') && !pLower.includes('hoặc bài văn')) {
+    return { unit: 'paragraph', min: 3, max: 5, display: 'Bài văn hoàn chỉnh (gồm 3 phần: Mở bài – Thân bài – Kết bài)', isExplicit: true };
+  }
+  if (pLower.includes('hoặc bài văn ngắn') || pLower.includes('đoạn văn (hoặc bài văn')) {
+    if (formatId === 'bai_van_ngan') {
+      return { unit: 'paragraph', min: 3, max: 4, display: 'Bài văn ngắn (gồm 3 phần: Mở bài – Thân bài – Kết bài)', isExplicit: true };
+    } else {
+      return { unit: 'paragraph', min: 1, max: 1, display: 'Một đoạn văn hoàn chỉnh liền mạch (khoảng 7–12 câu)', isExplicit: true };
+    }
+  }
+
+  // Đề không quy định cụ thể: Gợi ý tham khảo, KHÔNG khẳng định là bắt buộc
+  if (genre === 'viet_thu') {
+    return { unit: 'word', min: 80, max: 150, display: 'Thư ngắn (khoảng 80–120 chữ, đủ các phần của bức thư)', isExplicit: false };
+  }
+  if (genre === 'loi_nhan') {
+    return { unit: 'sentence', min: 3, max: 4, display: 'Tin nhắn/Lời nhắn ngắn (khoảng 3–4 câu súc tích)', isExplicit: false };
+  }
+  if (grade <= 1) {
+    return { unit: 'sentence', min: 1, max: 2, display: '1–2 câu hoàn chỉnh (Gợi ý phù hợp Lớp 1)', isExplicit: false };
+  }
+  if (grade === 2) {
+    return { unit: 'sentence', min: 3, max: 5, display: 'Đoạn văn ngắn (Gợi ý tham khảo: khoảng 3–5 câu)', isExplicit: false };
+  }
+  if (grade === 3) {
+    return { unit: 'sentence', min: 5, max: 7, display: 'Đoạn văn (Gợi ý tham khảo: khoảng 5–7 câu)', isExplicit: false };
+  }
+  return { unit: 'sentence', min: 7, max: 12, display: 'Đoạn văn hoặc bài văn (Gợi ý tham khảo: khoảng 7–12 câu)', isExplicit: false };
 }
 
 /**
@@ -164,7 +387,8 @@ export function analyzePromptSemantics(
   difficulty: DifficultyLevel = 'co_ban',
   selectedDirectionId?: string | null,
   selectedObjectId?: string | null,
-  customObjectName?: string
+  customObjectName?: string,
+  selectedFormatId?: string | null
 ): SemanticAnalysisResult {
   const p = promptText.trim();
   const pLower = p.toLowerCase();
@@ -208,11 +432,71 @@ export function analyzePromptSemantics(
     }
   }
 
-  // 2. PHÂN BIỆT RÕ RÀNG 3 LOẠI LỰA CHỌN THEO ĐÚNG BẢN CHẤT NGỮ NGHĨA:
-  // LOẠI A: Lựa chọn đối tượng (Ví dụ: "Chọn một đồ vật gần gũi (hộp bút, chiếc cặp, đồng hồ, bảng lớp...) và viết đoạn văn...")
-  // Cùng một thể loại miêu tả và nhiệm vụ viết, học sinh chỉ chọn 1 đối tượng cụ thể để tả.
-  const isObjectSelectionPrompt = 
+  // 2. PHÂN BIỆT RÕ RÀNG CÁC LOẠI LỰA CHỌN THEO ĐÚNG BẢN CHẤT NGỮ NGHĨA (GDPT 2018):
+  // BÀI 1 LỚP 1: Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bố, mẹ, ông hoặc bà
+  const isFamilyLoveGrade1Prompt =
+    (grade === 1 || pLower.includes('1–2 câu') || pLower.includes('1-2 câu')) &&
+    (pLower.includes('tình cảm') || pLower.includes('yêu thương')) &&
+    (pLower.includes('bố') || pLower.includes('mẹ')) &&
+    (pLower.includes('ông') || pLower.includes('bà'));
+
+  // BÀI 2 LỚP 1: Giới thiệu bản thân (họ tên, lớp, sở thích)
+  const isSelfIntroGrade1Prompt =
+    (grade === 1 || pLower.includes('1–2 câu') || pLower.includes('1-2 câu')) &&
+    pLower.includes('giới thiệu') &&
+    (pLower.includes('họ tên') || pLower.includes('tên')) &&
+    (pLower.includes('lớp') || pLower.includes('sở thích'));
+
+  // BÀI 3 LỚP 1: Quan sát tranh mèo con (hình dáng hoặc hành động)
+  const isCatObservationGrade1Prompt =
+    (pLower.includes('mèo') || pLower.includes('mèo con')) &&
+    (pLower.includes('tranh') || pLower.includes('hình dáng') || pLower.includes('hành động'));
+
+  // BÀI 4 LỚP 2: Tin nhắn ngắn cảm ơn hoặc xin lỗi
+  const isMessageThanksOrApologyGrade2Prompt =
+    (pLower.includes('tin nhắn') || pLower.includes('lời nhắn')) &&
+    pLower.includes('cảm ơn') &&
+    pLower.includes('xin lỗi');
+
+  // BÀI 5 LỚP 2: Đoạn văn ngắn từ 3 đến 5 câu nói lên tình cảm yêu mến, kính trọng đối với ông hoặc bà
+  const isGrandparentLoveGrade2Prompt =
+    !isFamilyLoveGrade1Prompt &&
+    (isAboutGrandmother(pLower) || isAboutGrandfather(pLower)) &&
+    (pLower.includes('kính trọng') || pLower.includes('yêu mến') || (pLower.includes('tình cảm') && (pLower.includes('đoạn văn') || pLower.includes('3 đến 5 câu') || pLower.includes('3-5 câu') || pLower.includes('3–5 câu'))));
+
+  // BÀI 6 LỚP 5: Kể lại kỷ niệm sâu sắc giữa em và một thầy giáo hoặc cô giáo đã dạy dỗ, nâng đỡ em tiến bộ
+  const isTeacherMemoryGrade5Prompt =
+    (pLower.includes('thầy giáo') || pLower.includes('cô giáo') || pLower.includes('thầy cô') || (hasWord(pLower, 'thầy') && hasWord(pLower, 'cô'))) &&
+    (pLower.includes('kỷ niệm') || pLower.includes('dạy dỗ') || pLower.includes('nâng đỡ') || pLower.includes('tiến bộ'));
+
+  // BÀI VĂN TẢ CÂY BÓNG MÁT (LỖI 1 - Cây bàng, cây phượng vĩ hoặc cây đa trên sân trường)
+  const isTreeSelectionPrompt = 
     (
+      pLower.includes('cây bóng mát') || 
+      pLower.includes('tả một cây') || 
+      pLower.includes('miêu tả một cây') || 
+      (pLower.includes('cây') && (pLower.includes('cây bàng') || pLower.includes('phượng vĩ') || pLower.includes('cây đa')))
+    ) && (
+      pLower.includes('sân trường') || 
+      pLower.includes('bóng mát') ||
+      pLower.includes('cây bóng mát')
+    );
+
+  // LỰA CHỌN HÌNH THỨC BÀI VIẾT (LỖI 2 - Viết một đoạn văn (hoặc bài văn ngắn))
+  const isFormatSelectionPrompt = 
+    (
+      pLower.includes('đoạn văn (hoặc bài văn') ||
+      pLower.includes('đoạn văn hoặc bài văn') ||
+      pLower.includes('bài văn (hoặc đoạn văn') ||
+      pLower.includes('bài văn hoặc đoạn văn') ||
+      pLower.includes('hoặc bài văn ngắn') ||
+      pLower.includes('hoặc đoạn văn ngắn')
+    );
+
+  // LỰA CHỌN ĐỒ VẬT (Hộp bút, chiếc cặp, đồng hồ, bảng lớp...)
+  const isObjectSelectionPrompt = 
+    !isTreeSelectionPrompt &&
+    !isFamilyLoveGrade1Prompt && (
       pLower.includes('chọn một đồ vật') ||
       pLower.includes('chọn 1 đồ vật') ||
       pLower.includes('chọn đồ vật') ||
@@ -220,35 +504,197 @@ export function analyzePromptSemantics(
       (pLower.includes('đồ vật') && (pLower.includes('hộp bút') || pLower.includes('chiếc cặp') || pLower.includes('đồng hồ') || pLower.includes('bảng lớp')))
     ) && (pLower.includes('tả') || pLower.includes('miêu tả') || pLower.includes('đoạn văn'));
 
-  // LOẠI C: Lựa chọn nhiệm vụ (Ví dụ: "Kể lại một việc tốt HOẶC nêu suy nghĩ về việc làm tốt")
-  // Đề mở ra hai nhiệm vụ khác nhau: kể chuyện (tự sự) hoặc nêu ý kiến (nghị luận).
+  // LỰA CHỌN NHIỆM VỤ (Ví dụ: "Kể lại một việc tốt HOẶC nêu suy nghĩ về việc làm tốt")
   const isTaskSelectionPrompt = 
+    !isTreeSelectionPrompt &&
+    !isFormatSelectionPrompt &&
     !isObjectSelectionPrompt &&
+    !isTeacherMemoryGrade5Prompt &&
+    !isMessageThanksOrApologyGrade2Prompt &&
     (pLower.includes('kể') && (pLower.includes('nêu suy nghĩ') || pLower.includes('nêu ý kiến') || pLower.includes('bày tỏ cảm xúc')) && (pLower.includes('hoặc') || pLower.includes('hay')));
 
-  // LOẠI B: Lựa chọn hướng viết (Ví dụ: "Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường đi xa", "Tả ngôi trường HOẶC góc sân trường")
-  // Hai hướng có đối tượng người nhận/không gian và nội dung khác biệt.
+  // LỰA CHỌN HƯỚNG VIẾT
   const isDirectionSelectionPrompt = 
+    !isTreeSelectionPrompt &&
+    !isFormatSelectionPrompt &&
     !isObjectSelectionPrompt && 
     !isTaskSelectionPrompt && 
+    !isFamilyLoveGrade1Prompt &&
+    !isSelfIntroGrade1Prompt &&
     (
-      ((pLower.includes('thư') || pLower.includes('bức thư')) && (pLower.includes('ông') || pLower.includes('bà')) && (pLower.includes('bạn thân') || pLower.includes('chuyển trường') || pLower.includes('bạn'))) ||
-      ((pLower.includes('ngôi trường') || pLower.includes('trường')) && (pLower.includes('góc sân') || pLower.includes('sân trường'))) ||
-      (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà')) && (pLower.includes(' hoặc ') || pLower.includes(' hay '))) ||
+      isCatObservationGrade1Prompt ||
+      isMessageThanksOrApologyGrade2Prompt ||
+      isGrandparentLoveGrade2Prompt ||
+      isTeacherMemoryGrade5Prompt ||
+      (((pLower.includes('thư') || pLower.includes('bức thư')) && (isAboutGrandmother(pLower) || isAboutGrandfather(pLower)) && (pLower.includes('bạn thân') || pLower.includes('chuyển trường') || pLower.includes('bạn')))) ||
+      (((pLower.includes('ngôi trường') || (hasWord(pLower, 'trường') && !pLower.includes('cây') && !pLower.includes('chào cờ'))) && (pLower.includes('góc sân') || (pLower.includes('sân trường') && pLower.includes('hoặc'))))) ||
       ((pLower.includes('thư') || pLower.includes('bức thư')) && pLower.includes('người thân') && (pLower.includes('bạn ở xa') || pLower.includes('bạn'))) ||
       (pLower.includes('sách') && pLower.includes('nhân vật') && (pLower.includes('hoặc') || pLower.includes('hay'))) ||
-      (pLower.includes('hoặc') || pLower.includes('hay là'))
-    ) && !pLower.includes('bản thân') && !pLower.includes('giới thiệu bản thân');
+      ((pLower.includes(' hoặc ') || pLower.includes(' hay là ')) && !pLower.includes('bóng mát') && !pLower.includes('cây') && !pLower.includes('bài văn ngắn') && !pLower.includes('bố, mẹ'))
+    ) && !pLower.includes('giới thiệu bản thân');
 
   let choiceType: PromptChoiceType = 'none';
   let objectChoiceQuestion: string | undefined = undefined;
   let availableObjects: ObjectChoiceItem[] | undefined = undefined;
+  let formatChoiceQuestion: string | undefined = undefined;
+  let availableFormats: FormatChoiceItem[] | undefined = undefined;
   let hasMultipleDirections = false;
   const detectedDirections: PromptDirection[] = [];
 
-  if (isObjectSelectionPrompt) {
+  // 1. Phân nhánh BÀI 1 LỚP 1: Lựa chọn người thân (Bố, Mẹ, Ông, Bà)
+  if (isFamilyLoveGrade1Prompt) {
     choiceType = 'object_selection';
-    hasMultipleDirections = false; // LOẠI A: Cùng 1 nhiệm vụ miêu tả, KHÔNG được coi là hai hướng viết phong phú!
+    hasMultipleDirections = false;
+    objectChoiceQuestion = 'Con muốn bày tỏ tình cảm yêu thương với người thân nào?';
+    availableObjects = [
+      { id: 'bo', name: 'Bố', icon: '👨' },
+      { id: 'me', name: 'Mẹ', icon: '👩' },
+      { id: 'ong', name: 'Ông', icon: '👴' },
+      { id: 'ba', name: 'Bà', icon: '👵' }
+    ];
+  }
+  // 2. Phân nhánh BÀI 3 LỚP 1: Quan sát tranh mèo con (Hình dáng hoặc Hành động)
+  else if (isCatObservationGrade1Prompt) {
+    choiceType = 'direction_selection';
+    hasMultipleDirections = true;
+    detectedDirections.push({
+      id: 'ta_hinh_dang',
+      title: 'Tả hình dáng mèo con',
+      mainObject: 'Hình dáng chú mèo con',
+      scope: 'Màu lông, vóc dáng nhỏ nhắn và các bộ phận nổi bật con quan sát thấy trong tranh',
+      recipient: 'Người đọc',
+      purpose: 'Quan sát tranh và viết 1–2 câu tả hình dáng mèo con',
+      pointOfView: 'Em',
+      topicCode: 'CD07',
+      topicName: 'Động vật',
+      icon: '🐱'
+    });
+    detectedDirections.push({
+      id: 'ta_hanh_dong',
+      title: 'Tả hành động mèo con',
+      mainObject: 'Hành động chú mèo con',
+      scope: 'Hành động, cử chỉ đáng yêu của chú mèo con con quan sát thấy trong tranh',
+      recipient: 'Người đọc',
+      purpose: 'Quan sát tranh và viết 1–2 câu tả hành động mèo con',
+      pointOfView: 'Em',
+      topicCode: 'CD07',
+      topicName: 'Động vật',
+      icon: '🐾'
+    });
+  }
+  // 3. Phân nhánh BÀI 4 LỚP 2: Tin nhắn ngắn cảm ơn hoặc xin lỗi bạn
+  else if (isMessageThanksOrApologyGrade2Prompt) {
+    choiceType = 'direction_selection';
+    hasMultipleDirections = true;
+    detectedDirections.push({
+      id: 'tin_nhan_cam_on',
+      title: 'Tin nhắn cảm ơn bạn đã cho em mượn đồ dùng',
+      mainObject: 'Bạn cùng lớp',
+      scope: 'Nhắc lại việc bạn cho mượn đồ dùng học tập và gửi lời cảm ơn chân thành (3–4 câu)',
+      recipient: 'Bạn cùng lớp',
+      purpose: 'Viết tin nhắn ngắn cảm ơn bạn',
+      pointOfView: 'Mình – bạn hoặc tớ – cậu',
+      topicCode: 'CD23',
+      topicName: 'Giao tiếp',
+      icon: '💌'
+    });
+    detectedDirections.push({
+      id: 'tin_nhan_xin_loi',
+      title: 'Tin nhắn xin lỗi bạn vì lỡ làm hỏng vật gì',
+      mainObject: 'Bạn cùng lớp',
+      scope: 'Nêu sự việc sơ ý làm hỏng đồ dùng, gửi lời xin lỗi chân thành và cách khắc phục (3–4 câu)',
+      recipient: 'Bạn cùng lớp',
+      purpose: 'Viết tin nhắn ngắn xin lỗi bạn',
+      pointOfView: 'Mình – bạn hoặc tớ – cậu',
+      topicCode: 'CD23',
+      topicName: 'Giao tiếp',
+      icon: '🙏'
+    });
+  }
+  // 4. Phân nhánh BÀI 5 LỚP 2: Đoạn văn ngắn 3 đến 5 câu thể hiện tình cảm với ông hoặc bà
+  else if (isGrandparentLoveGrade2Prompt) {
+    choiceType = 'direction_selection';
+    hasMultipleDirections = true;
+    detectedDirections.push({
+      id: 'tinh_cam_ong',
+      title: 'Nói lên tình cảm yêu mến, kính trọng đối với ông',
+      mainObject: 'Ông kính yêu',
+      scope: 'Bày tỏ lòng kính trọng, cử chỉ ấm áp của ông và lời hứa chăm ngoan (3–5 câu)',
+      recipient: 'Người đọc',
+      purpose: 'Bày tỏ tình cảm yêu mến, kính trọng đối với ông',
+      pointOfView: 'Cháu – ông',
+      topicCode: 'CD02',
+      topicName: 'Gia đình',
+      icon: '👴'
+    });
+    detectedDirections.push({
+      id: 'tinh_cam_ba',
+      title: 'Nói lên tình cảm yêu mến, kính trọng đối với bà',
+      mainObject: 'Bà kính yêu',
+      scope: 'Bày tỏ lòng kính yêu, sự chăm sóc hiền từ của bà và lời hứa chăm ngoan (3–5 câu)',
+      recipient: 'Người đọc',
+      purpose: 'Bày tỏ tình cảm yêu mến, kính trọng đối với bà',
+      pointOfView: 'Cháu – bà',
+      topicCode: 'CD02',
+      topicName: 'Gia đình',
+      icon: '👵'
+    });
+  }
+  // 5. Phân nhánh BÀI 6 LỚP 5: Kể lại kỷ niệm sâu sắc với thầy giáo hoặc cô giáo
+  else if (isTeacherMemoryGrade5Prompt) {
+    choiceType = 'direction_selection';
+    hasMultipleDirections = true;
+    detectedDirections.push({
+      id: 'ky_niem_thay_giao',
+      title: 'Kể lại kỷ niệm sâu sắc với thầy giáo',
+      mainObject: 'Thầy giáo kính yêu',
+      scope: 'Kỷ niệm thầy ân cần dạy dỗ, nâng đỡ em tiến bộ trong học tập',
+      recipient: 'Người đọc',
+      purpose: 'Kể lại kỷ niệm sâu sắc với thầy giáo',
+      pointOfView: 'Em',
+      topicCode: 'CD04',
+      topicName: 'Thầy cô',
+      icon: '👨‍🏫'
+    });
+    detectedDirections.push({
+      id: 'ky_niem_co_giao',
+      title: 'Kể lại kỷ niệm sâu sắc với cô giáo',
+      mainObject: 'Cô giáo kính yêu',
+      scope: 'Kỷ niệm cô ân cần chỉ bảo, nâng đỡ em tiến bộ trong học tập',
+      recipient: 'Người đọc',
+      purpose: 'Kể lại kỷ niệm sâu sắc với cô giáo',
+      pointOfView: 'Em',
+      topicCode: 'CD04',
+      topicName: 'Thầy cô',
+      icon: '👩‍🏫'
+    });
+  }
+  // 6. Phân nhánh CÂY BÓNG MÁT
+  else if (isTreeSelectionPrompt) {
+    choiceType = 'object_selection';
+    hasMultipleDirections = false; // Lựa chọn cây miêu tả, KHÔNG PHẢI hai hướng viết phong phú!
+    objectChoiceQuestion = 'Con muốn miêu tả cây bóng mát nào?';
+    availableObjects = [
+      { id: 'cay_bang', name: 'Cây bàng', icon: '🌳' },
+      { id: 'cay_phuong', name: 'Cây phượng vĩ', icon: '🌺' },
+      { id: 'cay_da', name: 'Cây đa', icon: '🌿' },
+      { id: 'cay_khac', name: 'Cây bóng mát khác', icon: '✨', isCustom: true }
+    ];
+  } 
+  // 7. Phân nhánh HÌNH THỨC BÀI VIẾT (Đoạn văn vs Bài văn ngắn)
+  else if (isFormatSelectionPrompt) {
+    choiceType = 'format_selection';
+    hasMultipleDirections = false;
+    formatChoiceQuestion = 'Con muốn kể câu chuyện theo hình thức nào?';
+    availableFormats = [
+      { id: 'doan_van', name: 'Viết một đoạn văn', description: 'Một đoạn văn hoàn chỉnh liền mạch, nêu diễn biến và cảm xúc xúc động', icon: '📄' },
+      { id: 'bai_van_ngan', name: 'Viết một bài văn ngắn', description: 'Bài văn ngắn gồm 3 phần: Mở bài, Thân bài, Kết bài sâu sắc', icon: '📖' }
+    ];
+  } 
+  // 8. Phân nhánh LỰA CHỌN ĐỒ VẬT
+  else if (isObjectSelectionPrompt) {
+    choiceType = 'object_selection';
+    hasMultipleDirections = false;
     objectChoiceQuestion = 'Con muốn tả đồ vật nào?';
     availableObjects = [
       { id: 'hop_but', name: 'Hộp bút', icon: '✏️' },
@@ -257,7 +703,9 @@ export function analyzePromptSemantics(
       { id: 'bang_lop', name: 'Bảng lớp', icon: '📋' },
       { id: 'do_vat_khac', name: 'Đồ vật khác', icon: '✨', isCustom: true }
     ];
-  } else if (isTaskSelectionPrompt) {
+  } 
+  // 9. Phân nhánh LỰA CHỌN NHIỆM VỤ
+  else if (isTaskSelectionPrompt) {
     choiceType = 'task_selection';
     hasMultipleDirections = true;
     detectedDirections.push({
@@ -284,11 +732,13 @@ export function analyzePromptSemantics(
       topicName: 'Việc tốt',
       icon: '💡'
     });
-  } else if (isDirectionSelectionPrompt) {
+  } 
+  // 10. Phân nhánh LỰA CHỌN HƯỚNG VIẾT KHÁC
+  else if (isDirectionSelectionPrompt) {
     choiceType = 'direction_selection';
     hasMultipleDirections = true;
 
-    // Trường hợp 1: Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường đi xa (Đề kiểm thử trọng tâm)
+    // Viết thư thăm hỏi ông bà HOẶC bạn thân chuyển trường đi xa
     if (
       (pLower.includes('thư') || pLower.includes('bức thư')) && 
       (pLower.includes('ông') || pLower.includes('bà')) && 
@@ -319,7 +769,7 @@ export function analyzePromptSemantics(
         icon: '🎒'
       });
     }
-    // Trường hợp 2: Tả ngôi trường HOẶC góc sân trường
+    // Tả ngôi trường HOẶC góc sân trường
     else if ((pLower.includes('ngôi trường') || pLower.includes('trường')) && (pLower.includes('góc sân') || pLower.includes('sân trường'))) {
       detectedDirections.push({
         id: 'ngoi_truong',
@@ -346,34 +796,7 @@ export function analyzePromptSemantics(
         icon: '🌿'
       });
     }
-    // Trường hợp 3: Kỷ niệm với ông HOẶC bà
-    else if (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà')) && (pLower.includes(' hoặc ') || pLower.includes(' hay '))) {
-      detectedDirections.push({
-        id: 'ong',
-        title: 'Kể lại kỷ niệm đáng nhớ với ông',
-        mainObject: 'Kỷ niệm đáng nhớ với ông',
-        scope: 'Lời dạy bảo ân cần, cử chỉ ấm áp của ông và bài học đạo đức con luôn ghi nhớ',
-        recipient: 'Người đọc',
-        purpose: 'Kể lại kỷ niệm sâu sắc với ông và bộc lộ lòng biết ơn',
-        pointOfView: 'Cháu – ông',
-        topicCode: 'CD02',
-        topicName: 'Gia đình',
-        icon: '👴'
-      });
-      detectedDirections.push({
-        id: 'ba',
-        title: 'Kể lại kỷ niệm đáng nhớ với bà',
-        mainObject: 'Kỷ niệm đáng nhớ với bà',
-        scope: 'Lời ru, câu chuyện cổ tích, sự chăm sóc chu đáo của bà và lòng biết ơn của cháu',
-        recipient: 'Người đọc',
-        purpose: 'Kể lại kỷ niệm sâu sắc với bà và bộc lộ lòng biết ơn',
-        pointOfView: 'Cháu – bà',
-        topicCode: 'CD02',
-        topicName: 'Gia đình',
-        icon: '👵'
-      });
-    }
-    // Trường hợp 4: Viết thư cho người thân HOẶC bạn ở xa
+    // Viết thư cho người thân HOẶC bạn ở xa
     else if ((pLower.includes('thư') || pLower.includes('bức thư')) && pLower.includes('người thân') && (pLower.includes('bạn ở xa') || pLower.includes('bạn'))) {
       detectedDirections.push({
         id: 'thu_nguoi_than',
@@ -400,7 +823,7 @@ export function analyzePromptSemantics(
         icon: '🤝'
       });
     }
-    // Trường hợp 5: Giới thiệu cuốn sách HOẶC nhân vật em yêu thích
+    // Giới thiệu cuốn sách HOẶC nhân vật em yêu thích
     else if (pLower.includes('sách') && pLower.includes('nhân vật')) {
       detectedDirections.push({
         id: 'gioi_thieu_sach',
@@ -427,33 +850,40 @@ export function analyzePromptSemantics(
         icon: '✨'
       });
     }
-    // Phân tách tự động tổng quát cho mọi đề chứa "hoặc" / "hay là"
+    // Phân tách tự động an toàn bên ngoài dấu ngoặc đơn
     else {
-      const parts = p.split(/\bhoặc\b|\bhay là\b/i);
-      if (parts.length >= 2 && parts[0].trim().length > 4 && parts[1].trim().length > 4) {
-        const clean1 = parts[0].replace(/^viết\s*(một\s*)?(đoạn\s*văn)?\s*(kể|tả|nêu|về)?/i, '').trim();
-        const clean2 = parts[1].replace(/mà\s*em\s*(yêu\s*thích|thích\s*nhất|nhớ\s*nhất).*/i, '').trim();
+      const parts = splitOutsideParentheses(p);
+      if (parts.length >= 2 && parts[0].trim().length > 3 && parts[1].trim().length > 3) {
+        const sanitizeTitle = (s: string) => {
+          return s
+            .replace(/^[\s(\[{,.;:!?\-–—]+|[\s)\]},.;:!?\-–—]+$/g, '')
+            .trim();
+        };
+        const clean1 = sanitizeTitle(parts[0].replace(/^viết\s*(một\s*)?(đoạn\s*văn|bài\s*văn)?\s*(kể|tả|nêu|về)?/i, ''));
+        const clean2 = sanitizeTitle(parts[1].replace(/mà\s*em\s*(yêu\s*thích|thích\s*nhất|nhớ\s*nhất).*/i, ''));
         const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-        detectedDirections.push({
-          id: 'dir_1',
-          title: cap(clean1.length > 50 ? clean1.slice(0, 48) + '...' : clean1),
-          mainObject: cap(clean1.slice(0, 30)),
-          scope: 'Nội dung và chi tiết bám sát theo cách viết thứ nhất',
-          recipient: 'Người đọc',
-          purpose: 'Viết bài theo hướng thứ nhất',
-          pointOfView: 'Ngôi thứ nhất (Em / Con)',
-          icon: '✨'
-        });
-        detectedDirections.push({
-          id: 'dir_2',
-          title: cap(clean2.length > 50 ? clean2.slice(0, 48) + '...' : clean2),
-          mainObject: cap(clean2.slice(0, 30)),
-          scope: 'Nội dung và chi tiết bám sát theo cách viết thứ hai',
-          recipient: 'Người đọc',
-          purpose: 'Viết bài theo hướng thứ hai',
-          pointOfView: 'Ngôi thứ nhất (Em / Con)',
-          icon: '🌟'
-        });
+        if (clean1.length > 2 && clean2.length > 2) {
+          detectedDirections.push({
+            id: 'dir_1',
+            title: cap(clean1.length > 50 ? clean1.slice(0, 48) + '...' : clean1),
+            mainObject: cap(clean1.slice(0, 30)),
+            scope: 'Nội dung và chi tiết bám sát theo cách viết thứ nhất',
+            recipient: 'Người đọc',
+            purpose: 'Viết bài theo hướng thứ nhất',
+            pointOfView: 'Ngôi thứ nhất (Em / Con)',
+            icon: '✨'
+          });
+          detectedDirections.push({
+            id: 'dir_2',
+            title: cap(clean2.length > 50 ? clean2.slice(0, 48) + '...' : clean2),
+            mainObject: cap(clean2.slice(0, 30)),
+            scope: 'Nội dung và chi tiết bám sát theo cách viết thứ hai',
+            recipient: 'Người đọc',
+            purpose: 'Viết bài theo hướng thứ hai',
+            pointOfView: 'Ngôi thứ nhất (Em / Con)',
+            icon: '🌟'
+          });
+        }
       }
     }
   }
@@ -505,56 +935,94 @@ export function analyzePromptSemantics(
     genre = 'huong_dan';
   } else if (pLower.includes('viết câu') || pLower.includes('đặt câu') || pLower.includes('1–2 câu') || pLower.includes('1-2 câu') || pLower.includes('2–3 câu') || pLower.includes('2-3 câu')) {
     genre = 'viet_cau';
+  } else if (isTaskSelectionPrompt) {
+    genre = selectedDirectionId === 'task_neu_y_kien' ? 'neu_y_kien' : 'ke_chuyen';
+  } else if (isTeacherMemoryGrade5Prompt) {
+    genre = 'ke_chuyen';
+  } else if (pLower.includes('tưởng tượng') || pLower.includes('nhập vai') || pLower.includes('hóa thân') || pLower.includes('sáng tạo')) {
+    genre = 'sang_tao';
   } else if (pLower.includes('nêu ý kiến') || pLower.includes('ý kiến của em') || pLower.includes('suy nghĩ của em')) {
     genre = 'neu_y_kien';
   } else if (pLower.includes('tình cảm') || pLower.includes('cảm xúc') || pLower.includes('lòng biết ơn') || pLower.includes('kính yêu') || pLower.includes('thương nhớ')) {
     genre = 'tinh_cam_cam_xuc';
   } else if (pLower.includes('thuật lại') || pLower.includes('chứng kiến')) {
     genre = 'thuat_lai';
-  } else if (pLower.includes('kể chuyện') || pLower.includes('kể lại câu chuyện') || pLower.includes('kể lại sự việc') || pLower.includes('kể lại kỷ niệm') || pLower.includes('kể lại trải nghiệm') || pLower.includes('kể về')) {
+  } else if (pLower.includes('kể') || pLower.includes('kể chuyện') || pLower.includes('kể lại') || pLower.includes('kỷ niệm')) {
     genre = 'ke_chuyen';
   } else if (pLower.includes('miêu tả') || pLower.includes('tả cảnh') || pLower.includes('tả người') || pLower.includes('tả đồ vật') || pLower.includes('tả con vật') || pLower.includes('tả cây') || pLower.includes('tả ngôi trường') || pLower.includes('tả góc sân') || pLower.startsWith('tả ')) {
     genre = 'mieu_ta';
-  } else if (pLower.includes('tưởng tượng') || pLower.includes('nhập vai') || pLower.includes('hóa thân') || pLower.includes('sáng tạo')) {
-    genre = 'sang_tao';
   }
 
   // 5. Nhận diện nhóm chủ đề (CD01 - CD25)
   let topicCode = 'CD25';
   let topicName = 'Chủ đề tự do';
 
-  if (pLower.includes('bản thân') || pLower.includes('chính mình') || pLower.includes('họ tên') || pLower.includes('sở thích của em')) {
-    topicCode = 'CD01'; topicName = 'Bản thân';
-  } else if (pLower.includes('ông') || pLower.includes('bà') || pLower.includes('bố') || pLower.includes('mẹ') || pLower.includes('cha') || pLower.includes('gia đình') || pLower.includes('anh trai') || pLower.includes('chị gái') || pLower.includes('em bé')) {
-    topicCode = 'CD02'; topicName = 'Gia đình';
+  // Ưu tiên 1: Cây cối / Thiên nhiên (LỖI 1 - Cây bóng mát, cây bàng, phượng vĩ, cây đa)
+  if (isTreeSelectionPrompt || pLower.includes('cây bóng mát') || pLower.includes('cây bàng') || pLower.includes('phượng vĩ') || pLower.includes('cây đa') || (pLower.includes('cây') && (pLower.includes('sân trường') || pLower.includes('bóng mát')))) {
+    topicCode = 'CD08'; 
+    topicName = 'Thiên nhiên – Cây cối';
+  } 
+  // Ưu tiên 2: Tình yêu thương, đùm bọc, sẻ chia (LỖI 2 - Kể chuyện con người yêu thương nhau)
+  else if (isFormatSelectionPrompt || pLower.includes('yêu thương') || pLower.includes('đùm bọc') || pLower.includes('sự sẻ chia') || pLower.includes('con người với con người')) {
+    topicCode = 'CD13'; 
+    topicName = 'Tình yêu thương – Sự sẻ chia';
+  }
+  // Ưu tiên 3: Hoạt động trường học, chào cờ (LỖI 3 - Thuật lại buổi lễ chào cờ)
+  else if (pLower.includes('chào cờ') || pLower.includes('lễ chào cờ') || (pLower.includes('thuật lại') && (pLower.includes('trường') || pLower.includes('lớp')))) {
+    topicCode = 'CD05'; 
+    topicName = 'Trường học – Hoạt động tập thể';
+  }
+  // Ưu tiên 4: Bản thân
+  else if (pLower.includes('bản thân') || pLower.includes('chính mình') || pLower.includes('họ tên') || pLower.includes('sở thích của em')) {
+    topicCode = 'CD01'; 
+    topicName = 'Bản thân';
+  } 
+  // Ưu tiên 5: Gia đình (Dùng hàm kiểm tra chuẩn ranh giới từ để không nhầm "cây bàng", "đề bài", "bài văn")
+  else if (isAboutGrandfather(pLower) || isAboutGrandmother(pLower) || pLower.includes('bố') || pLower.includes('mẹ') || pLower.includes('cha') || pLower.includes('gia đình') || pLower.includes('anh trai') || pLower.includes('chị gái') || pLower.includes('em bé')) {
+    topicCode = 'CD02'; 
+    topicName = 'Gia đình';
   } else if (pLower.includes('bạn thân') || pLower.includes('người bạn') || pLower.includes('bạn bè') || pLower.includes('bạn cùng lớp') || pLower.includes('chuyển trường')) {
-    topicCode = 'CD03'; topicName = 'Bạn bè';
+    topicCode = 'CD03'; 
+    topicName = 'Bạn bè';
   } else if (pLower.includes('thầy') || pLower.includes('cô giáo') || pLower.includes('thầy giáo') || pLower.includes('cô chủ nhiệm')) {
-    topicCode = 'CD04'; topicName = 'Thầy cô';
+    topicCode = 'CD04'; 
+    topicName = 'Thầy cô';
   } else if (pLower.includes('ngôi trường') || pLower.includes('trường tiểu học') || pLower.includes('lớp học') || pLower.includes('sân trường') || pLower.includes('góc sân')) {
-    topicCode = 'CD05'; topicName = 'Trường lớp';
+    topicCode = 'CD05'; 
+    topicName = 'Trường lớp';
   } else if (pLower.includes('hộp bút') || pLower.includes('cặp sách') || pLower.includes('cây bút') || pLower.includes('thước kẻ') || pLower.includes('gấu bông') || pLower.includes('đồ chơi') || pLower.includes('đồ dùng')) {
-    topicCode = 'CD06'; topicName = 'Đồ vật';
+    topicCode = 'CD06'; 
+    topicName = 'Đồ vật';
   } else if (pLower.includes('chú chó') || pLower.includes('mèo con') || pLower.includes('con gà') || pLower.includes('con chim') || pLower.includes('con vật')) {
-    topicCode = 'CD07'; topicName = 'Động vật';
-  } else if (pLower.includes('cây bàng') || pLower.includes('cây phượng') || pLower.includes('cây bóng mát') || pLower.includes('hoa sen') || pLower.includes('hoa hồng') || pLower.includes('bồn hoa') || pLower.includes('vườn cây')) {
-    topicCode = 'CD08'; topicName = 'Thực vật';
+    topicCode = 'CD07'; 
+    topicName = 'Động vật';
+  } else if (pLower.includes('hoa sen') || pLower.includes('hoa hồng') || pLower.includes('bồn hoa') || pLower.includes('vườn cây')) {
+    topicCode = 'CD08'; 
+    topicName = 'Thực vật';
   } else if (pLower.includes('mưa rào') || pLower.includes('bình minh') || pLower.includes('hoàng hôn') || pLower.includes('bầu trời') || pLower.includes('dòng sông') || pLower.includes('biển')) {
-    topicCode = 'CD09'; topicName = 'Thiên nhiên';
+    topicCode = 'CD09'; 
+    topicName = 'Thiên nhiên';
   } else if (pLower.includes('quê hương') || pLower.includes('làng quê') || pLower.includes('thành phố') || pLower.includes('danh lam thắng cảnh')) {
-    topicCode = 'CD10'; topicName = 'Quê hương';
+    topicCode = 'CD10'; 
+    topicName = 'Quê hương';
   } else if (pLower.includes('tết') || pLower.includes('trung thu') || pLower.includes('lễ hội') || pLower.includes('hội chợ')) {
-    topicCode = 'CD11'; topicName = 'Lễ hội';
+    topicCode = 'CD11'; 
+    topicName = 'Lễ hội';
   } else if (pLower.includes('dã ngoại') || pLower.includes('tham quan') || pLower.includes('trải nghiệm') || pLower.includes('cắm trại')) {
-    topicCode = 'CD12'; topicName = 'Hoạt động trải nghiệm';
+    topicCode = 'CD12'; 
+    topicName = 'Hoạt động trải nghiệm';
   } else if (pLower.includes('việc tốt') || pLower.includes('giúp đỡ') || pLower.includes('nhặt của rơi') || pLower.includes('chia sẻ')) {
-    topicCode = 'CD13'; topicName = 'Việc tốt';
+    topicCode = 'CD13'; 
+    topicName = 'Việc tốt';
   } else if (pLower.includes('sách') || pLower.includes('truyện') || pLower.includes('nhân vật cổ tích')) {
-    topicCode = 'CD15'; topicName = 'Sách và truyện';
+    topicCode = 'CD15'; 
+    topicName = 'Sách và truyện';
   } else if (pLower.includes('ước mơ') || pLower.includes('lớn lên')) {
-    topicCode = 'CD16'; topicName = 'Ước mơ';
+    topicCode = 'CD16'; 
+    topicName = 'Ước mơ';
   } else if (pLower.includes('môi trường') || pLower.includes('rác') || pLower.includes('trồng cây')) {
-    topicCode = 'CD17'; topicName = 'Môi trường';
+    topicCode = 'CD17'; 
+    topicName = 'Môi trường';
   }
 
   // 6. Nhận diện các mã nhiệm vụ (01 đến 64)
@@ -564,12 +1032,13 @@ export function analyzePromptSemantics(
   for (const task of WRITING_TASKS_CATALOG) {
     let matches = false;
     if (task.genre === genre && task.targetGrades.includes(grade)) {
-      if (task.code === 'NV40' && genre === 'viet_thu' && (pLower.includes('thăm hỏi') || pLower.includes('ông') || pLower.includes('bà'))) matches = true;
+      if (task.code === 'NV40' && genre === 'viet_thu' && (pLower.includes('thăm hỏi') || isAboutGrandfather(pLower) || isAboutGrandmother(pLower))) matches = true;
       else if (task.code === 'NV41' && genre === 'viet_thu' && (pLower.includes('bạn thân') || pLower.includes('chuyển trường'))) matches = true;
       else if (task.code === 'NV44' && genre === 'loi_nhan') matches = true;
       else if (task.code === 'NV37' && genre === 'neu_y_kien') matches = true;
-      else if (task.code === 'NV17' && genre === 'ke_chuyen' && pLower.includes('kỷ niệm')) matches = true;
+      else if (task.code === 'NV17' && genre === 'ke_chuyen' && (pLower.includes('kỷ niệm') || isTeacherMemoryGrade5Prompt)) matches = true;
       else if (task.code === 'NV16' && genre === 'ke_chuyen' && (pLower.includes('trải nghiệm') || pLower.includes('tham quan'))) matches = true;
+      else if (task.code === 'NV28' && genre === 'mieu_ta' && isTreeSelectionPrompt) matches = true;
       else if (task.code === 'NV29' && genre === 'mieu_ta' && (pLower.includes('góc sân') || pLower.includes('góc học tập'))) matches = true;
       else if (task.code === 'NV27' && genre === 'mieu_ta' && (pLower.includes('ngôi trường') || pLower.includes('cảnh'))) matches = true;
       else if (task.code === 'NV08' && genre === 'viet_doan_van' && pLower.includes('giới thiệu')) matches = true;
@@ -592,8 +1061,9 @@ export function analyzePromptSemantics(
     else if (genre === 'loi_nhan') { detectedTaskCodes.push('NV44'); detectedTaskLabels.push('Viết lời nhắn'); }
     else if (genre === 'neu_y_kien') { detectedTaskCodes.push('NV37'); detectedTaskLabels.push('Nêu ý kiến'); }
     else if (genre === 'tinh_cam_cam_xuc') { detectedTaskCodes.push('NV11'); detectedTaskLabels.push('Viết đoạn văn nêu cảm xúc'); }
-    else if (genre === 'ke_chuyen') { detectedTaskCodes.push('NV09'); detectedTaskLabels.push('Viết đoạn văn kể chuyện'); }
-    else if (genre === 'mieu_ta') { detectedTaskCodes.push('NV10'); detectedTaskLabels.push('Viết đoạn văn miêu tả'); }
+    else if (genre === 'thuat_lai') { detectedTaskCodes.push('NV12'); detectedTaskLabels.push('Thuật lại sự việc theo trình tự thời gian'); }
+    else if (genre === 'ke_chuyen') { detectedTaskCodes.push(isTeacherMemoryGrade5Prompt ? 'NV17' : 'NV09'); detectedTaskLabels.push(isTeacherMemoryGrade5Prompt ? 'Kể lại kỷ niệm sâu sắc' : 'Viết bài văn kể chuyện'); }
+    else if (genre === 'mieu_ta') { detectedTaskCodes.push(isTreeSelectionPrompt ? 'NV28' : 'NV10'); detectedTaskLabels.push(isTreeSelectionPrompt ? 'Miêu tả cây cối' : 'Viết đoạn văn miêu tả'); }
     else if (genre === 'viet_cau') { detectedTaskCodes.push('NV01'); detectedTaskLabels.push('Viết câu'); }
     else { detectedTaskCodes.push('NV08'); detectedTaskLabels.push('Viết đoạn văn'); }
   }
@@ -605,9 +1075,106 @@ export function analyzePromptSemantics(
   let audienceOrRecipient = 'Người đọc bài văn của em';
   let pointOfView = 'Ngôi thứ nhất (Em / Con)';
   let selectedObjectName: string | null = null;
+  const activeFormatId = selectedFormatId || (isFormatSelectionPrompt ? 'doan_van' : null);
 
-  // Xử lý LOẠI A - Lựa chọn đối tượng
-  if (choiceType === 'object_selection') {
+  // Xử lý CÂY BÓNG MÁT (LỖI 1)
+  if (isTreeSelectionPrompt) {
+    topicCode = 'CD08';
+    topicName = 'Thiên nhiên – Cây cối';
+    genre = 'mieu_ta';
+    if (!detectedTaskCodes.includes('NV28')) {
+      detectedTaskCodes.unshift('NV28');
+      detectedTaskLabels.unshift('Miêu tả cây cối');
+    }
+
+    if (selectedObjectId === 'cay_bang') {
+      mainObject = 'Cây bàng trên sân trường';
+      coreSubject = 'Miêu tả cây bàng trên sân trường gắn với kỷ niệm của em';
+      selectedObjectName = 'Cây bàng';
+      writingScope = 'Gốc rễ vững chãi, thân cây xù xì, tán lá xòe rộng như chiếc ô xanh khổng lồ, lá đổi màu theo mùa và kỷ niệm rộn rã giờ ra chơi dưới bóng mát';
+    } else if (selectedObjectId === 'cay_phuong') {
+      mainObject = 'Cây phượng vĩ trên sân trường';
+      coreSubject = 'Miêu tả cây phượng vĩ trên sân trường gắn với kỷ niệm của em';
+      selectedObjectName = 'Cây phượng vĩ';
+      writingScope = 'Thân cây cao lớn, cành lá sum suê như đuôi chim phượng, chùm hoa đỏ rực báo hiệu mùa hè và kỷ niệm chia tay năm học thân thương';
+    } else if (selectedObjectId === 'cay_da') {
+      mainObject = 'Cây đa trên sân trường';
+      coreSubject = 'Miêu tả cây đa trên sân trường gắn với kỷ niệm của em';
+      selectedObjectName = 'Cây đa';
+      writingScope = 'Gốc đa cổ thụ, rễ phụ buông rủ như những chiếc cột chống, vòm lá xanh thẫm tỏa bóng mát chở che và những kỷ niệm êm đềm tuổi thơ';
+    } else if (selectedObjectId === 'cay_khac' || selectedObjectId === 'custom') {
+      const cName = (customObjectName && customObjectName.trim()) || 'Cây bóng mát';
+      mainObject = `${cName} trên sân trường`;
+      coreSubject = `Miêu tả ${cName.toLowerCase()} trên sân trường gắn với kỷ niệm của em`;
+      selectedObjectName = cName;
+      writingScope = `Đặc điểm thân lá, hoa quả, bóng mát và kỷ niệm khó quên cùng thầy cô, bạn bè dưới gốc ${cName.toLowerCase()}`;
+    } else {
+      mainObject = 'Cây bóng mát trên sân trường (Cây bàng, cây phượng vĩ hoặc cây đa)';
+      coreSubject = 'Miêu tả một cây bóng mát trên sân trường gắn với kỷ niệm của em';
+      selectedObjectName = null;
+      writingScope = 'Hình dáng, tán lá rợp mát, hoa lá theo mùa và một kỷ niệm đẹp đẽ, thân thương dưới gốc cây trên sân trường';
+    }
+  }
+  // Xử lý LỰA CHỌN HÌNH THỨC BÀI VIẾT (LỖI 2 - Kể chuyện con người yêu thương nhau)
+  else if (isFormatSelectionPrompt) {
+    topicCode = 'CD13';
+    topicName = 'Tình yêu thương – Sự sẻ chia';
+    genre = 'ke_chuyen';
+    mainObject = 'Câu chuyện cảm động về sự yêu thương, đùm bọc giữa con người với con người';
+    coreSubject = 'Kể lại một câu chuyện cảm động về sự yêu thương, đùm bọc giữa con người với con người';
+    writingScope = 'Hoàn cảnh éo le, hành động sẻ chia kịp thời, tình người ấm áp và bài học nhân ái sâu sắc';
+    if (!detectedTaskCodes.includes('NV09')) {
+      detectedTaskCodes.unshift('NV09');
+      detectedTaskLabels.unshift('Kể lại câu chuyện cảm động');
+    }
+  }
+  // Xử lý THUẬT LẠI BUỔI LỄ CHÀO CỜ (LỖI 3)
+  else if (pLower.includes('chào cờ') || (genre === 'thuat_lai' && pLower.includes('lễ'))) {
+    topicCode = 'CD05';
+    topicName = 'Trường học – Hoạt động tập thể';
+    genre = 'thuat_lai';
+    mainObject = 'Buổi lễ chào cờ đầu tuần ở trường em';
+    coreSubject = 'Thuật lại buổi lễ chào cờ đầu tuần ở trường em theo đúng trình tự thời gian';
+    writingScope = 'Trình tự thời gian: Trước buổi lễ (chuẩn bị, không khí sân trường), Trong buổi lễ (nghi lễ chào cờ, hát Quốc ca, nhận xét thi đua), Sau buổi lễ (lời dặn dò, các lớp về phòng học) và cảm xúc tự hào, phấn khởi của em';
+  }
+  // Xử lý BÀI 1 LỚP 1: Lựa chọn người thân (Bố, Mẹ, Ông, Bà)
+  else if (isFamilyLoveGrade1Prompt) {
+    topicCode = 'CD02';
+    topicName = 'Gia đình';
+    genre = 'viet_cau';
+    if (!detectedTaskCodes.includes('NV01')) {
+      detectedTaskCodes.unshift('NV01');
+      detectedTaskLabels.unshift('Viết câu thể hiện tình cảm');
+    }
+    if (selectedObjectId === 'bo') {
+      mainObject = 'Bố kính yêu';
+      coreSubject = 'Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bố';
+      selectedObjectName = 'Bố';
+      writingScope = 'Bày tỏ tình cảm yêu thương chân thành với bố và lời cảm ơn hoặc lời hứa chăm ngoan';
+    } else if (selectedObjectId === 'me') {
+      mainObject = 'Mẹ kính yêu';
+      coreSubject = 'Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho mẹ';
+      selectedObjectName = 'Mẹ';
+      writingScope = 'Bày tỏ tình cảm yêu thương sâu sắc với mẹ và lời cảm ơn hoặc lời hứa chăm ngoan';
+    } else if (selectedObjectId === 'ong') {
+      mainObject = 'Ông kính yêu';
+      coreSubject = 'Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho ông';
+      selectedObjectName = 'Ông';
+      writingScope = 'Bày tỏ lòng yêu quý, kính trọng ông và lời chúc hoặc lời hứa chăm ngoan';
+    } else if (selectedObjectId === 'ba') {
+      mainObject = 'Bà kính yêu';
+      coreSubject = 'Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bà';
+      selectedObjectName = 'Bà';
+      writingScope = 'Bày tỏ lòng yêu quý, kính trọng bà hiền từ và lời chúc hoặc lời hứa chăm ngoan';
+    } else {
+      mainObject = 'Bố, Mẹ, Ông hoặc Bà';
+      coreSubject = 'Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bố, mẹ, ông hoặc bà';
+      selectedObjectName = null;
+      writingScope = 'Chọn một người thân (bố, mẹ, ông hoặc bà) để bộc lộ tình cảm yêu thương chân thành trong 1–2 câu';
+    }
+  }
+  // Xử lý LOẠI A - Lựa chọn đồ vật (Hộp bút, Cặp, Đồng hồ, Bảng...)
+  else if (isObjectSelectionPrompt || choiceType === 'object_selection') {
     topicCode = 'CD06';
     topicName = 'Đồ vật';
     genre = 'mieu_ta';
@@ -667,9 +1234,56 @@ export function analyzePromptSemantics(
     if (activeDirection.pointOfView) pointOfView = activeDirection.pointOfView;
     if (activeDirection.topicCode) topicCode = activeDirection.topicCode;
     if (activeDirection.topicName) topicName = activeDirection.topicName;
-  } else if (choiceType !== 'object_selection') {
-    if (genre === 'viet_thu') {
-      if (pLower.includes('ông') || pLower.includes('bà')) {
+    if (isTeacherMemoryGrade5Prompt) {
+      genre = 'ke_chuyen';
+      topicCode = 'CD04';
+      topicName = 'Thầy cô';
+    }
+  } else if (choiceType !== 'object_selection' && !isTreeSelectionPrompt && !isFormatSelectionPrompt) {
+    if (isTeacherMemoryGrade5Prompt) {
+      topicCode = 'CD04';
+      topicName = 'Thầy cô';
+      genre = 'ke_chuyen';
+      mainObject = 'Thầy giáo hoặc cô giáo kính yêu';
+      coreSubject = 'Viết bài văn kể lại một kỷ niệm sâu sắc giữa em và một thầy giáo hoặc cô giáo đã dạy dỗ, nâng đỡ em tiến bộ';
+      writingScope = 'Kỷ niệm thầy cô ân cần chỉ bảo, nâng đỡ em vượt qua khó khăn và tiến bộ trong học tập';
+      audienceOrRecipient = 'Người đọc';
+      pointOfView = 'Em';
+    } else if (isMessageThanksOrApologyGrade2Prompt) {
+      topicCode = 'CD23';
+      topicName = 'Giao tiếp';
+      genre = 'loi_nhan';
+      mainObject = 'Bạn cùng lớp';
+      audienceOrRecipient = 'Bạn cùng lớp';
+      coreSubject = 'Viết một tin nhắn ngắn (3–4 câu) cảm ơn bạn hoặc xin lỗi bạn';
+      writingScope = 'Tin nhắn ngắn gửi bạn để cảm ơn vì cho mượn đồ dùng hoặc xin lỗi vì lỡ làm hỏng vật gì';
+      pointOfView = 'Mình – bạn hoặc tớ – cậu';
+    } else if (isGrandparentLoveGrade2Prompt) {
+      topicCode = 'CD02';
+      topicName = 'Gia đình';
+      genre = 'tinh_cam_cam_xuc';
+      mainObject = 'Ông hoặc bà kính yêu';
+      coreSubject = 'Viết đoạn văn ngắn từ 3 đến 5 câu nói lên tình cảm yêu mến, kính trọng của em đối với ông hoặc bà';
+      writingScope = 'Tình cảm kính yêu, sự chăm sóc hiền từ của ông hoặc bà và lời hứa chăm ngoan';
+      pointOfView = 'Cháu – ông/bà';
+    } else if (isCatObservationGrade1Prompt) {
+      topicCode = 'CD07';
+      topicName = 'Động vật';
+      genre = 'viet_cau';
+      mainObject = 'Hình dáng hoặc hành động của mèo con';
+      coreSubject = 'Quan sát tranh chú mèo con và viết 1–2 câu tả hình dáng hoặc hành động của mèo con';
+      writingScope = 'Màu lông, nét đáng yêu hoặc cử chỉ nhanh nhẹn của chú mèo con quan sát trong tranh';
+      pointOfView = 'Em';
+    } else if (isSelfIntroGrade1Prompt) {
+      topicCode = 'CD01';
+      topicName = 'Bản thân';
+      genre = 'viet_cau';
+      mainObject = 'Bản thân em (Họ tên, lớp và sở thích đáng yêu)';
+      coreSubject = 'Viết 1–2 câu giới thiệu họ tên, lớp và sở thích đáng yêu của em';
+      writingScope = 'Họ và tên đầy đủ, lớp học và sở thích ngộ nghĩnh, đáng yêu của em';
+      pointOfView = 'Em';
+    } else if (genre === 'viet_thu') {
+      if (isAboutGrandfather(pLower) || isAboutGrandmother(pLower)) {
         mainObject = 'Ông bà kính yêu';
         audienceOrRecipient = 'Ông bà ở quê';
         coreSubject = 'Viết thư thăm hỏi ông bà';
@@ -689,11 +1303,11 @@ export function analyzePromptSemantics(
       audienceOrRecipient = 'Người thân trong gia đình (Bố, Mẹ, Ông, Bà)';
       coreSubject = 'Viết lời nhắn cho người thân';
       writingScope = 'Lý do, địa điểm, thời gian về và lời nhắn nhủ yêu thương để người nhà yên tâm';
-    } else if (pLower.includes('ngôi trường') && !pLower.includes('góc sân')) {
+    } else if (pLower.includes('ngôi trường') && !pLower.includes('góc sân') && !pLower.includes('cây')) {
       mainObject = 'Ngôi trường tiểu học';
       coreSubject = 'Tả ngôi trường tiểu học của em';
       writingScope = 'Toàn cảnh ngôi trường, dãy lớp học, sân trường và kỷ niệm gắn bó';
-    } else if (pLower.includes('góc sân trường') || (pLower.includes('góc sân') && pLower.includes('trường'))) {
+    } else if (pLower.includes('góc sân trường') || (pLower.includes('góc sân') && pLower.includes('trường') && !pLower.includes('cây'))) {
       mainObject = 'Một góc sân trường';
       coreSubject = 'Tả một góc sân trường em yêu thích';
       writingScope = 'Vị trí góc sân, cảnh vật xung quanh (ghế đá, bồn hoa, ánh nắng) và hoạt động giờ ra chơi';
@@ -701,7 +1315,7 @@ export function analyzePromptSemantics(
       mainObject = 'Bản thân học sinh';
       coreSubject = 'Giới thiệu về bản thân em';
       writingScope = 'Họ tên, sở thích, ước mơ và điểm đặc biệt đáng nhớ của chính em';
-    } else if (pLower.includes('kỷ niệm') && (pLower.includes('ông') || pLower.includes('bà'))) {
+    } else if (pLower.includes('kỷ niệm') && (isAboutGrandfather(pLower) || isAboutGrandmother(pLower))) {
       mainObject = 'Kỷ niệm đáng nhớ với ông bà';
       coreSubject = 'Kể lại một kỷ niệm đáng nhớ với ông bà';
       writingScope = 'Sự việc đáng nhớ, lời dạy bảo, cử chỉ ân cần của ông bà và cảm xúc của em';
@@ -725,37 +1339,122 @@ export function analyzePromptSemantics(
     'TUYỆT ĐỐI KHÔNG dùng một dàn ý mẫu chung sao chép cho các thể loại khác nhau'
   ];
 
-  if (genre === 'viet_thu') {
+  if (isFamilyLoveGrade1Prompt) {
+    compulsoryConstraints.push('Viết đúng 1–2 câu trọn vẹn bày tỏ tình cảm yêu thương với người thân đã chọn');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết thành bài văn hay đoạn văn dài nhiều phần');
+  } else if (isSelfIntroGrade1Prompt) {
+    compulsoryConstraints.push('Viết đúng 1–2 câu giới thiệu đủ 3 thông tin: họ tên, lớp và sở thích đáng yêu');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết dài dòng lan man sang tình cảm gia đình');
+  } else if (isCatObservationGrade1Prompt) {
+    compulsoryConstraints.push('Viết 1–2 câu dựa trên quan sát tranh chú mèo con (tả hình dáng hoặc hành động)');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG tự bịa các chi tiết hành động khi chưa quan sát tranh');
+  } else if (isMessageThanksOrApologyGrade2Prompt) {
+    compulsoryConstraints.push('Viết tin nhắn ngắn (3–4 câu) gửi bạn cùng lớp để cảm ơn hoặc xin lỗi');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG nhắn gửi cho bố mẹ hoặc nói chuyện đi đâu, mấy giờ về');
+  } else if (isGrandparentLoveGrade2Prompt) {
+    compulsoryConstraints.push('Viết đoạn văn ngắn từ 3 đến 5 câu nói lên tình cảm yêu mến, kính trọng');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết lan man thành 7–9 câu hay bài văn 3 phần');
+  } else if (isTeacherMemoryGrade5Prompt) {
+    compulsoryConstraints.push('Viết bài văn hoàn chỉnh gồm 3 phần (Mở bài, Thân bài, Kết bài) kể kỷ niệm với thầy/cô giáo');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG chuyển sang ông bà, gia đình hay bạn bè');
+  } else if (genre === 'viet_thu') {
     negativeConstraints.push('KHÔNG dùng các tiêu đề "Mở đoạn", "Phát triển đoạn", "Kết đoạn" cho dàn ý bức thư');
     compulsoryConstraints.push('Trình bày đầy đủ 5 phần chuẩn mực của bức thư');
   } else if (genre === 'loi_nhan') {
     negativeConstraints.push('KHÔNG ép lời nhắn ngắn thành bài văn dài 3 phần');
     compulsoryConstraints.push('Ghi rõ người nhận, nội dung nhắn gửi ngắn gọn, người gửi và thời gian');
+  } else if (isTreeSelectionPrompt) {
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG chuyển thành bài tả toàn cảnh ngôi trường hay tả góc sân trường chung chung');
+    compulsoryConstraints.push('Tập trung miêu tả cây bóng mát đã chọn và gắn liền với một kỷ niệm đẹp dưới tán cây');
+  } else if (pLower.includes('chào cờ')) {
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG lồng ghép chuyện gia đình, bà ru hay viết thư vào buổi lễ chào cờ');
+    compulsoryConstraints.push('Thuật lại đúng trình tự thời gian của buổi lễ chào cờ đầu tuần ở trường');
   }
 
-  // 9. Xác định độ dài đề xuất theo khối lớp và thể loại
-  // Kiểm tra đề bài có quy định số câu bắt buộc không:
-  const lengthSpecified = /\b\d+\s*[-–]\s*\d+\s*câu\b/i.test(p) || /\b\d+\s*câu\b/i.test(p) || /từ\s*\d+\s*đến\s*\d+\s*câu/i.test(p);
-  let suggestedLength = '4–6 câu hoặc 7–9 câu';
+  // 9. Xác định độ dài và hình thức văn bản
+  const lengthConstraint = parsePromptLength(p, grade, genre, activeFormatId);
+  const lengthSpecified = lengthConstraint.isExplicit;
+  let suggestedLength = lengthConstraint.display;
 
-  if (!lengthSpecified && (choiceType === 'object_selection' || (genre === 'mieu_ta' && pLower.includes('đoạn văn')))) {
-    // Với đề bài không quy định số câu, không được bắt buộc cố định mà đưa ra gợi ý sư phạm linh hoạt
-    suggestedLength = 'Đề bài chưa quy định số câu. Con hãy viết một đoạn văn đủ ý, phù hợp với hướng dẫn của giáo viên (Gợi ý tham khảo: khoảng 5–7 câu).';
-  } else if (genre === 'viet_cau' || pLower.includes('2–3 câu') || pLower.includes('2-3 câu')) {
-    suggestedLength = '2–3 câu hoàn chỉnh';
+  let writingFormat = 'Đoạn văn';
+  if (isFamilyLoveGrade1Prompt || isSelfIntroGrade1Prompt || isCatObservationGrade1Prompt || (grade === 1 && genre === 'viet_cau')) {
+    writingFormat = '1–2 câu hoàn chỉnh';
+    suggestedLength = '1–2 câu hoàn chỉnh (đầu câu viết hoa, cuối câu có dấu chấm)';
+  } else if (isMessageThanksOrApologyGrade2Prompt) {
+    writingFormat = 'Tin nhắn ngắn (3–4 câu)';
+    suggestedLength = 'Tin nhắn ngắn từ 3 đến 4 câu';
+  } else if (isGrandparentLoveGrade2Prompt) {
+    writingFormat = 'Đoạn văn ngắn (3–5 câu)';
+    suggestedLength = 'Đoạn văn ngắn từ 3 đến 5 câu';
+  } else if (isTeacherMemoryGrade5Prompt || isTreeSelectionPrompt || (grade >= 4 && (genre === 'ke_chuyen' || genre === 'mieu_ta') && !pLower.includes('đoạn văn'))) {
+    writingFormat = 'Bài văn hoàn chỉnh (gồm 3 phần: Mở bài, Thân bài, Kết bài)';
+    if (isTeacherMemoryGrade5Prompt) {
+      suggestedLength = 'Bài văn hoàn chỉnh gồm 3 phần: Mở bài, Thân bài, Kết bài (khoảng 15–20 câu)';
+    } else if (isTreeSelectionPrompt) {
+      suggestedLength = 'Bài văn hoàn chỉnh gồm 3 phần: Mở bài, Thân bài, Kết bài (khoảng 12–18 câu hoặc theo hướng dẫn của thầy cô).';
+    }
+  } else if (isFormatSelectionPrompt) {
+    writingFormat = activeFormatId === 'bai_van_ngan' 
+      ? 'Bài văn ngắn (gồm 3 phần: Mở bài, Thân bài, Kết bài)' 
+      : 'Đoạn văn hoàn chỉnh';
+    suggestedLength = activeFormatId === 'bai_van_ngan'
+      ? 'Bài văn ngắn (gồm 3 phần: Mở bài, Thân bài, Kết bài sâu sắc, khoảng 12–18 câu)'
+      : 'Một đoạn văn hoàn chỉnh liền mạch (khoảng 7–10 câu hoặc theo hướng dẫn của thầy cô)';
   } else if (genre === 'viet_thu') {
+    writingFormat = 'Bức thư ngắn (gồm 5 phần chuẩn mực)';
     suggestedLength = 'Thư ngắn (khoảng 80–120 chữ, có đủ 5 phần chuẩn mực của thư)';
   } else if (genre === 'loi_nhan') {
+    writingFormat = 'Lời nhắn / Tin nhắn ngắn';
     suggestedLength = 'Lời nhắn ngắn (khoảng 3–5 câu súc tích)';
-  } else if (grade <= 1) {
-    suggestedLength = '1–2 câu trọn vẹn';
-  } else if (grade === 2) {
-    suggestedLength = '3–5 câu ngắn gọn';
-  } else if (grade === 3) {
-    suggestedLength = '5–7 câu hoặc 7–9 câu';
-  } else if (grade >= 4) {
-    suggestedLength = '8–12 câu hoặc 1–2 đoạn văn hoàn chỉnh';
+  } else if (genre === 'viet_cau') {
+    writingFormat = `${lengthConstraint.display} hoàn chỉnh`;
+    suggestedLength = `${lengthConstraint.display} hoàn chỉnh`;
   }
+
+  const needsImageObservation = Boolean(
+    isCatObservationGrade1Prompt || 
+    pLower.includes('quan sát tranh') || 
+    pLower.includes('nhìn tranh') || 
+    pLower.includes('dựa vào tranh')
+  );
+
+  const taskAnalysis: WritingTaskAnalysis = {
+    pipelineVersion: '2018-v2.0',
+    originalPrompt: p,
+    grade,
+    writingType: genre,
+    genre,
+    topicCode,
+    topicName,
+    mainTask: (detectedTaskLabels && detectedTaskLabels[0]) || 'Viết bài theo yêu cầu đề',
+    targetObject: mainObject,
+    writingFormat,
+    length: {
+      rawText: lengthConstraint.display,
+      unit: lengthConstraint.unit,
+      min: lengthConstraint.min,
+      max: lengthConstraint.max,
+      isExplicit: lengthConstraint.isExplicit,
+      display: lengthConstraint.display
+    },
+    isMultiDirection: hasMultipleDirections,
+    alternatives: detectedDirections.map(d => ({
+      id: d.id,
+      title: d.title,
+      subject: d.title,
+      targetObject: d.mainObject,
+      focusPoint: d.scope,
+      requiredContent: [d.scope],
+      notes: d.purpose,
+      icon: d.icon
+    })),
+    selectedAlternativeId: activeDirection ? activeDirection.id : undefined,
+    needsImageObservation,
+    requiredElements: compulsoryConstraints,
+    forbiddenElements: negativeConstraints,
+    audience: audienceOrRecipient,
+    pointOfView
+  };
 
   return {
     actionVerbs,
@@ -763,6 +1462,10 @@ export function analyzePromptSemantics(
     mainObject,
     writingScope,
     genre,
+    writingFormat,
+    needsImageObservation,
+    lengthConstraint,
+    taskAnalysis,
     topicCode,
     topicName,
     detectedTaskCodes,
@@ -775,6 +1478,9 @@ export function analyzePromptSemantics(
     selectedObjectId: selectedObjectId || null,
     selectedObjectName,
     customObjectName,
+    formatChoiceQuestion,
+    availableFormats,
+    selectedFormatId: activeFormatId,
     hasMultipleDirections,
     detectedDirections,
     selectedDirectionId: activeDirection ? activeDirection.id : null,
@@ -823,6 +1529,499 @@ export function buildGenreStructure(
     `Phạm vi: ${writingScope}`
   ];
   let vocabularySuggestions: VocabularyImageryBank | null = null;
+
+  const promptRaw = semantics.taskAnalysis?.originalPrompt || semantics.coreSubject || '';
+  const pLower = promptRaw.toLowerCase();
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT 1 (LỚP 1 BÀI 1): TÌNH CẢM YÊU THƯƠNG GIA ĐÌNH
+  // Đề: "Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bố, mẹ, ông hoặc bà."
+  // -------------------------------------------------------------
+  if (isFamilyLoveGrade1Prompt(pLower, grade)) {
+    const chosenPerson = semantics.selectedObjectName || 'người thân (Bố, Mẹ, Ông hoặc Bà)';
+    const relKey = semantics.selectedObjectId;
+    let relPoints = ['Bố kính yêu', 'Mẹ yêu quý', 'Ông kính mến', 'Bà hiền từ'];
+    let sampleC1 = `Em yêu ${chosenPerson} nhất trên đời.`;
+    let sampleC2 = `Con hứa sẽ luôn chăm ngoan để ${chosenPerson} luôn vui lòng.`;
+    if (relKey === 'bo') {
+      relPoints = ['Bố kính yêu', 'Bố của em', 'Người bố tuyệt vời', 'Bố thân thương'];
+      sampleC1 = 'Con yêu bố nhiều lắm vì bố luôn chăm sóc và dạy bảo con.';
+      sampleC2 = 'Con hứa sẽ luôn chăm ngoan, học giỏi để bố luôn vui lòng.';
+    } else if (relKey === 'me') {
+      relPoints = ['Mẹ yêu quý', 'Mẹ dịu hiền', 'Người mẹ tuyệt vời', 'Mẹ thân thương'];
+      sampleC1 = 'Em yêu mẹ của em nhất trên đời vì mẹ luôn chăm sóc em từng bữa ăn giấc ngủ.';
+      sampleC2 = 'Con hứa sẽ luôn chăm ngoan, vâng lời để mẹ luôn vui lòng.';
+    } else if (relKey === 'ong') {
+      relPoints = ['Ông kính yêu', 'Ông nội kính mến', 'Ông ngoại kính mến', 'Người ông hiền từ'];
+      sampleC1 = 'Cháu kính yêu ông rất nhiều vì ông luôn dạy bảo cháu những điều hay.';
+      sampleC2 = 'Cháu chúc ông luôn mạnh khỏe và hứa sẽ chăm ngoan để ông vui lòng.';
+    } else if (relKey === 'ba') {
+      relPoints = ['Bà kính yêu', 'Bà nội hiền từ', 'Bà ngoại hiền từ', 'Người bà ấm áp'];
+      sampleC1 = 'Cháu yêu bà nhiều lắm vì bà luôn kể chuyện cổ tích cho cháu nghe.';
+      sampleC2 = 'Cháu kính chúc bà luôn mạnh khỏe và hứa sẽ vâng lời bà dạy bảo.';
+    }
+
+    hoaNhoUnderstand = `Con hãy chọn một người thân trong gia đình (${chosenPerson}) mà con yêu quý nhất, rồi viết 1–2 câu thật tình cảm để gửi tới người ấy nhé!`;
+    specificRequirements = [
+      'Nhiệm vụ: Viết 1–2 câu thể hiện tình cảm yêu thương',
+      `Người nhận: ${chosenPerson}`,
+      'Dung lượng: Đúng 1–2 câu hoàn chỉnh (không viết thành đoạn văn dài hay bài văn)',
+      'Quy tắc câu: Đầu câu viết hoa, cuối câu có dấu chấm kết thúc (.)'
+    ];
+    socraticQuestions = [
+      `Con muốn bày tỏ tình cảm yêu thương với ai trong gia đình (${chosenPerson})?`,
+      'Người thân ấy có nụ cười, cử chỉ chăm sóc hay điều gì làm con thấy ấm áp nhất?',
+      'Con muốn nói lời yêu thương hoặc lời cảm ơn chân thành nào?',
+      'Con có muốn hứa điều gì ngoan ngoãn để người thân luôn vui lòng không?'
+    ];
+    branches = [
+      { id: 'br-1', title: '❤️ Người thân em yêu', icon: '❤️', color: 'rose', points: relPoints },
+      { id: 'br-2', title: '☀️ Cử chỉ yêu thương ấm áp', icon: '☀️', color: 'amber', points: ['Nụ cười hiền hậu', 'Ánh mắt dịu dàng', 'Đôi bàn tay ân cần chăm sóc', 'Lời vỗ về ngọt ngào'] },
+      { id: 'br-3', title: '💬 Lời nói yêu thương', icon: '💬', color: 'purple', points: ['Em yêu ... nhất trên đời', 'Con thương ... rất nhiều', 'Ở bên ... con thấy thật hạnh phúc'] },
+      { id: 'br-4', title: '🌱 Lời hứa chăm ngoan', icon: '🌱', color: 'emerald', points: ['Chăm chỉ học tập', 'Vâng lời dạy bảo', 'Luôn là con ngoan trò giỏi'] },
+      { id: 'br-5', title: '✍️ Quy tắc viết câu lớp 1', icon: '✍️', color: 'sky', points: ['Đầu câu viết hoa', 'Cuối câu có dấu chấm', 'Câu văn đủ ý trọn vẹn'] }
+    ];
+
+    const c1 = [`Câu 1 (Bày tỏ tình cảm): Viết một câu thể hiện tình cảm chân thành với ${chosenPerson}. (Ví dụ: "${sampleC1}")`];
+    const c2 = [`Câu 2 (Cảm ơn hoặc Lời hứa ngoan): Viết câu thứ hai nói lời cảm ơn cử chỉ chăm sóc hoặc lời hứa ngoan. (Ví dụ: "${sampleC2}")`];
+
+    outline = {
+      moDoan: c1,
+      phatTrienDoan: [],
+      ketDoan: c2,
+      genre: 'viet_cau',
+      sections: [
+        { id: 'sec-1', title: 'Câu 1. Bày tỏ tình cảm yêu thương', icon: '❤️', guideNote: 'Nói trực tiếp tình yêu thương ấm áp của con dành cho người thân', bulletPoints: c1 },
+        { id: 'sec-2', title: 'Câu 2. Lời cảm ơn hoặc Lời hứa chăm ngoan', icon: '🌱', guideNote: 'Gửi gắm lời cảm ơn hoặc lời hứa ngoan ngoãn', bulletPoints: c2 }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [
+          { word: 'yêu quý', meaningAndUsage: 'Tình cảm thân thiết, gắn bó sâu sắc' },
+          { word: 'kính trọng', meaningAndUsage: 'Tôn kính và biết ơn người bề trên' },
+          { word: 'hiền hậu', meaningAndUsage: 'Dịu dàng, nụ cười bao dung ấm áp' },
+          { word: 'chăm ngoan', meaningAndUsage: 'Vâng lời người lớn và chăm học' }
+        ],
+        imageries: [
+          { type: 'Hình ảnh ấm áp', example: 'Đôi bàn tay ấm áp xoa đầu em', explanation: 'Gợi cảm giác bình yên được chở che' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Bày tỏ tình cảm', sentence: 'Em yêu mẹ của em nhất trên đời.', whyItIsGood: 'Câu văn ngắn gọn, đúng 1 câu, chan chứa tình yêu thương.' },
+          { type: 'ket_bai', label: 'Lời hứa ngoan', sentence: 'Con hứa sẽ luôn chăm ngoan để bố mẹ vui lòng.', whyItIsGood: 'Câu thứ hai trọn vẹn, thể hiện sự hiếu thảo.' }
+        ],
+        creativeIdeas: ['Con có thể tự tay vẽ một trái tim nhỏ tặng người thân sau khi viết xong bài nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT 2 (LỚP 1 BÀI 2): GIỚI THIỆU BẢN THÂN
+  // Đề: "Viết 1–2 câu giới thiệu họ tên, lớp và sở thích đáng yêu của em."
+  // -------------------------------------------------------------
+  if (isSelfIntroGrade1Prompt(pLower, grade)) {
+    hoaNhoUnderstand = 'Con hãy viết 1–2 câu ngắn gọn để giới thiệu họ tên, lớp học và sở thích đáng yêu của mình với thầy cô và các bạn nhé!';
+    specificRequirements = [
+      'Nhiệm vụ: Viết 1–2 câu giới thiệu bản thân',
+      'Nội dung bắt buộc 1: Giới thiệu họ và tên đầy đủ của em',
+      'Nội dung bắt buộc 2: Lớp học em đang theo học',
+      'Nội dung bắt buộc 3: Sở thích đáng yêu của em (vẽ tranh, đọc sách, đá bóng...)',
+      'Dung lượng: Đúng 1–2 câu hoàn chỉnh'
+    ];
+    socraticQuestions = [
+      'Con tên đầy đủ là gì và con đang là học sinh lớp mấy?',
+      'Con có sở thích gì đáng yêu nhất (vẽ tranh, đọc truyện tranh, xếp hình lego, múa hát hay chơi thể thao)?',
+      'Con đã kiểm tra đầu câu viết hoa, tên riêng viết hoa và cuối câu có dấu chấm chưa?'
+    ];
+    branches = [
+      { id: 'br-1', title: '🌱 Họ và tên của em', icon: '🌱', color: 'emerald', points: ['Ghi rõ họ và tên đầy đủ', 'Viết hoa chữ cái đầu mỗi tiếng trong tên riêng'] },
+      { id: 'br-2', title: '🏫 Lớp và trường của em', icon: '🏫', color: 'purple', points: ['Học sinh lớp 1...', 'Trường Tiểu học...'] },
+      { id: 'br-3', title: '🎨 Sở thích đáng yêu', icon: '🎨', color: 'rose', points: ['Vẽ tranh những bông hoa', 'Đọc truyện tranh', 'Xếp hình lego', 'Chơi đá bóng cùng bạn'] },
+      { id: 'br-4', title: '✨ Điều em thích làm nhất', icon: '✨', color: 'amber', points: ['Cùng bạn vui chơi giờ ra chơi', 'Học tập chăm chỉ mỗi ngày'] },
+      { id: 'br-5', title: '✍️ Quy tắc viết câu', icon: '✍️', color: 'sky', points: ['Đầu câu viết hoa', 'Tên riêng viết hoa', 'Cuối câu đặt dấu chấm'] }
+    ];
+
+    const c1 = ['Câu 1 (Họ tên & Lớp): Con giới thiệu họ tên và lớp học của mình. (Ví dụ: "Em tên là Nguyễn Minh Anh, học sinh lớp 1A trường Tiểu học Thăng Long.")'];
+    const c2 = ['Câu 2 (Sở thích đáng yêu): Con giới thiệu sở thích đặc biệt và đáng yêu của em. (Ví dụ: "Em rất thích vẽ tranh những bông hoa rực rỡ và đọc sách cùng các bạn.")'];
+
+    outline = {
+      moDoan: c1,
+      phatTrienDoan: [],
+      ketDoan: c2,
+      genre: 'viet_cau',
+      sections: [
+        { id: 'sec-1', title: 'Câu 1. Giới thiệu họ tên và lớp học', icon: '🌱', guideNote: 'Nêu tên đầy đủ và lớp học hiện tại của con', bulletPoints: c1 },
+        { id: 'sec-2', title: 'Câu 2. Giới thiệu sở thích đáng yêu', icon: '🎨', guideNote: 'Kể về niềm yêu thích hoặc trò chơi con say mê nhất', bulletPoints: c2 }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [
+          { word: 'đáng yêu', meaningAndUsage: 'Gợi sự thích thú, mến thương' },
+          { word: 'chăm chỉ', meaningAndUsage: 'Cần cù trong học tập và rèn luyện' },
+          { word: 'say mê', meaningAndUsage: 'Yêu thích làm một điều gì đó với tất cả niềm vui' }
+        ],
+        imageries: [
+          { type: 'Gợi tả', example: 'Nụ cười tươi rạng rỡ của bạn học trò lớp Một', explanation: 'Nét hồn nhiên, ngây thơ' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Giới thiệu họ tên và lớp', sentence: 'Em tên là Trần Bảo Châu, học sinh lớp 1C trường Tiểu học Sao Mai.', whyItIsGood: 'Rõ ràng, đủ thông tin họ tên và lớp.' },
+          { type: 'ket_bai', label: 'Giới thiệu sở thích', sentence: 'Sở thích đáng yêu của em là vẽ tranh phong cảnh và nhảy múa.', whyItIsGood: 'Tự nhiên, gần gũi với lứa tuổi lớp 1.' }
+        ],
+        creativeIdeas: ['Con nhớ nắn nót từng chữ cái viết hoa họ tên của chính mình nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT 3 (LỚP 1 BÀI 3): QUAN SÁT TRANH MÈO CON
+  // Đề: "Quan sát tranh chú mèo con và viết 1–2 câu tả hình dáng hoặc hành động của mèo con."
+  // -------------------------------------------------------------
+  if (isCatObservationGrade1Prompt(pLower)) {
+    const isAction = semantics.selectedDirectionId === 'ta_hanh_dong';
+    hoaNhoUnderstand = isAction 
+      ? 'Con hãy quan sát kỹ cử chỉ, hành động của chú mèo con trong bức tranh và viết 1–2 câu tả xem chú mèo đang làm gì thật ngộ nghĩnh nhé!' 
+      : 'Con hãy quan sát kỹ bức tranh chú mèo con và viết 1–2 câu tả màu lông, đôi mắt hoặc vóc dáng nhỏ nhắn đáng yêu của mèo con nhé!';
+    specificRequirements = [
+      'Nhiệm vụ: Viết 1–2 câu dựa trên quan sát tranh chú mèo con',
+      `Hướng viết: ${isAction ? 'Tả hành động của mèo con' : 'Tả hình dáng của mèo con'}`,
+      'Phương pháp: Quan sát chi tiết từ tranh thực tế (đặt câu hỏi khơi gợi, không tự bịa đặt chi tiết)',
+      'Dung lượng: Đúng 1–2 câu hoàn chỉnh'
+    ];
+    socraticQuestions = [
+      'Bức tranh của con vẽ chú mèo con có vóc dáng hay đang làm hành động gì?',
+      isAction ? 'Chú mèo đang vờn cuộn len, sưởi nắng, ngủ say hay rình bắt mồi?' : 'Màu lông của chú mèo là màu gì (vàng cam, trắng muốt hay tam thể)?',
+      'Đôi mắt, đôi tai hoặc chiếc đuôi của chú mèo có điểm gì làm con thích thú nhất?',
+      'Con đã kiểm tra đầu câu viết hoa và cuối câu có dấu chấm chưa?'
+    ];
+    branches = isAction ? [
+      { id: 'br-1', title: '🐾 Hành động nổi bật trong tranh', icon: '🐾', color: 'emerald', points: ['Mèo đang làm gì trong tranh?', 'Vờn cuộn len đỏ', 'Sưởi nắng trên thềm', 'Nhảy nhót tinh nghịch'] },
+      { id: 'br-2', title: '🐱 Cử chỉ đôi chân và đuôi', icon: '🐱', color: 'purple', points: ['Bàn chân khẽ chạm', 'Móng vuốt giấu kín trong đệm thịt', 'Chiếc đuôi ngoe nguẩy nhịp nhàng'] },
+      { id: 'br-3', title: '👀 Ánh mắt chăm chú tinh nghịch', icon: '👀', color: 'amber', points: ['Đôi mắt mở to tròn', 'Nhìn chăm chú vào mục tiêu', 'Ánh nhìn lấp lánh vẻ tò mò'] },
+      { id: 'br-4', title: '⚡ Động tác nhanh nhẹn khéo léo', icon: '⚡', color: 'sky', points: ['Nhảy thoăn thoắt', 'Bước đi êm ru nhẹ nhàng', 'Uốn mình mềm mại'] },
+      { id: 'br-5', title: '💖 Cảm xúc thích thú khi ngắm mèo', icon: '💖', color: 'rose', points: ['Chú mèo con thật ngộ nghĩnh', 'Em rất yêu quý mèo con', 'Nụ cười thích thú của em'] }
+    ] : [
+      { id: 'br-1', title: '🎨 Màu lông và vóc dáng', icon: '🎨', color: 'emerald', points: ['Màu lông chú mèo trong tranh là màu gì?', 'Bộ lông mềm mại mượt mà', 'Thân hình nhỏ nhắn như cục bông'] },
+      { id: 'br-2', title: '👀 Đôi mắt tròn xoe sáng ngời', icon: '👀', color: 'purple', points: ['Mắt tròn xoe như hai hòn bi ve', 'Màu mắt xanh biếc hoặc hổ phách', 'Ánh nhìn trong veo'] },
+      { id: 'br-3', title: '👂 Đôi tai vểnh và ria mép', icon: '👂', color: 'amber', points: ['Hai chiếc tai hình tam giác nhỏ xíu', 'Tai luôn vểnh lên nghe ngóng', 'Ria mép trắng tinh hai bên mép'] },
+      { id: 'br-4', title: '🐾 Bốn chân và chiếc đuôi nhỏ', icon: '🐾', color: 'sky', points: ['Chân có lớp đệm thịt hồng hào', 'Đuôi cong cong như dấu hỏi', 'Dáng đứng đáng yêu'] },
+      { id: 'br-5', title: '💖 Tình cảm dành cho chú mèo', icon: '💖', color: 'rose', points: ['Chú mèo con xinh xắn', 'Ngoan ngoãn và đáng yêu', 'Em muốn vuốt ve bộ lông mèo'] }
+    ];
+
+    const c1 = isAction 
+      ? ['Câu 1 (Hành động nổi bật): Viết một câu tả hành động chú mèo đang thực hiện trong tranh. (Ví dụ: "Chú mèo con đang tinh nghịch vờn theo cuộn len màu đỏ trên sàn nhà.")']
+      : ['Câu 1 (Màu lông & Vóc dáng): Viết một câu tả màu lông và vóc dáng chú mèo con trong tranh. (Ví dụ: "Chú mèo con khoác lên mình bộ lông vàng óng ả và mềm mại như nhung.")'];
+    const c2 = isAction
+      ? ['Câu 2 (Cử chỉ nhanh nhẹn): Viết câu thứ hai tả sự khéo léo, ngộ nghĩnh của mèo khi vận động. (Ví dụ: "Đôi chân nhỏ thoăn thoắt nhảy nhót trông thật đáng yêu và nhanh nhẹn.")']
+      : ['Câu 2 (Đôi mắt hoặc Nét đáng yêu): Viết câu thứ hai tả đôi mắt tròn xoe hoặc đôi tai vểnh ngộ nghĩnh. (Ví dụ: "Đôi mắt chú tròn xoe, xanh biếc như hai hòn bi ve lấp lánh dưới nắng.")'];
+
+    outline = {
+      moDoan: c1,
+      phatTrienDoan: [],
+      ketDoan: c2,
+      genre: 'viet_cau',
+      sections: [
+        { id: 'sec-1', title: isAction ? 'Câu 1. Tả hành động đáng yêu' : 'Câu 1. Tả màu lông và vóc dáng', icon: isAction ? '🐾' : '🎨', guideNote: 'Tả chi tiết nổi bật nhất con nhìn thấy trong tranh', bulletPoints: c1 },
+        { id: 'sec-2', title: isAction ? 'Câu 2. Tả sự nhanh nhẹn, cử chỉ' : 'Câu 2. Tả đôi mắt hoặc nét mặt', icon: isAction ? '⚡' : '👀', guideNote: 'Tả thêm cử chỉ hoặc bộ phận ngộ nghĩnh', bulletPoints: c2 }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [
+          { word: 'mềm mại', meaningAndUsage: 'Gợi cảm giác mịn màng của bộ lông' },
+          { word: 'tròn xoe', meaningAndUsage: 'Đôi mắt mở to tròn đáng yêu' },
+          { word: 'nhanh nhẹn', meaningAndUsage: 'Cử chỉ thoăn thoắt, khéo léo' },
+          { word: 'tinh nghịch', meaningAndUsage: 'Hiếu động, thích đùa vui' }
+        ],
+        imageries: [
+          { type: 'So sánh', example: 'Mắt mèo trong veo như hai hòn bi ve', explanation: 'Gợi tả vẻ long lanh, sáng ngời' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Tả hình dáng', sentence: 'Chú mèo con có bộ lông trắng muốt như bông tuyết.', whyItIsGood: 'Hình ảnh so sánh đẹp, đúng chuẩn lớp 1.' },
+          { type: 'ket_bai', label: 'Tả hành động', sentence: 'Chú mèo con vờn cuộn len thoăn thoắt trông thật đáng yêu.', whyItIsGood: 'Diễn tả hành động ngộ nghĩnh, trọn vẹn ý.' }
+        ],
+        creativeIdeas: ['Con hãy nhìn thật kỹ tranh xem mèo đang nhìn về hướng nào nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT 4 (LỚP 2 BÀI 4): TIN NHẮN CẢM ƠN HOẶC XIN LỖI BẠN
+  // Đề: "Viết một tin nhắn ngắn (3–4 câu) cảm ơn bạn đã cho em mượn đồ dùng hoặc xin lỗi bạn vì lỡ làm hỏng vật gì."
+  // -------------------------------------------------------------
+  if (isMessageThanksOrApologyGrade2Prompt(pLower)) {
+    const isApology = semantics.selectedDirectionId === 'tin_nhan_xin_loi';
+    hoaNhoUnderstand = isApology 
+      ? 'Con hãy viết một tin nhắn ngắn (3–4 câu) gửi bạn cùng lớp để chân thành xin lỗi bạn vì đã lỡ làm hỏng hoặc làm bẩn một món đồ của bạn nhé!' 
+      : 'Con hãy viết một tin nhắn ngắn (3–4 câu) gửi bạn cùng lớp để cảm ơn bạn đã cho con mượn đồ dùng học tập thật chu đáo nhé!';
+    specificRequirements = [
+      isApology ? 'Nhiệm vụ: Viết tin nhắn ngắn (3–4 câu) xin lỗi bạn' : 'Nhiệm vụ: Viết tin nhắn ngắn (3–4 câu) cảm ơn bạn',
+      'Người nhận: Bạn cùng lớp (xưng hô: Bạn / Cậu)',
+      isApology 
+        ? 'Nội dung: Lời gọi bạn, sự việc lỡ làm hỏng đồ dùng, lời xin lỗi chân thành, cách khắc phục hoặc lời đền bạn vật mới' 
+        : 'Nội dung: Lời gọi bạn, nhắc lại đồ dùng đã mượn, gửi lời cảm ơn chân thành, lời hẹn trả hoặc giữ gìn cẩn thận',
+      'Người gửi: Tên của con ở cuối tin nhắn',
+      'Lưu ý: Viết tin nhắn gửi bạn cùng lớp, không nhắn cho người nhà',
+      'Dung lượng: Đúng 3–4 câu súc tích'
+    ];
+    socraticQuestions = [
+      isApology ? 'Con muốn gửi tin nhắn xin lỗi bạn nào trong lớp?' : 'Con muốn gửi tin nhắn cảm ơn bạn nào đã cho con mượn đồ dùng?',
+      isApology ? 'Con đã sơ ý làm hỏng hoặc làm bẩn món đồ gì của bạn (thước kẻ, bút mực, quyển sách)?' : 'Bạn đã cho con mượn đồ dùng gì và đồ dùng đó giúp ích cho con ra sao?',
+      isApology ? 'Con sẽ nói lời xin lỗi bạn như thế nào cho thật chân thành?' : 'Con muốn nói lời cảm ơn bạn ấm áp như thế nào?',
+      isApology ? 'Con sẽ khắc phục hoặc đền bạn chiếc mới như thế nào?' : 'Con hẹn khi nào sẽ mang trả lại bạn nguyên vẹn?',
+      'Con đã ký tên và ghi rõ tên mình ở cuối mẩu tin nhắn chưa?'
+    ];
+    branches = isApology ? [
+      { id: 'br-1', title: '💌 Lời gọi bạn thân thương', icon: '💌', color: 'emerald', points: ['Gửi bạn [Tên bạn] thân mến!', 'Chào [Tên bạn]!'] },
+      { id: 'br-2', title: '⚠️ Sự việc sơ ý làm hỏng đồ', icon: '⚠️', color: 'purple', points: ['Hôm qua sơ ý làm gãy thước kẻ', 'Lỡ làm rách mép vở', 'Làm rơi bút mực xuống sàn'] },
+      { id: 'br-3', title: '🙏 Lời xin lỗi chân thành', icon: '🙏', color: 'amber', points: ['Mình vô cùng xin lỗi bạn', 'Mình rất ân hận vì sự bất cẩn của mình'] },
+      { id: 'br-4', title: '🎁 Cách đền và khắc phục', icon: '🎁', color: 'sky', points: ['Chuẩn bị chiếc mới giống hệt gửi đền bạn', 'Sáng mai đến lớp mình sẽ mang sang cho bạn'] },
+      { id: 'br-5', title: '✒️ Ký tên & Mong bạn thứ lỗi', icon: '✒️', color: 'rose', points: ['Mong bạn bỏ qua cho mình nhé', 'Bạn cùng bàn của cậu: [Tên con]'] }
+    ] : [
+      { id: 'br-1', title: '💌 Lời gọi bạn thân thương', icon: '💌', color: 'emerald', points: ['Gửi bạn [Tên bạn] thân mến!', 'Chào bạn [Tên bạn]!'] },
+      { id: 'br-2', title: '✏️ Đồ dùng bạn đã cho mượn', icon: '✏️', color: 'purple', points: ['Chiếc bút mực tím', 'Cục tẩy trắng', 'Chiếc compa trong giờ Toán'] },
+      { id: 'br-3', title: '💖 Lời cảm ơn chân thành', icon: '💖', color: 'amber', points: ['Cảm ơn bạn rất nhiều vì đã giúp đỡ mình', 'Nhờ có đồ của bạn, mình đã làm xong bài tập kịp thời'] },
+      { id: 'br-4', title: '🤝 Lời hứa giữ gìn và trả đồ', icon: '🤝', color: 'sky', points: ['Mình đã dùng cẩn thận và giữ gìn sạch sẽ', 'Sáng mai đến lớp mình sẽ gửi lại bạn ngay nhé'] },
+      { id: 'br-5', title: '✒️ Ký tên người nhắn', icon: '✒️', color: 'rose', points: ['Chúc bạn một ngày học thật vui', 'Bạn thân của cậu: [Tên con]'] }
+    ];
+
+    const sec1 = [isApology ? 'Gửi bạn [Tên bạn] thân mến!' : 'Gửi bạn [Tên bạn] thân mến!'];
+    const sec2 = isApology ? [
+      'Nêu sự việc: Hôm qua trong giờ học, mình sơ ý đã lỡ làm gãy chiếc thước kẻ của bạn.',
+      'Lời xin lỗi: Mình rất ân hận và xin lỗi bạn vì sự bất cẩn của mình.',
+      'Cách khắc phục: Mình đã chuẩn bị một chiếc thước mới giống hệt, sáng mai đến lớp mình sẽ gửi đền bạn nhé.'
+    ] : [
+      'Nhắc việc mượn đồ: Cảm ơn bạn rất nhiều vì tiết học hôm qua đã cho mình mượn chiếc compa.',
+      'Ích lợi: Nhờ có đồ dùng của bạn, mình đã hoàn thành hình vẽ kịp thời và được cô khen.',
+      'Hẹn trả: Mình đã dùng xong, giữ gìn cẩn thận và sáng mai đến lớp mình sẽ gửi lại bạn ngay nhé.'
+    ];
+    const sec3 = [
+      isApology ? 'Mong bạn bỏ qua cho mình nhé! Bạn của cậu: [Tên con]' : 'Chúc bạn học thật vui! Bạn thân của cậu: [Tên con]'
+    ];
+
+    outline = {
+      moDoan: sec1,
+      phatTrienDoan: sec2,
+      ketDoan: sec3,
+      genre: 'loi_nhan',
+      sections: [
+        { id: 'sec-1', title: 'Phần 1. Lời gọi bạn', icon: '💌', guideNote: 'Ghi lời xưng hô thân mật, lịch sự với bạn bè', bulletPoints: sec1 },
+        { id: 'sec-2', title: isApology ? 'Phần 2. Lời xin lỗi & Khắc phục (2–3 câu)' : 'Phần 2. Lời cảm ơn & Hẹn trả đồ (2–3 câu)', icon: isApology ? '🙏' : '💖', guideNote: 'Nội dung chính ngắn gọn, chân thành, đúng 2–3 câu', bulletPoints: sec2 },
+        { id: 'sec-3', title: 'Phần 3. Lời kết & Ký tên', icon: '✒️', guideNote: 'Lời chúc hoặc mong bạn thứ lỗi kèm chữ ký', bulletPoints: sec3 }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [
+          { word: 'chân thành', meaningAndUsage: 'Thật lòng, từ tận đáy lòng' },
+          { word: 'ân hận', meaningAndUsage: 'Cảm giác áy náy khi lỡ làm điều sai' },
+          { word: 'chu đáo', meaningAndUsage: 'Quan tâm, giúp đỡ tận tình' },
+          { word: 'cẩn thận', meaningAndUsage: 'Giữ gìn đồ dùng không để hư hại' }
+        ],
+        imageries: [
+          { type: 'Gợi cảm', example: 'Mẩu giấy nhắn nắn nót kẹp ngay ngắn vào trang vở của bạn', explanation: 'Thể hiện sự tôn trọng và chân thành' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Lời gọi đầu tin nhắn', sentence: 'Gửi bạn Minh Anh thân mến!', whyItIsGood: 'Thân mật, đúng mực học sinh.' },
+          { type: 'mieu_ta', label: 'Nội dung cảm ơn', sentence: 'Cảm ơn cậu đã cho tớ mượn chiếc compa trong giờ Toán hôm qua nhé.', whyItIsGood: 'Nêu rõ sự việc và lời cảm ơn chân thành.' },
+          { type: 'ket_bai', label: 'Ký tên', sentence: 'Bạn cùng bàn: Tuấn Dũng.', whyItIsGood: 'Rõ ràng, súc tích.' }
+        ],
+        creativeIdeas: ['Con hãy viết mẩu tin nhắn vào một tờ giấy ghi chú xinh xắn để trao tận tay bạn nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT 5 (LỚP 2 BÀI 5): ĐOẠN VĂN NGẮN 3 ĐẾN 5 CÂU VỀ TÌNH CẢM VỚI ÔNG HOẶC BÀ
+  // Đề: "Viết đoạn văn ngắn từ 3 đến 5 câu nói lên tình cảm yêu mến, kính trọng của em đối với ông hoặc bà."
+  // -------------------------------------------------------------
+  if (isGrandparentLoveGrade2Prompt(pLower, grade)) {
+    const isGrandma = semantics.selectedDirectionId === 'tinh_cam_ba' || semantics.mainObject.toLowerCase().includes('bà');
+    const relName = isGrandma ? 'bà' : 'ông';
+    const relTitle = isGrandma ? 'bà kính yêu' : 'ông kính yêu';
+    hoaNhoUnderstand = `Con hãy viết một đoạn văn ngắn từ 3 đến 5 câu để bày tỏ tình cảm yêu mến, kính trọng sâu sắc đối với ${relTitle} nhé!`;
+    specificRequirements = [
+      'Nhiệm vụ: Viết đoạn văn ngắn từ 3 đến 5 câu',
+      `Đối tượng: ${isGrandma ? 'Bà kính yêu' : 'Ông kính yêu'}`,
+      'Trọng tâm: Bày tỏ tình cảm yêu mến, kính trọng; cử chỉ yêu thương và lời hứa chăm ngoan',
+      'Dung lượng: Đúng 3 đến 5 câu hoàn chỉnh (không viết thành 7–9 câu hay bài văn)'
+    ];
+    socraticQuestions = [
+      `Trong gia đình, con muốn nói lên tình cảm yêu mến đối với ${relName} như thế nào?`,
+      `${relName} có nụ cười, ánh mắt hay cử chỉ chăm sóc nào làm con xúc động nhất?`,
+      'Mỗi ngày hoặc mỗi dịp về thăm, kỷ niệm nào bên ${relName} làm con nhớ mãi?',
+      `Con muốn kính chúc ${relName} điều gì và hứa điều ngoan ngoãn nào?`
+    ];
+    branches = [
+      { id: 'br-1', title: '🌱 Giới thiệu người thân', icon: '🌱', color: 'emerald', points: [`Giới thiệu ${relName} kính yêu`, 'Bộc lộ tình cảm yêu mến, kính trọng', 'Vị trí đặc biệt của người thân trong lòng em'] },
+      { id: 'br-2', title: '☀️ Nụ cười và ánh mắt hiền từ', icon: '☀️', color: 'purple', points: ['Nụ cười ấm áp, bao dung', 'Ánh mắt đong đầy yêu thương', 'Mái tóc bạc phơ hiền từ'] },
+      { id: 'br-3', title: '💖 Cử chỉ chăm sóc ân cần', icon: '💖', color: 'amber', points: ['Chăm lo từng bữa ăn, giấc ngủ', 'Kể chuyện cổ tích mỗi tối', 'Ân cần dặn dò những điều hay'] },
+      { id: 'br-4', title: '🌸 Tình cảm kính mến của em', icon: '🌸', color: 'sky', points: ['Em luôn kính yêu và gắn bó', 'Cảm giác bình yên bên người thân', 'Lòng biết ơn công lao sinh thành'] },
+      { id: 'br-5', title: '⭐ Lời kính chúc & Lời hứa ngoan', icon: '⭐', color: 'rose', points: ['Kính chúc sống lâu trăm tuổi, luôn mạnh khỏe', 'Hứa chăm ngoan, học giỏi để người thân tự hào'] }
+    ];
+
+    const sec1 = [`Câu 1 (Mở đoạn): Viết một câu giới thiệu về ${relName} kính yêu và bộc lộ ngay tình cảm yêu mến, kính trọng của em. (Ví dụ: "Trong gia đình, em luôn dành tình cảm yêu mến và kính trọng nhất đối với ${relName} của em.")`];
+    const sec2 = [
+      `Câu 2 (Cử chỉ yêu thương): Viết một câu kể về nụ cười hiền hậu hoặc sự chăm sóc ân cần của ${relName} dành cho em. (Ví dụ: "${relName} luôn dành cho em nụ cười hiền hậu và đôi bàn tay ấm áp xoa đầu mỗi khi em chăm ngoan.")`,
+      `Câu 3 (Kỷ niệm ấm áp): Viết thêm một câu kể lại kỷ niệm ấm áp bên ${relName}. (Ví dụ: "Mỗi buổi tối, ${relName} lại ân cần chỉ bảo em học bài và kể cho em nghe những câu chuyện cổ tích xúc động.")`
+    ];
+    const sec3 = [
+      `Câu 4–5 (Kết đoạn): Viết 1–2 câu bày tỏ lòng biết ơn sâu sắc và lời hứa chăm ngoan, học giỏi. (Ví dụ: "Em kính chúc ${relName} luôn mạnh khỏe, sống lâu trăm tuổi. Em hứa sẽ luôn chăm chỉ học tập để ${relName} luôn vui lòng.")`
+    ];
+
+    outline = {
+      moDoan: sec1,
+      phatTrienDoan: sec2,
+      ketDoan: sec3,
+      genre: 'tinh_cam_cam_xuc',
+      sections: [
+        { id: 'sec-1', title: 'Câu 1. Mở đoạn - Giới thiệu người thân', icon: '🌱', guideNote: 'Giới thiệu về người thân và bộc lộ tình cảm', bulletPoints: sec1 },
+        { id: 'sec-2', title: 'Câu 2–3. Phát triển đoạn - Cử chỉ ấm áp & Kỷ niệm', icon: '💖', guideNote: 'Nêu cử chỉ chăm sóc hoặc kỷ niệm xúc động', bulletPoints: sec2 },
+        { id: 'sec-3', title: 'Câu 4–5. Kết đoạn - Lòng biết ơn & Lời hứa ngoan', icon: '⭐', guideNote: 'Bày tỏ lòng biết ơn và lời hứa ngoan ngoãn', bulletPoints: sec3 }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [
+          { word: 'kính trọng', meaningAndUsage: 'Tôn kính và biết ơn người bề trên' },
+          { word: 'yêu mến', meaningAndUsage: 'Tình cảm mến thương tha thiết' },
+          { word: 'hiền hậu', meaningAndUsage: 'Nụ cười dịu dàng, đôn hậu' },
+          { word: 'ân cần', meaningAndUsage: 'Chăm sóc chu đáo, tận tâm' }
+        ],
+        imageries: [
+          { type: 'Hình ảnh đẹp', example: 'Mái tóc bạc phơ như mây trắng và đôi mắt hiền từ', explanation: 'Gợi vẻ đẹp phúc hậu của ông bà' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Mở đoạn', sentence: 'Em luôn dành tình cảm yêu mến và kính trọng sâu sắc nhất đối với người bà kính yêu của em.', whyItIsGood: 'Trang trọng, dạt dào tình cảm.' },
+          { type: 'mieu_ta', label: 'Phát triển đoạn', sentence: 'Bà luôn ân cần chăm sóc em từng bữa cơm và dạy bảo em những điều hay lẽ phải.', whyItIsGood: 'Chi tiết cụ thể, xúc động.' },
+          { type: 'ket_bai', label: 'Kết đoạn', sentence: 'Em kính chúc bà luôn mạnh khỏe và hứa sẽ chăm ngoan để bà luôn vui lòng.', whyItIsGood: 'Khép lại trọn vẹn, đúng chuẩn lớp 2.' }
+        ],
+        creativeIdeas: ['Con hãy nhớ lại món ăn bà hay nấu hoặc trò chơi ông hay chỉ dạy để đưa vào câu văn nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT 6 (LỚP 5 BÀI 6): KỶ NIỆM SÂU SẮC VỚI THẦY HOẶC CÔ GIÁO
+  // Đề: "Viết bài văn kể lại một kỷ niệm sâu sắc giữa em và một thầy giáo hoặc cô giáo đã dạy dỗ, nâng đỡ em tiến bộ."
+  // -------------------------------------------------------------
+  if (isTeacherMemoryGrade5Prompt(pLower)) {
+    const isFemaleTeacher = semantics.selectedDirectionId === 'ky_niem_co_giao' || semantics.mainObject.toLowerCase().includes('cô');
+    const teacherName = isFemaleTeacher ? 'cô giáo' : 'thầy giáo';
+    const teacherTitle = isFemaleTeacher ? 'cô giáo kính yêu' : 'thầy giáo kính yêu';
+    hoaNhoUnderstand = `Con hãy viết một bài văn hoàn chỉnh (gồm 3 phần: Mở bài, Thân bài, Kết bài) kể lại một kỷ niệm sâu sắc khó quên với ${teacherTitle} đã tận tình dạy dỗ, nâng đỡ con tiến bộ trong học tập nhé!`;
+    specificRequirements = [
+      'Nhiệm vụ: Viết bài văn kể chuyện (gồm 3 phần: Mở bài, Thân bài, Kết bài)',
+      'Chủ đề: Thầy cô (CD04)',
+      `Đối tượng: ${teacherTitle}`,
+      'Trọng tâm: Kỷ niệm thầy/cô ân cần chỉ bảo, nâng đỡ em tiến bộ trong học tập hoặc rèn luyện',
+      'Lưu ý: Bám sát câu chuyện về người thầy/cô đã dạy dỗ, nâng đỡ em tiến bộ, không chuyển sang chủ đề khác'
+    ];
+    socraticQuestions = [
+      `Người thầy giáo hay cô giáo nào đã để lại trong em ấn tượng sâu sắc nhất?`,
+      'Kỷ niệm sâu sắc đó diễn ra vào thời gian nào, trong hoàn cảnh ra sao (khi em gặp bài khó, điểm kém hay sơ ý mắc lỗi)?',
+      `Lúc ấy, cử chỉ, ánh mắt và lời dạy bảo nâng đỡ của ${teacherName} đã làm em xúc động thế nào?`,
+      'Nhờ sự giúp đỡ và dìu dắt tận tình của thầy/cô, em đã thay đổi và tiến bộ ra sao?',
+      `Tình cảm biết ơn và bài học cuộc sống sâu sắc mà em khắc ghi từ ${teacherName} là gì?`
+    ];
+    branches = [
+      { id: 'br-1', title: '🌱 Mở bài: Thầy/cô & Kỷ niệm', icon: '🌱', color: 'emerald', points: [`Giới thiệu ${teacherName} kính yêu`, 'Dẫn dắt vào kỷ niệm khó phai', 'Ấn tượng đầu tiên không thể nào quên'] },
+      { id: 'br-2', title: '🏫 Hoàn cảnh xảy ra kỷ niệm', icon: '🏫', color: 'purple', points: ['Thời gian và không gian sự việc', 'Tình huống khó khăn hoặc lúc em mắc lỗi', 'Tâm trạng lo lắng, bối rối lúc ban đầu'] },
+      { id: 'br-3', title: '💖 Cử chỉ nâng đỡ ấm áp', icon: '💖', color: 'amber', points: ['Không trách phạt mà ân cần chỉ dẫn', 'Ánh mắt bao dung, lời khuyên ấm lòng', 'Kiên nhẫn giảng giải từng bước'] },
+      { id: 'br-4', title: '🌟 Sự tiến bộ vượt bậc của em', icon: '🌟', color: 'sky', points: ['Vượt qua tự ti, nỗ lực rèn luyện', 'Đạt kết quả học tập tiến bộ rõ rệt', 'Niềm vui của thầy/cô và cả lớp'] },
+      { id: 'br-5', title: '🌸 Kết bài: Lòng biết ơn sâu sắc', icon: '🌸', color: 'rose', points: ['Khắc ghi công ơn dạy dỗ như người cha, người mẹ thứ hai', 'Bài học quý giá làm hành trang trưởng thành', 'Lời hứa luôn phấn đấu noi gương'] }
+    ];
+
+    const sec1 = [`Giới thiệu ${teacherName} đã dạy dỗ, dìu dắt em và dẫn dắt tự nhiên vào kỷ niệm sâu sắc khiến em nhớ mãi.`];
+    const sec2 = [
+      'Kể lại hoàn cảnh diễn ra sự việc: một lần em bị điểm kém, gặp bài toán hóc búa hoặc cảm thấy nản lòng, mất tự tin.',
+      'Miêu tả tâm trạng lo lắng, bối rối và buồn bã của em lúc đó.'
+    ];
+    const sec3 = [
+      `${teacherName} nhận thấy sự chán nản của em và nhẹ nhàng bước lại gần bên bàn học.`,
+      `Ánh mắt dịu hiền và lời động viên ân cần: Thầy/cô kiên nhẫn giảng lại từng bước, chỉ cho em cách khắc phục sai sót.`,
+      'Cảm xúc xúc động, ấm lòng của em khi cảm nhận được tình thương bao dung và sự tin tưởng của thầy/cô.'
+    ];
+    const sec4 = [
+      'Nhờ sự khích lệ và chỉ dẫn tận tình, em đã vượt qua khó khăn, hoàn thành tốt bài tập.',
+      'Từ ngày hôm đó, em tự tin hơn, chăm chỉ rèn luyện và tiến bộ rõ rệt trong học tập.'
+    ];
+    const sec5 = [
+      `Khẳng định kỷ niệm với ${teacherName} là hành trang quý báu theo em suốt những năm tháng học trò.`,
+      'Bày tỏ lòng tri ân sâu sắc và lời hứa sẽ luôn chăm ngoan để xứng đáng với công ơn dìu dắt của thầy/cô.'
+    ];
+
+    outline = {
+      moDoan: sec1,
+      phatTrienDoan: [...sec2, ...sec3, ...sec4],
+      ketDoan: sec5,
+      genre: 'ke_chuyen',
+      sections: [
+        { id: 'sec-1', title: 'Phần 1. Mở bài - Giới thiệu thầy/cô & Kỷ niệm', icon: '🌱', guideNote: 'Giới thiệu người thầy/cô và kỷ niệm sâu sắc', bulletPoints: sec1 },
+        { id: 'sec-2', title: 'Phần 2. Thân bài - Hoàn cảnh diễn ra kỷ niệm', icon: '🏫', guideNote: 'Nêu thời gian, hoàn cảnh khó khăn hoặc lúc em mắc lỗi', bulletPoints: sec2 },
+        { id: 'sec-3', title: 'Phần 3. Thân bài - Cử chỉ ân cần & Sự nâng đỡ', icon: '💖', guideNote: 'Tả hành động, lời giảng giải và sự bao dung của thầy/cô', bulletPoints: sec3 },
+        { id: 'sec-4', title: 'Phần 4. Thân bài - Kết quả & Sự tiến bộ của em', icon: '🌟', guideNote: 'Kể về sự thay đổi tích cực và kết quả đạt được', bulletPoints: sec4 },
+        { id: 'sec-5', title: 'Phần 5. Kết bài - Lòng biết ơn & Bài học cuộc sống', icon: '🌸', guideNote: 'Bộc lộ lòng tri ân sâu sắc và bài học làm người', bulletPoints: sec5 }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [
+          { word: 'dìu dắt', meaningAndUsage: 'Tận tình hướng dẫn, giúp đỡ từng bước tiến bộ' },
+          { word: 'bao dung', meaningAndUsage: 'Rộng lượng, sẵn sàng tha thứ và nâng đỡ' },
+          { word: 'ân cần', meaningAndUsage: 'Chu đáo, ấm áp trong từng lời chỉ bảo' },
+          { word: 'tiến bộ', meaningAndUsage: 'Vươn lên đạt kết quả tốt hơn trước' },
+          { word: 'tri ân', meaningAndUsage: 'Ghi nhớ và biết ơn sâu sắc công lao' }
+        ],
+        imageries: [
+          { type: 'So sánh', example: 'Lời dạy của thầy/cô như ngọn hải đăng soi sáng con đường tri thức', explanation: 'Gợi sự dẫn đường chỉ lối tận tâm' },
+          { type: 'Gợi cảm', example: 'Ánh mắt ấm áp chan chứa niềm tin tưởng và hy vọng', explanation: 'Truyền cho học sinh động lực vươn lên' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Mở bài gián tiếp', sentence: 'Trong suốt năm năm học dưới mái trường tiểu học, kỷ niệm sâu sắc nhất trong em là lần được cô giáo chủ nhiệm ân cần nâng đỡ lúc em nản lòng.', whyItIsGood: 'Dẫn dắt tự nhiên, nêu đúng trọng tâm đề.' },
+          { type: 'mieu_ta', label: 'Cử chỉ nâng đỡ', sentence: 'Cô đặt bàn tay ấm áp lên vai em, mỉm cười dịu dàng và kiên nhẫn chỉ cho em từng phép tính khó.', whyItIsGood: 'Chi tiết sống động, giàu cảm xúc.' },
+          { type: 'ket_bai', label: 'Kết bài mở rộng', sentence: 'Lời khuyên bảo năm ấy đã trở thành hành trang quý báu giúp em luôn vững tin và không ngừng nỗ lực vươn lên trong cuộc sống.', whyItIsGood: 'Sâu sắc, khẳng định bài học cuộc sống lâu bền.' }
+        ],
+        creativeIdeas: ['Con hãy nhớ lại một câu nói động viên cụ thể của thầy/cô để đưa vào bài làm cho thêm sinh động nhé!']
+      }
+    };
+  }
 
   // -------------------------------------------------------------
   // THỂ LOẠI 1: VIẾT THƯ (viet_thu)
@@ -1371,13 +2570,341 @@ export function buildGenreStructure(
   }
 
   // -------------------------------------------------------------
-  // THỂ LOẠI 6: KỂ CHUYỆN / SỰ VIỆC / KỶ NIỆM (ke_chuyen)
+  // THỂ LOẠI 6A: THUẬT LẠI SỰ VIỆC THEO TRÌNH TỰ THỜI GIAN (thuat_lai - LỖI 3)
   // -------------------------------------------------------------
-  else if (genre === 'ke_chuyen' || genre === 'thuat_lai') {
-    const isGrandfatherMemory = semantics.selectedDirectionId === 'ong' || (mainObject.toLowerCase().includes('ông') && !mainObject.toLowerCase().includes('bà'));
-    const isGrandmotherMemory = semantics.selectedDirectionId === 'ba' || (mainObject.toLowerCase().includes('bà') && !mainObject.toLowerCase().includes('ông'));
+  else if (genre === 'thuat_lai') {
+    const isFlagCeremony = mainObject.toLowerCase().includes('chào cờ') || coreSubject.toLowerCase().includes('chào cờ') || semantics.coreSubject.toLowerCase().includes('chào cờ');
 
-    if (isGrandfatherMemory) {
+    if (isFlagCeremony) {
+      hoaNhoUnderstand = 'Con sẽ viết đoạn văn thuật lại một buổi lễ chào cờ đầu tuần ở trường em theo đúng trình tự thời gian. Con hãy nhớ lại quang cảnh sân trường rợp bóng cờ hoa, nghi lễ chào cờ trang nghiêm và những lời dặn dò bổ ích của thầy cô nhé!';
+      specificRequirements = [
+        'Thể loại: Đoạn văn thuật lại một sự việc theo trình tự thời gian',
+        'Đối tượng: Buổi lễ chào cờ đầu tuần ở trường em',
+        'Thời gian & Địa điểm: Sáng thứ Hai đầu tuần, trên sân trường rợp bóng cây',
+        'Trình tự thời gian: Trước buổi lễ (chuẩn bị, xếp hàng), Trong buổi lễ (nghi thức chào cờ, hát Quốc ca, nhận xét thi đua), Sau buổi lễ (kết thúc, xếp hàng về lớp)',
+        'Cảm xúc: Tự hào dưới lá cờ Tổ quốc và quyết tâm học tập, rèn luyện tốt',
+        'Lưu ý: TUYỆT ĐỐI KHÔNG lồng ghép chuyện gia đình, bà ru hay viết thư vào buổi lễ chào cờ'
+      ];
+      socraticQuestions = [
+        'Buổi lễ chào cờ diễn ra vào sáng thứ mấy, ở đâu và thời tiết hôm đó như thế nào?',
+        'Trước khi buổi lễ bắt đầu, không khí sân trường và các bạn học sinh ra sao (xếp hàng, trang phục, khăn quàng đỏ)?',
+        'Khi khẩu lệnh "Chào cờ! Chào!" vang lên, tư thế của con và toàn trường trang nghiêm như thế nào?',
+        'Sau nghi thức chào cờ và hát Quốc ca, thầy cô đã nhận xét thi đua và phát động phong trào gì?',
+        'Buổi lễ kết thúc ra sao và con có cảm xúc, quyết tâm gì cho tuần học mới?'
+      ];
+      branches = [
+        {
+          id: 'br-1',
+          title: '⏰ Thời gian & Địa điểm',
+          icon: '⏰',
+          color: 'emerald',
+          points: [
+            'Sáng thứ Hai đầu tuần trong trẻo, mát mẻ',
+            'Sân trường rộng rãi, rợp bóng mát cây bàng, cây phượng',
+            'Lá cờ đỏ sao vàng tung bay phấp phới trên đỉnh cột cờ'
+          ]
+        },
+        {
+          id: 'br-2',
+          title: '👥 Không khí trước buổi lễ',
+          icon: '👥',
+          color: 'purple',
+          points: [
+            'Tiếng trống trường vang lên giòn giã báo hiệu giờ tập trung',
+            'Học sinh toàn trường nhanh chóng xếp hàng ngay ngắn theo từng lớp',
+            'Đồng phục tinh tươm, khăn quàng đỏ thắm trên vai, gương mặt háo hức'
+          ]
+        },
+        {
+          id: 'br-3',
+          title: '⚡ Hoạt động chính theo trình tự',
+          icon: '⚡',
+          color: 'amber',
+          points: [
+            'Khẩu lệnh dõng dạc vang lên: "Nghiêm! Chào cờ! Chào!"',
+            'Hàng trăm ánh mắt hướng về Quốc kỳ, cất cao tiếng hát Quốc ca hào hùng',
+            'Thầy Tổng phụ trách và Ban giám hiệu nhận xét thi đua tuần qua và phát động thi đua mới'
+          ]
+        },
+        {
+          id: 'br-4',
+          title: '🏁 Kết thúc buổi lễ',
+          icon: '🏁',
+          color: 'sky',
+          points: [
+            'Tiếng vỗ tay rộn rã chúc mừng các lớp xuất sắc nhận cờ thi đua',
+            'Thầy Hiệu trưởng ân cần dặn dò học sinh nỗ lực học tập',
+            'Các lớp trật tự nối đuôi nhau di chuyển về phòng học chuẩn bị tiết học đầu tiên'
+          ]
+        },
+        {
+          id: 'br-5',
+          title: '💖 Cảm xúc & Suy nghĩ',
+          icon: '💖',
+          color: 'rose',
+          points: [
+            'Lòng dâng lên niềm tự hào, xúc động khôn xiết dưới lá cờ Tổ quốc',
+            'Cảm giác phấn chấn, tràn đầy năng lượng bước vào tuần học mới',
+            'Tự hứa sẽ học tập chăm chỉ và rèn luyện tốt để đạt nhiều hoa điểm mười'
+          ]
+        }
+      ];
+
+      const sec1 = [
+        'Mở đoạn: Giới thiệu thời gian (sáng thứ Hai đầu tuần), địa điểm (sân trường) và sự việc thuật lại: buổi lễ chào cờ trang nghiêm của trường em.'
+      ];
+      const sec2 = [
+        'Trước buổi lễ: Tiếng trống vang lên giòn giã, các bạn học sinh chỉnh tề đồng phục, khăn quàng đỏ thắm nhanh chóng xếp thành những hàng ngũ thẳng tắp.',
+        'Trong buổi lễ: Khẩu lệnh dõng dạc vang lên, toàn trường đứng nghiêm trang hướng về Quốc kỳ và cất cao giai điệu Quốc ca hào hùng; tiếp đó thầy cô Ban giám hiệu nhận xét thi đua tuần cũ và phát động phong trào mới.',
+        'Kết thúc buổi lễ: Những tràng pháo tay giòn giã vang lên chúc mừng các lớp nhận cờ thi đua, sau đó từng lớp trật tự di chuyển về phòng học.'
+      ];
+      const sec3 = [
+        'Kết đoạn: Bộc lộ cảm xúc tự hào, phấn khởi dưới lá cờ Tổ quốc và quyết tâm nỗ lực học tập thật tốt trong tuần mới.'
+      ];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'thuat_lai',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Thời gian, địa điểm & Giới thiệu buổi lễ chào cờ', icon: '📍', guideNote: 'Nêu rõ thời gian sáng thứ Hai và không gian sân trường', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Diễn biến buổi lễ theo trình tự thời gian', icon: '⏰', guideNote: 'Thuật lại trước buổi lễ, nghi thức chào cờ và kết thúc buổi lễ', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Cảm xúc tự hào & Quyết tâm tuần mới', icon: '🌟', guideNote: 'Khẳng định niềm tự hào và lời hứa học tập chăm ngoan', bulletPoints: sec3 }
+        ]
+      };
+
+      vocabularySuggestions = {
+        goodWords: [
+          { word: 'trang nghiêm', meaningAndUsage: 'Nghi thức diễn ra vô cùng tôn nghiêm, chỉnh tề và kính cẩn' },
+          { word: 'dõng dạc', meaningAndUsage: 'Giọng hô to, rõ ràng và dứt khoát của người chỉ huy' },
+          { word: 'hào hùng', meaningAndUsage: 'Giai điệu bài hát Quốc ca vang dội, đầy khí thế tự hào' },
+          { word: 'thẳng tắp', meaningAndUsage: 'Hàng ngũ các lớp xếp ngay ngắn, thẳng đều tăm tắp' },
+          { word: 'phấn chấn', meaningAndUsage: 'Tâm trạng vui tươi, tràn đầy hào hứng bước vào tuần học mới' }
+        ],
+        imageries: [
+          { type: 'So sánh', example: 'Lá cờ đỏ sao vàng tung bay phần phật trên nền trời xanh như cánh chim kiêu hãnh', explanation: 'Gợi vẻ đẹp thiêng liêng của lá Quốc kỳ' },
+          { type: 'Gợi tả', example: 'Tiếng hát Quốc ca của hàng trăm học sinh hòa nhịp vang động cả sân trường', explanation: 'Gợi không khí trang trọng, xúc động' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Mở đoạn trang trọng', sentence: 'Mỗi sáng thứ Hai đầu tuần, khi tiếng trống rộn rã vang lên, sân trường em lại tưng bừng bước vào buổi lễ chào cờ trang nghiêm.', whyItIsGood: 'Nêu rõ thời gian, không gian và sự việc.' },
+          { type: 'mieu_ta', label: 'Nghi lễ thiêng liêng', sentence: 'Dưới ánh nắng sớm mai, toàn trường đồng thanh cất cao bài Quốc ca với tất cả niềm tự hào khôn xiết.', whyItIsGood: 'Khắc họa khoảnh khắc thiêng liêng của nghi thức chào cờ.' },
+          { type: 'ket_bai', label: 'Cảm xúc và quyết tâm', sentence: 'Buổi lễ chào cờ khép lại trong niềm hân hoan, tiếp thêm cho em ngọn lửa quyết tâm gặt hái thật nhiều hoa điểm mười trong tuần học mới.', whyItIsGood: 'Khép lại đầy cảm xúc và tinh thần tích cực.' }
+        ],
+        creativeIdeas: [
+          'Gợi tả ánh nắng vàng rọi qua vòm lá chiếu sáng hàng khăn quàng đỏ thắm',
+          'Nhớ lại lời dặn dò sâu sắc nhất của thầy cô trong buổi lễ'
+        ]
+      };
+    } else {
+      hoaNhoUnderstand = `Đề bài muốn con thuật lại sự việc "${mainObject}" theo đúng trình tự thời gian: việc gì diễn ra trước kể trước, việc gì diễn ra sau kể sau, có mở đầu, diễn biến và kết thúc rõ ràng.`;
+      specificRequirements = [
+        'Thể loại: Thuật lại sự việc theo trình tự thời gian',
+        `Đối tượng: ${mainObject}`,
+        'Trình tự: Nêu rõ các mốc thời gian (bắt đầu, diễn biến chính, kết thúc)',
+        'Cảm xúc: Bộc lộ cảm nhận và ý nghĩa của hoạt động đối với bản thân'
+      ];
+      socraticQuestions = [
+        'Sự việc bắt đầu khi nào, ở đâu và gồm những ai tham gia?',
+        'Trước khi diễn ra, mọi người đã chuẩn bị những gì?',
+        'Những hành động, sự việc chính diễn ra theo trình tự như thế nào?',
+        'Chi tiết hoặc khoảnh khắc nào làm con ấn tượng nhất?',
+        'Sự việc kết thúc ra sao và đọng lại trong con cảm xúc gì?'
+      ];
+      branches = [
+        { id: 'br-1', title: '⏰ Bắt đầu sự việc', icon: '⏰', color: 'emerald', points: ['Thời gian, địa điểm diễn ra', 'Mục đích của sự việc', 'Không khí chuẩn bị ban đầu'] },
+        { id: 'br-2', title: '⚡ Hoạt động mở đầu', icon: '⚡', color: 'purple', points: ['Việc làm đầu tiên', 'Sự tham gia tích cực của mọi người', 'Ấn tượng ban đầu'] },
+        { id: 'br-3', title: '🏃 Diễn biến cao trào', icon: '🏃', color: 'amber', points: ['Những việc làm tiếp theo theo trình tự', 'Chi tiết sôi nổi hoặc gay cấn', 'Hành động phối hợp nhịp nhàng'] },
+        { id: 'br-4', title: '🏁 Kết thúc hoạt động', icon: '🏁', color: 'sky', points: ['Sự việc khép lại ra sao?', 'Kết quả đạt được', 'Tiếng cười và niềm vui chung'] },
+        { id: 'br-5', title: '💖 Cảm xúc & Ý nghĩa', icon: '💖', color: 'rose', points: ['Cảm xúc đọng lại trong lòng em', 'Ý nghĩa của hoạt động', 'Bài học kinh nghiệm bổ ích'] }
+      ];
+
+      const sec1 = [`Giới thiệu thời gian, địa điểm và sự việc (${mainObject}) mà em tham gia hoặc chứng kiến.`];
+      const sec2 = [
+        'Thuật lại những việc làm chuẩn bị mở đầu cho hoạt động.',
+        'Thuật lại các sự việc chính nối tiếp nhau theo đúng trình tự thời gian.',
+        'Chi tiết nổi bật nhất làm không khí trở nên hào hứng và đáng nhớ.'
+      ];
+      const sec3 = ['Sự việc khép lại và cảm xúc vui vẻ, tự hào cùng bài học ý nghĩa rút ra được.'];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'thuat_lai',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu sự việc', icon: '📍', guideNote: 'Nêu thời gian, địa điểm và sự việc bắt đầu', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Thuật lại theo trình tự thời gian', icon: '⏰', guideNote: 'Kể các bước nối tiếp từ trước đến sau', bulletPoints: sec2 },
+          { id: 'sec-3', title: 'Phần 3. Kết đoạn - Kết thúc & Cảm xúc', icon: '🌟', guideNote: 'Khép lại sự việc và nêu cảm nhận', bulletPoints: sec3 }
+        ]
+      };
+    }
+  }
+
+  // -------------------------------------------------------------
+  // THỂ LOẠI 6B: KỂ CHUYỆN / SỰ VIỆC / KỶ NIỆM (ke_chuyen)
+  // -------------------------------------------------------------
+  else if (genre === 'ke_chuyen') {
+    const isCompassionStory = 
+      semantics.choiceType === 'format_selection' ||
+      mainObject.toLowerCase().includes('yêu thương') || 
+      mainObject.toLowerCase().includes('đùm bọc') ||
+      coreSubject.toLowerCase().includes('yêu thương') ||
+      coreSubject.toLowerCase().includes('đùm bọc');
+
+    const isGrandfatherMemory = semantics.selectedDirectionId === 'ong' || (isAboutGrandfather(mainObject) && !isAboutGrandmother(mainObject));
+    const isGrandmotherMemory = semantics.selectedDirectionId === 'ba' || (isAboutGrandmother(mainObject) && !isAboutGrandfather(mainObject));
+
+    // KỂ CHUYỆN CẢM ĐỘNG VỀ SỰ YÊU THƯƠNG, ĐÙM BỌC (LỖI 2)
+    if (isCompassionStory) {
+      const isShortEssay = semantics.selectedFormatId === 'bai_van_ngan';
+      hoaNhoUnderstand = `Con sẽ ${isShortEssay ? 'viết một bài văn ngắn' : 'viết một đoạn văn'} kể lại một câu chuyện cảm động về sự yêu thương, đùm bọc giữa con người với con người. Hãy kể rõ hoàn cảnh khó khăn, nghĩa cử ấm áp kịp thời và bài học nhân ái làm sáng ngời tình người nhé!`;
+      specificRequirements = [
+        'Thể loại: Kể chuyện (Kể lại một câu chuyện có thật hoặc con đã chứng kiến/tham gia)',
+        'Đề tài: Tình yêu thương, sự sẻ chia, đùm bọc giữa con người với con người',
+        'Nhân vật & Hoàn cảnh: Giới thiệu rõ nhân vật gặp khó khăn và người giúp đỡ bằng tấm lòng nhân ái',
+        'Diễn biến: Kể rõ các sự việc nối tiếp nhau, hành động sẻ chia kịp thời, ấm áp và khoảnh khắc xúc động nhất',
+        'Kết quả & Bài học: Sự việc kết thúc tốt đẹp, lan tỏa lòng nhân ái và bài học sâu sắc về tinh thần "lá lành đùm lá rách"',
+        `Hình thức: Bám sát hình thức con đã chọn (${isShortEssay ? 'Bài văn ngắn gồm 3 phần: Mở bài, Thân bài, Kết bài' : 'Một đoạn văn hoàn chỉnh liền mạch'})`
+      ];
+      socraticQuestions = [
+        'Câu chuyện cảm động con muốn kể diễn ra trong hoàn cảnh nào (mùa bão lũ, hoàn cảnh khó khăn, hay một sự việc đời thường)?',
+        'Ai là người gặp khó khăn và ai đã dang rộng vòng tay giúp đỡ họ bằng tất cả tình thương?',
+        'Hành động giúp đỡ cụ thể diễn ra như thế nào (chia sẻ đồ ăn, quyên góp áo ấm, động viên tinh thần)?',
+        'Khoảnh khắc hoặc cử chỉ nào trong câu chuyện làm con xúc động muốn rơi nước mắt?',
+        'Câu chuyện kết thúc ra sao và đã để lại cho con bài học gì về tình người và lòng nhân ái?'
+      ];
+      branches = [
+        {
+          id: 'br-1',
+          title: '📖 Câu chuyện & Nhân vật',
+          icon: '📖',
+          color: 'emerald',
+          points: [
+            'Tên câu chuyện cảm động hoặc sự việc có thật em đã chứng kiến',
+            'Nhân vật gặp hoàn cảnh khó khăn, éo le cần được nâng đỡ',
+            'Những con người giàu lòng nhân ái sẵn sàng dang tay giúp đỡ'
+          ]
+        },
+        {
+          id: 'br-2',
+          title: '🌧️ Hoàn cảnh khó khăn cần sẻ chia',
+          icon: '🌧️',
+          color: 'purple',
+          points: [
+            'Thời gian và không gian diễn ra câu chuyện (ngày mưa bão, xóm nghèo, bệnh viện)',
+            'Nỗi vất vả, thiếu thốn hoặc nghịch cảnh mà nhân vật phải đối mặt',
+            'Sự bế tắc dường như không lối thoát nếu không có ai giúp đỡ'
+          ]
+        },
+        {
+          id: 'br-3',
+          title: '💖 Diễn biến nghĩa cử yêu thương',
+          icon: '💖',
+          color: 'amber',
+          points: [
+            'Hành động giúp đỡ tận tình, không toan tính hay đòi hỏi đền đáp',
+            'Lời nói động viên ân cần tiếp thêm niềm tin và nghị lực sống',
+            'Sự chung tay đùm bọc của cả cộng đồng, bà con lối xóm'
+          ]
+        },
+        {
+          id: 'br-4',
+          title: '✨ Khoảnh khắc xúc động nhất',
+          icon: '✨',
+          color: 'sky',
+          points: [
+            'Ánh mắt rưng rưng ngấn lệ vì xúc động và biết ơn',
+            'Cái nắm tay siết chặt truyền hơi ấm tình người giữa gian khó',
+            'Nụ cười rạng rỡ trở lại trên gương mặt sau bao ngày buồn tủi'
+          ]
+        },
+        {
+          id: 'br-5',
+          title: '🌸 Cảm xúc & Bài học nhân ái',
+          icon: '🌸',
+          color: 'rose',
+          points: [
+            'Niềm xúc động, khâm phục trước những tấm lòng thơm thảo',
+            'Khắc sâu truyền thống cao đẹp "Lá lành đùm lá rách", "Thương người như thể thương thân"',
+            'Bản thân tự hứa sẽ luôn biết sẻ chia và giúp đỡ mọi người xung quanh'
+          ]
+        }
+      ];
+
+      if (isShortEssay) {
+        const sec1 = [
+          'Mở bài: Giới thiệu câu chuyện cảm động về tình yêu thương, đùm bọc giữa con người với con người và ấn tượng sâu đậm không thể phai mờ trong lòng em.'
+        ];
+        const sec2 = [
+          'Hoàn cảnh câu chuyện: Thời gian, địa điểm và nghịch cảnh éo le của nhân vật cần được chở che, nâng đỡ.',
+          'Diễn biến nghĩa cử cao đẹp: Kể lại chi tiết những hành động sẻ chia kịp thời, sự đùm bọc tận tình và ấm áp của những con người nhân hậu.',
+          'Khoảnh khắc xúc động nhất: Giây phút nghẹn ngào làm rơi nước mắt, ánh mắt biết ơn và niềm hy vọng được thắp sáng.'
+        ];
+        const sec3 = [
+          'Kết bài: Bày tỏ niềm xúc động, khâm phục những tấm lòng nhân ái và khẳng định bài học sâu sắc về tinh thần sẻ chia đối với bản thân và xã hội.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: sec2,
+          ketDoan: sec3,
+          genre: 'ke_chuyen',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Mở bài - Giới thiệu câu chuyện cảm động', icon: '🌱', guideNote: 'Nêu tên câu chuyện và ấn tượng sâu đậm ban đầu', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Thân bài - Hoàn cảnh, diễn biến & Khoảnh khắc xúc động', icon: '💖', guideNote: 'Kể rõ đầu đuôi nghĩa cử yêu thương và chi tiết cảm động', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Kết bài - Cảm xúc & Bài học nhân ái', icon: '🌸', guideNote: 'Khẳng định giá trị tình người và thông điệp lan tỏa', bulletPoints: sec3 }
+          ]
+        };
+      } else {
+        const sec1 = [
+          'Mở đoạn: Giới thiệu câu chuyện cảm động về sự yêu thương, đùm bọc giữa con người với con người khiến em vô cùng xúc động và nhớ mãi.'
+        ];
+        const sec2 = [
+          'Kể vắn tắt hoàn cảnh khó khăn của nhân vật và thời điểm sự việc diễn ra.',
+          'Kể lại diễn biến hành động sẻ chia ấm áp, sự đùm bọc kịp thời không tính toan của những tấm lòng nhân ái.',
+          'Chi tiết xúc động nhất: Khoảnh khắc ánh mắt chan chứa biết ơn và bàn tay ấm áp nắm chặt tiếp thêm niềm tin sống.'
+        ];
+        const sec3 = [
+          'Kết đoạn: Bộc lộ cảm xúc trân trọng, xúc động và khắc ghi bài học "Lá lành đùm lá rách", tự nhủ luôn biết yêu thương và sẻ chia với mọi người.'
+        ];
+
+        outline = {
+          moDoan: sec1,
+          phatTrienDoan: sec2,
+          ketDoan: sec3,
+          genre: 'ke_chuyen',
+          sections: [
+            { id: 'sec-1', title: 'Phần 1. Mở đoạn - Giới thiệu câu chuyện yêu thương', icon: '🌱', guideNote: 'Nêu câu chuyện cảm động và cảm xúc ban đầu', bulletPoints: sec1 },
+            { id: 'sec-2', title: 'Phần 2. Phát triển đoạn - Hoàn cảnh & Diễn biến nghĩa cử đùm bọc', icon: '📖', guideNote: 'Kể lại việc làm tốt và chi tiết xúc động nhất', bulletPoints: sec2 },
+            { id: 'sec-3', title: 'Phần 3. Kết đoạn - Cảm xúc & Bài học nhân ái', icon: '🌸', guideNote: 'Rút ra bài học nhân văn sâu sắc', bulletPoints: sec3 }
+          ]
+        };
+      }
+
+      vocabularySuggestions = {
+        goodWords: [
+          { word: 'đùm bọc', meaningAndUsage: 'Che chở, cưu mang và giúp đỡ người gặp khó khăn bằng tình thương yêu' },
+          { word: 'sẻ chia', meaningAndUsage: 'Cùng san sẻ niềm vui, nỗi buồn hoặc của cải vật chất với người thiếu thốn' },
+          { word: 'nhân ái', meaningAndUsage: 'Tấm lòng yêu thương con người tha thiết, luôn hướng thiện' },
+          { word: 'thơm thảo', meaningAndUsage: 'Tấm lòng tốt đẹp, hào phóng và chân thành dành cho mọi người' },
+          { word: 'nghẹn ngào', meaningAndUsage: 'Cảm xúc xúc động trào dâng đến mức không nói nên lời' }
+        ],
+        imageries: [
+          { type: 'Thành ngữ', example: 'Lá lành đùm lá rách / Thương người như thể thương thân', explanation: 'Truyền thống yêu thương tương thân tương ái ngàn đời của dân tộc' },
+          { type: 'So sánh', example: 'Nghĩa cử ấm áp của cô chú như ngọn lửa sưởi ấm những ngày đông giá rét', explanation: 'Gợi sự ấm áp xua tan gian khổ của tình người' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Mở đầu xúc động', sentence: 'Trong cuộc sống quanh ta, có những câu chuyện dung dị mà sáng ngời tình người, làm ấm lòng bao số phận éo le.', whyItIsGood: 'Mở đầu tự nhiên, gợi mở chủ đề nhân văn.' },
+          { type: 'mieu_ta', label: 'Khoảnh khắc ấm áp', sentence: 'Đôi bàn tay gầy guộc run run đón nhận gói quà ấm áp, ánh mắt rưng rưng ngấn lệ nói lên ngàn lời cảm ơn không cất nên lời.', whyItIsGood: 'Chi tiết miêu tả cử chỉ xúc động, giàu hình ảnh.' },
+          { type: 'ket_bai', label: 'Bài học lan tỏa', sentence: 'Câu chuyện khép lại nhưng ngọn lửa yêu thương vẫn âm ỉ cháy mãi trong trái tim em, nhắc nhở em biết sống vì mọi người.', whyItIsGood: 'Khép lại giàu dư ba và ý nghĩa giáo dục sâu sắc.' }
+        ],
+        creativeIdeas: [
+          'Kể lại một chi tiết đối thoại mộc mạc mà chứa chan tình người',
+          'Liên hệ tới phong trào quyên góp ủng hộ đồng bào lũ lụt ở trường con'
+        ]
+      };
+    } else if (isGrandfatherMemory) {
       hoaNhoUnderstand = 'Đề bài muốn con kể lại một kỷ niệm đáng nhớ và sâu sắc với ông. Con hãy nhớ lại một lần được ông dạy bảo ân cần, cùng ông tỉa cây làm vườn, chơi cờ hoặc một việc làm của ông khiến con xúc động nhé!';
       specificRequirements = [
         'Nhiệm vụ: Kể lại một kỷ niệm đáng nhớ với ông',
@@ -1695,19 +3222,175 @@ export function buildGenreStructure(
   // THỂ LOẠI 11: MIÊU TẢ (mieu_ta - Mặc định chuẩn quan sát)
   // -------------------------------------------------------------
   else if (genre === 'mieu_ta') {
+    const isTreeSelection = 
+      semantics.topicCode === 'CD08' ||
+      mainObject.toLowerCase().includes('cây') || 
+      coreSubject.toLowerCase().includes('cây bóng mát') ||
+      coreSubject.toLowerCase().includes('cây bàng') ||
+      coreSubject.toLowerCase().includes('phượng vĩ') ||
+      coreSubject.toLowerCase().includes('cây đa') ||
+      (semantics.availableObjects && semantics.availableObjects.some(o => o.id === 'cay_bang'));
+
     const isObjectSelection = 
-      semantics.choiceType === 'object_selection' ||
-      semantics.topicCode === 'CD06' ||
-      semantics.availableObjects !== undefined;
+      !isTreeSelection && (
+        semantics.choiceType === 'object_selection' ||
+        semantics.topicCode === 'CD06' ||
+        semantics.availableObjects !== undefined
+      );
 
     const isCornerOfYard = 
-      semantics.selectedDirectionId === 'goc_san_truong' ||
-      mainObject.toLowerCase().includes('góc sân');
+      !isTreeSelection && (
+        semantics.selectedDirectionId === 'goc_san_truong' ||
+        mainObject.toLowerCase().includes('góc sân')
+      );
 
     // =========================================================
-    // TRƯỜNG HỢP A: LOẠI A - LỰA CHỌN ĐỐI TƯỢNG (HỘP BÚT, CẶP, ĐỒNG HỒ, BẢNG LỚP...)
+    // TRƯỜNG HỢP 0: BÀI VĂN TẢ CÂY BÓNG MÁT TRÊN SÂN TRƯỜNG (LỖI 1)
     // =========================================================
-    if (isObjectSelection) {
+    if (isTreeSelection) {
+      const selectedTree = semantics.selectedObjectName;
+      const treeNameDisplay = selectedTree || 'Cây bóng mát';
+
+      if (selectedTree) {
+        hoaNhoUnderstand = `Con đã chọn miêu tả "${treeNameDisplay}" trên sân trường gắn với kỷ niệm của mình! Con hãy miêu tả dáng cây cao lớn, tán lá rợp bóng mát chở che và kể lại một kỷ niệm vui vẻ, thân thương dưới gốc cây cùng bạn bè nhé.`;
+      } else {
+        hoaNhoUnderstand = 'Con sẽ viết một bài văn miêu tả một cây bóng mát trên sân trường (cây bàng, cây phượng vĩ hoặc cây đa) gắn với kỷ niệm của em. Con hãy bấm chọn loài cây mình yêu thích ở bên trên để Hoa Nhỏ hướng dẫn dàn ý chi tiết nhé!';
+      }
+
+      specificRequirements = [
+        'Thể loại: Bài văn miêu tả cây cối (gồm 3 phần: Mở bài – Thân bài – Kết bài)',
+        `Đối tượng miêu tả: ${selectedTree ? selectedTree + ' trên sân trường' : 'Một cây bóng mát trên sân trường (Cây bàng, cây phượng vĩ hoặc cây đa)'}`,
+        'Quan sát bao quát: Dáng đứng sừng sững giữa sân trường, vòm lá xanh xòe rộng như chiếc ô khổng lồ che chở nắng mưa',
+        'Chi tiết từng bộ phận: Gốc cây vững chãi, rễ cây trồi lên uốn lượn, thân cây xù xì, cành lá sum suê và hoa quả theo mùa',
+        'Nội dung bắt buộc: Thể hiện một kỷ niệm đẹp, sâu sắc gắn bó với cây cùng thầy cô và bạn bè trong giờ ra chơi',
+        'Tình cảm: Yêu mến, gắn bó coi cây như người bạn tri kỉ tuổi học trò và có ý thức chăm sóc, bảo vệ cây xanh'
+      ];
+
+      socraticQuestions = [
+        `Cây bóng mát con chọn miêu tả là cây gì (${treeNameDisplay}), cây đứng ở vị trí nào trên sân trường?`,
+        'Từ xa nhìn lại, cây có dáng vẻ bề thế, vòm lá xòe rộng ra sao (như chiếc ô xanh khổng lồ, như ngọn lửa hè rực rỡ)?',
+        'Lại gần quan sát, gốc cây, rễ cây trồi lên mặt đất, thân cây và lớp vỏ xù xì in dấu năm tháng như thế nào?',
+        'Tán lá, màu sắc của lá và hoa quả biến đổi ra sao theo từng mùa trong năm học?',
+        'Kỷ niệm nào dưới bóng mát của cây (đọc sách, trò chuyện, chơi đùa cùng bạn bè) làm con nhớ nhất?',
+        'Con có tình cảm gì đối với cây bóng mát và con sẽ làm gì để cây luôn xanh tốt tỏa bóng mát cho sân trường?'
+      ];
+
+      branches = [
+        {
+          id: 'br-1',
+          title: '🌳 Giới thiệu cây bóng mát',
+          icon: '🌳',
+          color: 'emerald',
+          points: [
+            `Cây bóng mát (${treeNameDisplay}) sừng sững giữa sân trường em`,
+            'Vị trí trồng: ở giữa sân trường, bên cạnh cột cờ hoặc góc sân thân thuộc',
+            'Ấn tượng từ xa: xòe rộng như một chiếc ô xanh khổng lồ che rợp một góc trời'
+          ]
+        },
+        {
+          id: 'br-2',
+          title: '🌿 Hình dáng & Đặc điểm nổi bật',
+          icon: '🌿',
+          color: 'purple',
+          points: [
+            'Gốc cây to vững chãi, hai ba bạn học sinh ôm mới xuể',
+            'Rễ cây to nổi cuồn cuộn trên mặt đất như những chú trăn hiền lành',
+            'Thân cây cao vút, lớp vỏ nâu xù xì dãi dầu bao mùa mưa nắng',
+            'Các cành cây vươn dài khỏe khoắn tỏa đều ra bốn phía'
+          ]
+        },
+        {
+          id: 'br-3',
+          title: '🍃 Lá, hoa, quả & Bóng mát',
+          icon: '🍃',
+          color: 'amber',
+          points: [
+            'Tán lá xanh um tầng tầng lớp lớp đan cài vào nhau',
+            'Sự biến đổi kỳ diệu của màu lá và hoa qua các mùa trong năm',
+            'Ánh nắng nhảy nhót xuyên qua kẽ lá soi xuống thảm cỏ',
+            'Bóng mát rượi xua tan cái oi ả của những buổi trưa hè'
+          ]
+        },
+        {
+          id: 'br-4',
+          title: '🤝 Kỷ niệm gắn bó dưới gốc cây',
+          icon: '🤝',
+          color: 'sky',
+          points: [
+            'Những giờ ra chơi rộn rã tiếng cười nói của bạn bè',
+            'Ngồi trên hàng ghế đá dưới gốc cây cùng bạn đọc truyện, ôn bài',
+            'Kỷ niệm nhặt lá ép vào trang vở hoặc trò chuyện cùng thầy cô'
+          ]
+        },
+        {
+          id: 'br-5',
+          title: '💖 Tình cảm & Ý thức chăm sóc',
+          icon: '💖',
+          color: 'rose',
+          points: [
+            'Yêu quý và coi cây như người bạn lớn âm thầm chở che tuổi học trò',
+            'Kỷ niệm dưới bóng cây mãi in sâu trong ký ức tuổi thơ',
+            'Ý thức chăm sóc: tưới nước, không bẻ cành hái lá để cây luôn xanh tốt'
+          ]
+        }
+      ];
+
+      const sec1 = [
+        `Mở bài: Giới thiệu cây bóng mát (${treeNameDisplay}) trên sân trường gắn bó thân thiết với em.`,
+        'Vị trí sừng sững giữa sân trường và ấn tượng ban đầu sâu sắc khi nhìn từ xa.'
+      ];
+      const sec2 = [
+        'Tả bao quát: Cây cao lớn vượt cả tầng hai lớp học, tán lá xòe rộng tầng tầng lớp lớp như chiếc ô khổng lồ che rợp khoảng sân mát rượi.',
+        'Tả chi tiết các bộ phận: Gốc cây to hai ba bạn ôm không xuể, rễ cây trồi lên mặt đất như những chiếc ghế tự nhiên cho học sinh ngồi nghỉ, thân cây khoác tấm áo vỏ nâu xù xì in hằn dấu vết thời gian.',
+        'Tả cành và lá: Các cành cây vươn dài khỏe khoắn, lá cây xanh biếc mượt mà biến đổi sắc màu theo từng mùa và mang lại bóng râm dịu mát xua tan cái nắng hè.',
+        'Kỷ niệm sâu sắc gắn với cây: Dưới gốc cây thân thương, mỗi giờ ra chơi chúng em lại quây quần bên ghế đá đọc sách, chia sẻ từng chiếc bánh mẩu chuyện và lưu giữ bao kỷ niệm trong trẻo tuổi học trò.'
+      ];
+      const sec3 = [
+        'Kết bài: Bày tỏ tình cảm yêu mến, gắn bó thiết tha với cây bóng mát như một người bạn tri kỉ tuổi thơ.',
+        'Lời hứa chăm sóc, bảo vệ cây xanh sân trường luôn tươi tốt để tiếp tục tỏa bóng mát cho bao thế hệ học sinh mai sau.'
+      ];
+
+      outline = {
+        moDoan: sec1,
+        phatTrienDoan: sec2,
+        ketDoan: sec3,
+        genre: 'mieu_ta',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở bài - Giới thiệu cây bóng mát trên sân trường', icon: '🌱', guideNote: 'Giới thiệu tên cây bóng mát, vị trí và ấn tượng ban đầu', bulletPoints: sec1 },
+          { id: 'sec-2', title: 'Phần 2. Thân bài - Tả bao quát & Đặc điểm chi tiết của cây', icon: '🌳', guideNote: 'Tả gốc, rễ, thân, vỏ cây và cành lá sum suê', bulletPoints: [sec2[0], sec2[1]] },
+          { id: 'sec-3', title: 'Phần 3. Thân bài - Bóng mát che chở & Kỷ niệm dưới gốc cây', icon: '🤝', guideNote: 'Tả bóng mát và kể kỷ niệm rộn rã giờ ra chơi', bulletPoints: [sec2[2], sec2[3]] },
+          { id: 'sec-4', title: 'Phần 4. Kết bài - Tình cảm gắn bó & Ý thức chăm sóc cây', icon: '💖', guideNote: 'Bày tỏ tình cảm yêu quý và lời hứa bảo vệ cây xanh', bulletPoints: sec3 }
+        ]
+      };
+
+      vocabularySuggestions = {
+        goodWords: [
+          { word: 'sừng sững', meaningAndUsage: 'Dáng đứng hiên ngang, cao lớn và vững chãi giữa sân trường' },
+          { word: 'xanh um', meaningAndUsage: 'Màu xanh tốt, rậm rạp và tràn đầy sức sống của tán lá' },
+          { word: 'rợp mát', meaningAndUsage: 'Bóng râm rộng lớn, che mát một khoảng sân rộng xua tan nắng hè' },
+          { word: 'xù xì', meaningAndUsage: 'Lớp vỏ thân cây gồ ghề, in dấu năm tháng mưa nắng' },
+          { word: 'tri kỉ', meaningAndUsage: 'Người bạn thân thiết gắn bó, thấu hiểu bao vui buồn học trò' }
+        ],
+        imageries: [
+          { type: 'So sánh', example: 'Tán cây xòe rộng tầng tầng lớp lớp như chiếc ô xanh khổng lồ che chở cho chúng em', explanation: 'Gợi bóng mát bao la và sự chở che ấm áp' },
+          { type: 'Gợi tả', example: 'Làn gió sớm khẽ lay động vòm lá xào xạc như tiếng thì thầm tâm sự của người bạn lớn', explanation: 'Gợi cảm giác thân thuộc, gắn bó' }
+        ],
+        sampleSentences: [
+          { type: 'mo_bai', label: 'Mở bài gợi cảm', sentence: 'Mỗi sớm mai bước qua cánh cổng trường, hình ảnh cây bàng cổ thụ vươn tán lá xanh mát giữa sân trường luôn đem lại cho em cảm giác thân thương và bình yên lạ kỳ.', whyItIsGood: 'Nêu bật đối tượng và bộc lộ cảm xúc sâu lắng.' },
+          { type: 'mieu_ta', label: 'Tả bóng mát & kỷ niệm', sentence: 'Dưới vòm lá rợp mát ấy, bao thế hệ học trò chúng em đã cùng nhau lớn lên, sẻ chia những trang sách hay và rộn rã tiếng cười trong mỗi giờ ra chơi.', whyItIsGood: 'Gắn liền cảnh vật cây cối với kỷ niệm tuổi học trò.' },
+          { type: 'ket_bai', label: 'Kết bài lắng đọng', sentence: 'Mai này dẫu có lớn khôn và rời xa mái trường, bóng mát thân thương cùng những kỷ niệm êm đềm dưới gốc cây sẽ mãi khắc sâu trong ký ức của em.', whyItIsGood: 'Dư âm sâu sắc, tình cảm bền chặt dài lâu.' }
+        ],
+        creativeIdeas: [
+          'Miêu tả sự biến đổi màu lá bàng từ màu xanh ngọc bích sang màu đỏ đồng rực rỡ khi sang đông',
+          'Kể lại một lần cùng bạn ngồi nhặt quả phượng hoặc cánh hoa ép vào trang nhật ký tuổi thơ'
+        ]
+      };
+    }
+
+    // =========================================================
+    // TRƯỜNG HỢP A: LOẠI A - LỰA CHỌN ĐỒ VẬT (HỘP BÚT, CẶP, ĐỒNG HỒ, BẢNG LỚP...)
+    // =========================================================
+    else if (isObjectSelection) {
       const objId = semantics.selectedObjectId;
 
       // 1. Khi chọn HỘP BÚT
@@ -2363,7 +4046,7 @@ export function buildGenreStructure(
         'Nhiệm vụ: Viết đoạn văn miêu tả một góc sân trường em yêu thích',
         'Đối tượng: Một góc sân trường cụ thể (ghế đá, bồn hoa, tán cây che mát)',
         'Phạm vi: Cảnh vật ở góc sân và hoạt động vui tươi trong giờ ra chơi',
-        'Lưu ý: Bám sát góc sân trường, TUYỆT ĐỐI KHÔNG chuyển thành tả toàn cảnh ngôi trường hay chỉ tả một cái cây đơn lẻ',
+        'Lưu ý: Bám sát góc sân trường, không chuyển sang bao quát cả trường học hay chỉ tả một cái cây đơn lẻ',
         'Tình cảm: Yêu quý góc sân trường và ý thức giữ gìn vệ sinh sạch đẹp'
       ];
       socraticQuestions = [
@@ -2640,10 +4323,9 @@ export function validatePromptAnalysisResult(
   analysis: PromptAnalysisData,
   semantics: SemanticAnalysisResult
 ): PromptValidationReport {
-  // Kiểm tra chống nhiễm chéo đối tượng giữa các hướng viết (Section 1 & 3)
+  // Kiểm tra chống nhiễm chéo đối tượng giữa các hướng viết trên nội dung bài (Section 1 & 3)
   const allAnalysisText = (
     (analysis.hoaNhoUnderstand || '') + ' ' +
-    (analysis.specificRequirements || []).join(' ') + ' ' +
     (analysis.branches || []).map(b => (b.title || '') + ' ' + (b.points || []).join(' ')).join(' ') + ' ' +
     JSON.stringify(analysis.outline || '')
   ).toLowerCase();
@@ -2672,9 +4354,37 @@ export function validatePromptAnalysisResult(
     } else {
       directionSeparationNote = '100% nội dung tập trung vào góc sân trường yêu thích trong giờ ra chơi';
     }
+  } else if (analysis.selectedDirectionId === 'tin_nhan_cam_on' || analysis.selectedDirectionId === 'tin_nhan_xin_loi') {
+    if (allAnalysisText.includes('mấy giờ về') || allAnalysisText.includes('đi đâu') || allAnalysisText.includes('bố mẹ yên tâm')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tin nhắn gửi bạn bị lẫn nội dung nhắn cho bố mẹ';
+    } else {
+      directionSeparationNote = '100% nội dung tin nhắn gửi bạn cùng lớp (3–4 câu), không lẫn nội dung nhắn bố mẹ';
+    }
+  } else if (analysis.selectedDirectionId === 'ky_niem_thay_giao' || analysis.selectedDirectionId === 'ky_niem_co_giao') {
+    if (allAnalysisText.includes('ông bà') || allAnalysisText.includes('bà kính yêu') || allAnalysisText.includes('cháu ngoan')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Kỷ niệm với thầy cô bị lẫn nội dung ông bà';
+    } else {
+      directionSeparationNote = '100% nội dung kỷ niệm sâu sắc với thầy/cô giáo dạy dỗ nâng đỡ em tiến bộ';
+    }
+  } else if (analysis.selectedDirectionId === 'tinh_cam_ong') {
+    if (allAnalysisText.includes('bà kính yêu') || allAnalysisText.includes('bà của em') || allAnalysisText.includes('người bà')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Hướng tình cảm với ông bị lẫn nội dung về bà';
+    } else {
+      directionSeparationNote = '100% nội dung bày tỏ tình cảm yêu mến, kính trọng đối với ông (3–5 câu)';
+    }
+  } else if (analysis.selectedDirectionId === 'tinh_cam_ba') {
+    if (allAnalysisText.includes('ông kính yêu') || allAnalysisText.includes('ông của em') || allAnalysisText.includes('người ông')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Hướng tình cảm với bà bị lẫn nội dung về ông';
+    } else {
+      directionSeparationNote = '100% nội dung bày tỏ tình cảm yêu mến, kính trọng đối với bà (3–5 câu)';
+    }
   }
 
-  // Kiểm tra cách ly đối tượng (LOẠI A) - Tránh 100% nhiễm chéo giữa các đồ vật
+  // Kiểm tra cách ly đối tượng (LOẠI A) - Tránh 100% nhiễm chéo giữa các đối tượng
   if (analysis.selectedObjectId === 'dong_ho') {
     if (allAnalysisText.includes('hộp bút') || allAnalysisText.includes('chiếc cặp') || allAnalysisText.includes('bảng lớp')) {
       directionSeparationCheck = false;
@@ -2694,6 +4404,16 @@ export function validatePromptAnalysisResult(
     if (allAnalysisText.includes('kim đồng hồ') || allAnalysisText.includes('phấn trắng') || allAnalysisText.includes('máng nhôm')) {
       directionSeparationCheck = false;
       directionSeparationNote = 'LỖI: Tả chiếc cặp bị lẫn chi tiết đồng hồ/bảng lớp';
+    }
+  } else if (analysis.selectedObjectId === 'bo') {
+    if (allAnalysisText.includes('mẹ của em') || allAnalysisText.includes('mẹ yêu quý')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Bày tỏ tình cảm với bố bị lẫn mẹ';
+    }
+  } else if (analysis.selectedObjectId === 'me') {
+    if (allAnalysisText.includes('bố của em') || allAnalysisText.includes('bố kính yêu')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Bày tỏ tình cảm với mẹ bị lẫn bố';
     }
   }
 

@@ -23,7 +23,13 @@ import {
   WRITING_TASKS_CATALOG,
   analyzePromptSemantics,
   buildGenreStructure,
-  validatePromptAnalysisResult
+  validatePromptAnalysisResult,
+  isFamilyLoveGrade1Prompt,
+  isSelfIntroGrade1Prompt,
+  isCatObservationGrade1Prompt,
+  isMessageThanksOrApologyGrade2Prompt,
+  isGrandparentLoveGrade2Prompt,
+  isTeacherMemoryGrade5Prompt
 } from './src/utils/promptAnalyzerEngine.ts';
 
 dotenv.config();
@@ -2321,12 +2327,13 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
     const { 
       prompt = '', 
       grade = 3, 
+      difficultyLevel = 'co_ban', 
       specialWishes = '', 
-      selectedDirectionId = null,
-      selectedObjectId = null,
+      selectedDirectionId = null, 
+      selectedObjectId = null, 
       selectedObjectName = null,
       customObjectName = '',
-      difficultyLevel = 'co_ban'
+      selectedFormatId = null
     } = req.body;
 
     const numGrade = Number(grade) || 3;
@@ -2341,7 +2348,8 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       diffLevel, 
       selectedDirectionId, 
       selectedObjectId, 
-      customObjectName
+      customObjectName,
+      selectedFormatId
     );
 
     // 2. Nếu đề có nhiều hướng viết (LOẠI B hoặc LOẠI C) và học sinh chưa chọn:
@@ -2389,7 +2397,17 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       originalPrompt: prompt,
       grade: numGrade,
       writingType: semantics.genre,
-      writingFormat: semantics.genre === 'viet_thu' ? 'Bức thư' : semantics.genre === 'loi_nhan' ? 'Lời nhắn' : 'Đoạn văn',
+      writingFormat: semantics.writingFormat || (semantics.genre === 'viet_thu' 
+        ? 'Bức thư' 
+        : semantics.genre === 'loi_nhan' 
+        ? 'Lời nhắn' 
+        : semantics.choiceType === 'format_selection'
+        ? (semantics.selectedFormatId === 'bai_van_ngan' ? 'Bài văn ngắn' : 'Đoạn văn')
+        : (semantics.topicCode === 'CD08' && prompt.toLowerCase().includes('bài văn'))
+        ? 'Bài văn'
+        : 'Đoạn văn'),
+      needsImageObservation: semantics.needsImageObservation,
+      taskAnalysis: semantics.taskAnalysis,
       topicCode: semantics.topicCode,
       topicName: semantics.topicName,
       difficultyLevel: diffLevel,
@@ -2401,6 +2419,9 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       selectedObjectId: semantics.selectedObjectId,
       selectedObjectName: semantics.selectedObjectName,
       customObjectName: semantics.customObjectName,
+      formatChoiceQuestion: semantics.formatChoiceQuestion,
+      availableFormats: semantics.availableFormats,
+      selectedFormatId: semantics.selectedFormatId || null,
       hasMultipleDirections: semantics.hasMultipleDirections,
       detectedDirections: semantics.detectedDirections,
       selectedDirectionId: selectedDirectionId || null,
@@ -2423,7 +2444,15 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
 
     // 4. Nếu có Gemini AI, làm giàu thêm ý tưởng sinh động nhưng KHÔNG ĐƯỢC LÀM SAI LỆCH cấu trúc và đối tượng
     // Nếu là LOẠI A khi chưa chọn đồ vật: giữ nguyên bản phân tích chuẩn sư phạm không để AI đoán mò đối tượng
-    if (ai && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
+    const isSpecialPedagogicalPrompt = 
+      isFamilyLoveGrade1Prompt(prompt, numGrade) ||
+      isSelfIntroGrade1Prompt(prompt, numGrade) ||
+      isCatObservationGrade1Prompt(prompt) ||
+      isMessageThanksOrApologyGrade2Prompt(prompt) ||
+      isGrandparentLoveGrade2Prompt(prompt, numGrade) ||
+      isTeacherMemoryGrade5Prompt(prompt);
+
+    if (ai && !isSpecialPedagogicalPrompt && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
       try {
         const directionInstruction = semantics.selectedDirection ? `
 CHÚ Ý ĐẶC BIỆT VỀ HƯỚNG VIẾT ĐÃ CHỌN:

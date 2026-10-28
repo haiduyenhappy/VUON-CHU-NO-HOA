@@ -439,13 +439,71 @@ export interface MindMapBranch {
   items?: string[];
 }
 
-export type PromptChoiceType = 'object_selection' | 'direction_selection' | 'task_selection' | 'none';
+export type PromptChoiceType = 'object_selection' | 'direction_selection' | 'task_selection' | 'format_selection' | 'none';
 
 export interface ObjectChoiceItem {
   id: string;
   name: string;
   icon?: string;
   isCustom?: boolean;
+}
+
+export interface FormatChoiceItem {
+  id: string;
+  name: string;
+  description: string;
+  icon?: string;
+}
+
+export interface WritingTaskLength {
+  unit: 'sentence' | 'paragraph' | 'word' | 'unspecified';
+  min?: number;
+  max?: number;
+  display?: string;
+  isExplicit?: boolean;
+  rawText?: string;
+  formatDescription?: string;
+  minCount?: number;
+  maxCount?: number;
+}
+
+export interface WritingTaskAlternative {
+  id: string;
+  title: string;
+  subject?: string;
+  requiredContent?: string[];
+  icon?: string;
+  targetObject?: string;
+  focusPoint?: string;
+  notes?: string;
+}
+
+export interface WritingTaskAnalysis {
+  pipelineVersion?: string;
+  originalPrompt: string;
+  grade: number;
+  writingType: string;
+  textForm?: string;
+  mainSubject?: string;
+  requiredContent?: string[];
+  requiredLength?: WritingTaskLength;
+  length?: WritingTaskLength;
+  alternatives: WritingTaskAlternative[];
+  selectedAlternativeId?: string;
+  userConstraints?: string[];
+  needsImageObservation: boolean;
+  needsClarification?: boolean;
+  genre?: string;
+  topicCode?: string;
+  topicName?: string;
+  mainTask?: string;
+  targetObject?: string;
+  writingFormat?: string;
+  isMultiDirection?: boolean;
+  requiredElements?: string[];
+  forbiddenElements?: string[];
+  audience?: string;
+  pointOfView?: string;
 }
 
 export interface PromptAnalysisData {
@@ -471,6 +529,10 @@ export interface PromptAnalysisData {
   selectedObjectId?: string | null;
   selectedObjectName?: string | null;
   customObjectName?: string;
+  // Lựa chọn hình thức bài viết (Đoạn văn vs Bài văn ngắn)
+  formatChoiceQuestion?: string;
+  availableFormats?: FormatChoiceItem[];
+  selectedFormatId?: string | null;
   coreSubject: string;
   mainObject?: string;
   writingScope?: string;
@@ -486,6 +548,8 @@ export interface PromptAnalysisData {
   vocabularySuggestions: VocabularyImageryBank;
   validationChecks?: ValidationCheckItem[];
   allChecksPassed?: boolean;
+  needsImageObservation?: boolean;
+  taskAnalysis?: WritingTaskAnalysis;
 }
 
 // ------------------- HỆ THỐNG 25 CHỦ ĐỀ & 64 NHIỆM VỤ VIẾT & KIỂM ĐỊNH 20 TIÊU CHÍ -------------------
