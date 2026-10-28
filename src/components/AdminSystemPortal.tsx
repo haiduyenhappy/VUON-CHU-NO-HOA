@@ -32,7 +32,10 @@ import {
   X,
   RefreshCw,
   Clock,
-  Printer
+  Printer,
+  Eye,
+  EyeOff,
+  Filter
 } from 'lucide-react';
 
 import { AuthUser } from '../types';
@@ -90,10 +93,24 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
   const [classSearch, setClassSearch] = useState('');
   const [auditSearch, setAuditSearch] = useState('');
 
+  // Teacher Management Filters
+  const [teacherClassFilter, setTeacherClassFilter] = useState<string>('all');
+  const [teacherStatusFilter, setTeacherStatusFilter] = useState<string>('all');
+
   // Modals state
   const [isAddTeacherOpen, setIsAddTeacherOpen] = useState(false);
   const [isEditTeacherOpen, setIsEditTeacherOpen] = useState(false);
   const [isResetPassOpen, setIsResetPassOpen] = useState(false);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [accountModalTab, setAccountModalTab] = useState<'username' | 'password'>('password');
+  const [isPrintSlipOpen, setIsPrintSlipOpen] = useState(false);
+  const [slipMode, setSlipMode] = useState<'info' | 'handover'>('info');
+  const [slipTeacher, setSlipTeacher] = useState<TeacherAccount | null>(null);
+  const [slipPassword, setSlipPassword] = useState<string>('');
+  const [isPrintListOpen, setIsPrintListOpen] = useState(false);
+  const [isLockConfirmOpen, setIsLockConfirmOpen] = useState(false);
+  const [lockTargetTeacher, setLockTargetTeacher] = useState<TeacherAccount | null>(null);
+  const [lockTargetStatus, setLockTargetStatus] = useState<'active' | 'locked' | 'inactive'>('locked');
   const [isTransferClassOpen, setIsTransferClassOpen] = useState(false);
   const [isCreateClassOpen, setIsCreateClassOpen] = useState(false);
   const [isClassDetailOpen, setIsClassDetailOpen] = useState(false);
@@ -112,6 +129,25 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
     school: TEACHER_CONFIG.school,
     assignedClassId: ''
   });
+
+  const [editTeacherForm, setEditTeacherForm] = useState({
+    id: '',
+    fullName: '',
+    salutation: 'cô' as 'cô' | 'thầy',
+    phone: '',
+    email: '',
+    school: TEACHER_CONFIG.school,
+    role: 'TEACHER' as 'SUPER_ADMIN' | 'TEACHER',
+    status: 'active' as 'active' | 'locked' | 'inactive',
+    assignedClassIds: [] as string[]
+  });
+
+  const [newUsernameInput, setNewUsernameInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [requirePasswordChange, setRequirePasswordChange] = useState(true);
+  const [showPassword, setShowPassword] = useState(false);
+  const [tempPasswordResult, setTempPasswordResult] = useState<string | null>(null);
 
   const [newClassForm, setNewClassForm] = useState({
     name: '',
@@ -267,11 +303,130 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
     }
   };
 
-  // 3. Action: Reset Teacher Password
-  const handleResetTeacherPassword = async (teacher: TeacherAccount) => {
+  // Action: Open Edit Teacher Modal
+  const handleOpenEditTeacher = (teacher: TeacherAccount) => {
     playPop(settings.soundEnabled);
     setSelectedTeacher(teacher);
-    const generatedPass = 'GV' + Math.floor(100000 + Math.random() * 900000);
+    setEditTeacherForm({
+      id: teacher.id,
+      fullName: teacher.fullName,
+      salutation: teacher.salutation || 'cô',
+      phone: teacher.phone || '',
+      email: teacher.email || '',
+      school: teacher.school || TEACHER_CONFIG.school,
+      role: teacher.role || 'TEACHER',
+      status: teacher.status || 'active',
+      assignedClassIds: teacher.assignedClassIds || []
+    });
+    setIsEditTeacherOpen(true);
+  };
+
+  // Action: Save Edit Teacher Form
+  const handleSaveEditTeacher = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editTeacherForm.fullName.trim()) {
+      showToast('Vui lòng nhập họ và tên giáo viên.', 'error');
+      return;
+    }
+
+    // Last Super Admin Demotion Safeguard
+    if (selectedTeacher?.role === 'SUPER_ADMIN' && editTeacherForm.role === 'TEACHER') {
+      const activeSuperAdmins = teachers.filter(t => t.role === 'SUPER_ADMIN' && t.status === 'active' && t.id !== selectedTeacher.id);
+      if (activeSuperAdmins.length === 0) {
+        showToast('Không thể hạ quyền Quản trị viên chính duy nhất đang hoạt động.', 'error');
+        return;
+      }
+    }
+
+    try {
+      const res = await fetch('/api/admin/teachers/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer tok_${adminProfile.id}`,
+          'x-teacher-id': adminProfile.id
+        },
+        body: JSON.stringify(editTeacherForm)
+      });
+      const data = await res.json();
+      if (data.success) {
+        playSparkle(settings.soundEnabled);
+        showToast(`Đã cập nhật thành công hồ sơ giáo viên ${data.teacher.name}.`);
+        setIsEditTeacherOpen(false);
+        loadAdminData();
+      } else {
+        showToast(data.message || 'Lỗi cập nhật hồ sơ giáo viên.', 'error');
+      }
+    } catch (e) {
+      showToast('Không thể kết nối máy chủ.', 'error');
+    }
+  };
+
+  // Action: Open Account Management Modal
+  const handleOpenAccountModal = (teacher: TeacherAccount, tab: 'username' | 'password' = 'password') => {
+    playPop(settings.soundEnabled);
+    setSelectedTeacher(teacher);
+    setAccountModalTab(tab);
+    setNewUsernameInput(teacher.username || '');
+    const randPass = 'GV' + Math.floor(100000 + Math.random() * 900000);
+    setNewPasswordInput(randPass);
+    setConfirmPasswordInput(randPass);
+    setShowPassword(false);
+    setRequirePasswordChange(true);
+    setTempPasswordResult(null);
+    setIsAccountModalOpen(true);
+  };
+
+  // Action: Change Teacher Username
+  const handleChangeUsername = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeacher) return;
+    const clean = newUsernameInput.trim().toLowerCase();
+    if (clean.length < 3 || clean.length > 30) {
+      showToast('Tên đăng nhập phải từ 3 đến 30 ký tự.', 'error');
+      return;
+    }
+    if (!/^[a-z0-9_.]+$/.test(clean)) {
+      showToast('Tên đăng nhập chỉ chứa chữ cái thường không dấu, số, dấu gạch dưới (_) hoặc dấu chấm (.).', 'error');
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/admin/teachers/change-username', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer tok_${adminProfile.id}`,
+          'x-teacher-id': adminProfile.id
+        },
+        body: JSON.stringify({ id: selectedTeacher.id, newUsername: clean })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playSparkle(settings.soundEnabled);
+        showToast(`Đã đổi tên đăng nhập thành công sang "${data.teacher.username}".`);
+        setSelectedTeacher(data.teacher);
+        loadAdminData();
+      } else {
+        showToast(data.message || 'Lỗi khi đổi tên đăng nhập.', 'error');
+      }
+    } catch (e) {
+      showToast('Không thể kết nối máy chủ.', 'error');
+    }
+  };
+
+  // Action: Reset Teacher Password in Account Modal
+  const handleConfirmResetPassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedTeacher) return;
+    if (!newPasswordInput.trim()) {
+      showToast('Vui lòng nhập mật khẩu mới.', 'error');
+      return;
+    }
+    if (newPasswordInput !== confirmPasswordInput) {
+      showToast('Mật khẩu xác nhận không khớp.', 'error');
+      return;
+    }
 
     try {
       const res = await fetch('/api/admin/teachers/reset-password', {
@@ -281,16 +436,17 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
           'Authorization': `Bearer tok_${adminProfile.id}`,
           'x-teacher-id': adminProfile.id
         },
-        body: JSON.stringify({ id: teacher.id, newPassword: generatedPass })
+        body: JSON.stringify({
+          id: selectedTeacher.id,
+          newPassword: newPasswordInput.trim(),
+          mustChangePasswordNextLogin: requirePasswordChange
+        })
       });
       const data = await res.json();
       if (data.success) {
         playChime(settings.soundEnabled);
-        setResetPassResult({
-          teacherName: teacher.name,
-          password: generatedPass
-        });
-        setIsResetPassOpen(true);
+        setTempPasswordResult(data.temporaryPassword);
+        showToast(`Đã cấp lại mật khẩu thành công cho giáo viên ${selectedTeacher.name}.`);
         loadAdminData();
       } else {
         showToast(data.message || 'Lỗi cấp lại mật khẩu.', 'error');
@@ -298,6 +454,40 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
     } catch (e) {
       showToast('Không thể kết nối máy chủ.', 'error');
     }
+  };
+
+  // Action: Open Print Slip Modal
+  const handleOpenPrintSlip = (teacher: TeacherAccount, mode: 'info' | 'handover' = 'info', tempPass: string = '') => {
+    playPop(settings.soundEnabled);
+    setSlipTeacher(teacher);
+    setSlipMode(mode);
+    setSlipPassword(tempPass);
+    setIsPrintSlipOpen(true);
+  };
+
+  // Action: Open Lock / Unlock Confirmation
+  const handleOpenLockConfirm = (teacher: TeacherAccount, targetStatus: 'active' | 'locked' | 'inactive') => {
+    playPop(settings.soundEnabled);
+    if (teacher.id === adminProfile.id && targetStatus !== 'active') {
+      showToast('Không thể khóa tài khoản Quản trị viên chính của bạn.', 'error');
+      return;
+    }
+    if ((targetStatus === 'locked' || targetStatus === 'inactive') && teacher.role === 'SUPER_ADMIN') {
+      const activeSuperAdmins = teachers.filter(t => t.role === 'SUPER_ADMIN' && t.status === 'active' && t.id !== teacher.id);
+      if (activeSuperAdmins.length === 0) {
+        showToast('Không thể khóa Quản trị viên chính duy nhất đang hoạt động.', 'error');
+        return;
+      }
+    }
+    setLockTargetTeacher(teacher);
+    setLockTargetStatus(targetStatus);
+    setIsLockConfirmOpen(true);
+  };
+
+  const handleExecuteLockToggle = async () => {
+    if (!lockTargetTeacher) return;
+    await handleToggleTeacherStatus(lockTargetTeacher, lockTargetStatus);
+    setIsLockConfirmOpen(false);
   };
 
   // 4. Action: Create Class
@@ -657,32 +847,121 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
       {/* ================= TAB 2: QUẢN LÝ GIÁO VIÊN ================= */}
       {activeTab === 'teachers' && (
         <div className="bg-white rounded-3xl border-2 border-purple-200 p-5 sm:p-6 shadow-xs space-y-5 animate-fade-in">
-          {/* Action Bar */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3">
-            <div className="relative flex-1 max-w-md">
-              <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
-              <input
-                type="text"
-                value={teacherSearch}
-                onChange={(e) => setTeacherSearch(e.target.value)}
-                placeholder="Tìm theo tên giáo viên, mã số, lớp..."
-                className="w-full pl-9 pr-3 py-2 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:border-purple-400"
-              />
+          {/* Action & Filter Toolbar */}
+          <div className="flex flex-col lg:flex-row items-stretch lg:items-center justify-between gap-3">
+            <div className="flex flex-1 flex-col sm:flex-row items-stretch sm:items-center gap-2.5">
+              {/* Search Box */}
+              <div className="relative flex-1 min-w-[200px]">
+                <Search className="w-4 h-4 text-stone-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={teacherSearch}
+                  onChange={(e) => setTeacherSearch(e.target.value)}
+                  placeholder="Tìm theo tên giáo viên, mã GV, username..."
+                  className="w-full pl-9 pr-3 py-2.5 bg-stone-50 border border-stone-200 rounded-xl text-xs sm:text-sm font-medium focus:outline-hidden focus:border-purple-400 focus:bg-white"
+                />
+              </div>
+
+              {/* Class Filter */}
+              <div className="relative min-w-[150px]">
+                <select
+                  value={teacherClassFilter}
+                  onChange={(e) => setTeacherClassFilter(e.target.value)}
+                  className="w-full py-2.5 px-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-700 focus:outline-hidden focus:border-purple-400 focus:bg-white"
+                >
+                  <option value="all">Tất cả lớp học</option>
+                  <option value="unassigned">Chưa phân công</option>
+                  {classes.map(c => (
+                    <option key={c.id} value={c.id}>
+                      {c.name} (Khối {c.grade})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Status Filter */}
+              <div className="relative min-w-[140px]">
+                <select
+                  value={teacherStatusFilter}
+                  onChange={(e) => setTeacherStatusFilter(e.target.value)}
+                  className="w-full py-2.5 px-3 bg-stone-50 border border-stone-200 rounded-xl text-xs font-semibold text-stone-700 focus:outline-hidden focus:border-purple-400 focus:bg-white"
+                >
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="active">🟢 Đang hoạt động</option>
+                  <option value="locked">🔴 Đang bị khóa</option>
+                  <option value="inactive">⚪ Ngừng kích hoạt</option>
+                </select>
+              </div>
             </div>
 
-            <button
-              onClick={() => {
-                playPop(settings.soundEnabled);
-                setIsAddTeacherOpen(true);
-              }}
-              className="flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-2xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs sm:text-sm shadow-xs transition-all cursor-pointer hover:scale-102"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Thêm giáo viên mới</span>
-            </button>
+            {/* Top Action Buttons */}
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setIsPrintListOpen(true);
+                }}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-3.5 py-2.5 min-h-[40px] rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs shadow-xs transition-all cursor-pointer"
+                title="In danh sách giáo viên toàn trường"
+              >
+                <Printer className="w-4 h-4 text-purple-700" />
+                <span>🖨️ In danh sách</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setIsAddTeacherOpen(true);
+                }}
+                className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 min-h-[40px] rounded-2xl bg-purple-700 hover:bg-purple-800 text-white font-black text-xs sm:text-sm shadow-xs transition-all cursor-pointer hover:scale-102"
+              >
+                <Plus className="w-4 h-4" />
+                <span>+ Thêm giáo viên mới</span>
+              </button>
+            </div>
           </div>
 
-          {/* Teachers Table & Mobile Responsive Cards */}
+          {/* Quick Summary of Filtered Teachers */}
+          <div className="flex items-center justify-between text-xs text-stone-500 px-1">
+            <span>
+              Hiển thị <strong>{
+                teachers.filter(t => {
+                  if (teacherSearch.trim()) {
+                    const q = teacherSearch.toLowerCase();
+                    const matchName = t.fullName?.toLowerCase().includes(q);
+                    const matchId = t.id?.toLowerCase().includes(q);
+                    const matchUser = (t.username || '').toLowerCase().includes(q);
+                    if (!matchName && !matchId && !matchUser) return false;
+                  }
+                  if (teacherClassFilter !== 'all') {
+                    if (teacherClassFilter === 'unassigned') {
+                      if (t.assignedClassIds && t.assignedClassIds.length > 0) return false;
+                    } else {
+                      if (!t.assignedClassIds || !t.assignedClassIds.includes(teacherClassFilter)) return false;
+                    }
+                  }
+                  if (teacherStatusFilter !== 'all') {
+                    if (t.status !== teacherStatusFilter) return false;
+                  }
+                  return true;
+                }).length
+              }</strong> / <strong>{teachers.length}</strong> giáo viên
+            </span>
+            {(teacherSearch || teacherClassFilter !== 'all' || teacherStatusFilter !== 'all') && (
+              <button
+                onClick={() => {
+                  setTeacherSearch('');
+                  setTeacherClassFilter('all');
+                  setTeacherStatusFilter('all');
+                }}
+                className="text-purple-700 hover:underline font-semibold"
+              >
+                Xóa bộ lọc
+              </button>
+            )}
+          </div>
+
+          {/* Teachers Table (Desktop) */}
           <div className="hidden md:block overflow-x-auto rounded-2xl border border-stone-200">
             <table className="w-full text-left text-xs sm:text-sm">
               <thead className="bg-purple-50/80 text-purple-950 font-extrabold border-b border-purple-200">
@@ -695,15 +974,30 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
                   <th className="py-3 px-3 text-center">Vai trò</th>
                   <th className="py-3 px-3 text-center">Trạng thái</th>
                   <th className="py-3 px-3">Lần đăng nhập</th>
-                  <th className="py-3 px-3 text-right">Thao tác</th>
+                  <th className="py-3 px-3 text-center min-w-[290px]">Thao tác</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100 font-medium text-stone-800">
                 {teachers
                   .filter(t => {
-                    if (!teacherSearch.trim()) return true;
-                    const q = teacherSearch.toLowerCase();
-                    return t.fullName.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.username.toLowerCase().includes(q);
+                    if (teacherSearch.trim()) {
+                      const q = teacherSearch.toLowerCase();
+                      const matchName = t.fullName?.toLowerCase().includes(q);
+                      const matchId = t.id?.toLowerCase().includes(q);
+                      const matchUser = (t.username || '').toLowerCase().includes(q);
+                      if (!matchName && !matchId && !matchUser) return false;
+                    }
+                    if (teacherClassFilter !== 'all') {
+                      if (teacherClassFilter === 'unassigned') {
+                        if (t.assignedClassIds && t.assignedClassIds.length > 0) return false;
+                      } else {
+                        if (!t.assignedClassIds || !t.assignedClassIds.includes(teacherClassFilter)) return false;
+                      }
+                    }
+                    if (teacherStatusFilter !== 'all') {
+                      if (t.status !== teacherStatusFilter) return false;
+                    }
+                    return true;
                   })
                   .map((teacher, idx) => {
                     const isSuper = teacher.role === 'SUPER_ADMIN';
@@ -717,6 +1011,7 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
                             <span>{teacher.fullName}</span>
                           </div>
                           {teacher.email && <span className="text-[11px] text-stone-500 block">{teacher.email}</span>}
+                          {teacher.phone && <span className="text-[10px] text-stone-400 block font-mono">{teacher.phone}</span>}
                         </td>
                         <td className="py-3 px-3 font-mono font-bold text-purple-800">{teacher.id}</td>
                         <td className="py-3 px-3 font-semibold text-stone-700">{teacher.username}</td>
@@ -763,46 +1058,56 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
                           )}
                         </td>
                         <td className="py-3 px-3 text-xs text-stone-500">{teacher.lastLogin || 'Chưa đăng nhập'}</td>
-                        <td className="py-3 px-3 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            {/* Reset Password */}
+                        <td className="py-3 px-3">
+                          <div className="flex items-center justify-center gap-1.5 flex-nowrap">
+                            {/* 1. Sửa */}
                             <button
-                              onClick={() => handleResetTeacherPassword(teacher)}
-                              className="p-1.5 hover:bg-purple-100 rounded-lg text-purple-700 transition-colors"
-                              title="Cấp lại mật khẩu mới"
+                              onClick={() => handleOpenEditTeacher(teacher)}
+                              className="px-2.5 py-1.5 min-h-[36px] bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                              title="Chỉnh sửa thông tin giáo viên"
                             >
-                              <KeyRound className="w-4 h-4" />
+                              <Edit3 className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                              <span>Sửa</span>
                             </button>
 
-                            {/* Lock / Unlock */}
-                            {!isSuper && (
-                              teacher.status === 'locked' ? (
-                                <button
-                                  onClick={() => handleToggleTeacherStatus(teacher, 'active')}
-                                  className="p-1.5 hover:bg-emerald-100 rounded-lg text-emerald-700 transition-colors"
-                                  title="Mở khóa tài khoản"
-                                >
-                                  <Unlock className="w-4 h-4" />
-                                </button>
-                              ) : (
-                                <button
-                                  onClick={() => handleToggleTeacherStatus(teacher, 'locked')}
-                                  className="p-1.5 hover:bg-rose-100 rounded-lg text-rose-700 transition-colors"
-                                  title="Khóa tài khoản"
-                                >
-                                  <Lock className="w-4 h-4" />
-                                </button>
-                              )
-                            )}
+                            {/* 2. Tài khoản */}
+                            <button
+                              onClick={() => handleOpenAccountModal(teacher, 'password')}
+                              className="px-2.5 py-1.5 min-h-[36px] bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                              title="Quản lý tài khoản: Đổi username & cấp mật khẩu"
+                            >
+                              <KeyRound className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                              <span>Tài khoản</span>
+                            </button>
 
-                            {/* Deactivate */}
-                            {!isSuper && teacher.status !== 'inactive' && (
+                            {/* 3. In phiếu */}
+                            <button
+                              onClick={() => handleOpenPrintSlip(teacher, 'info')}
+                              className="px-2.5 py-1.5 min-h-[36px] bg-stone-50 hover:bg-stone-100 text-stone-800 border border-stone-200 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                              title="In phiếu tài khoản giáo viên"
+                            >
+                              <Printer className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+                              <span>In phiếu</span>
+                            </button>
+
+                            {/* 4. Khóa / Mở khóa */}
+                            {teacher.status === 'locked' ? (
                               <button
-                                onClick={() => handleToggleTeacherStatus(teacher, 'inactive')}
-                                className="p-1.5 hover:bg-stone-200 rounded-lg text-stone-600 transition-colors"
-                                title="Ngừng kích hoạt tài khoản"
+                                onClick={() => handleOpenLockConfirm(teacher, 'active')}
+                                className="px-2.5 py-1.5 min-h-[36px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                                title="Mở khóa tài khoản"
                               >
-                                <UserX className="w-4 h-4" />
+                                <Unlock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                                <span>Mở khóa</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleOpenLockConfirm(teacher, 'locked')}
+                                className="px-2.5 py-1.5 min-h-[36px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer shadow-2xs hover:scale-102"
+                                title="Khóa tài khoản"
+                              >
+                                <Lock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                                <span>Khóa</span>
                               </button>
                             )}
                           </div>
@@ -818,9 +1123,24 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
           <div className="block md:hidden space-y-3">
             {teachers
               .filter(t => {
-                if (!teacherSearch.trim()) return true;
-                const q = teacherSearch.toLowerCase();
-                return t.fullName.toLowerCase().includes(q) || t.id.toLowerCase().includes(q) || t.username.toLowerCase().includes(q);
+                if (teacherSearch.trim()) {
+                  const q = teacherSearch.toLowerCase();
+                  const matchName = t.fullName?.toLowerCase().includes(q);
+                  const matchId = t.id?.toLowerCase().includes(q);
+                  const matchUser = (t.username || '').toLowerCase().includes(q);
+                  if (!matchName && !matchId && !matchUser) return false;
+                }
+                if (teacherClassFilter !== 'all') {
+                  if (teacherClassFilter === 'unassigned') {
+                    if (t.assignedClassIds && t.assignedClassIds.length > 0) return false;
+                  } else {
+                    if (!t.assignedClassIds || !t.assignedClassIds.includes(teacherClassFilter)) return false;
+                  }
+                }
+                if (teacherStatusFilter !== 'all') {
+                  if (t.status !== teacherStatusFilter) return false;
+                }
+                return true;
               })
               .map((teacher, idx) => {
                 const isSuper = teacher.role === 'SUPER_ADMIN';
@@ -882,34 +1202,52 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
                       </div>
                     </div>
 
-                    {/* Mobile Action buttons */}
-                    <div className="flex items-center justify-end gap-2 pt-1 border-t border-stone-100">
+                    {/* Mobile 4 Action buttons grid */}
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-stone-100">
+                      {/* 1. Sửa */}
                       <button
-                        onClick={() => handleResetTeacherPassword(teacher)}
-                        className="px-3 py-1.5 min-h-[36px] bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center gap-1.5"
+                        onClick={() => handleOpenEditTeacher(teacher)}
+                        className="px-2.5 py-2 min-h-[36px] bg-purple-50 hover:bg-purple-100 text-purple-900 border border-purple-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
                       >
-                        <KeyRound className="w-3.5 h-3.5 text-purple-700" />
-                        <span>Cấp lại MK</span>
+                        <Edit3 className="w-3.5 h-3.5 text-purple-700 shrink-0" />
+                        <span>✏️ Sửa</span>
                       </button>
 
-                      {!isSuper && (
-                        teacher.status === 'locked' ? (
-                          <button
-                            onClick={() => handleToggleTeacherStatus(teacher, 'active')}
-                            className="px-3 py-1.5 min-h-[36px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
-                          >
-                            <Unlock className="w-3.5 h-3.5 text-emerald-600" />
-                            <span>Mở khóa</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleToggleTeacherStatus(teacher, 'locked')}
-                            className="px-3 py-1.5 min-h-[36px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold flex items-center gap-1.5"
-                          >
-                            <Lock className="w-3.5 h-3.5 text-rose-600" />
-                            <span>Khóa</span>
-                          </button>
-                        )
+                      {/* 2. Tài khoản */}
+                      <button
+                        onClick={() => handleOpenAccountModal(teacher, 'password')}
+                        className="px-2.5 py-2 min-h-[36px] bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                      >
+                        <KeyRound className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+                        <span>🔐 Tài khoản</span>
+                      </button>
+
+                      {/* 3. In phiếu */}
+                      <button
+                        onClick={() => handleOpenPrintSlip(teacher, 'info')}
+                        className="px-2.5 py-2 min-h-[36px] bg-stone-50 hover:bg-stone-100 text-stone-800 border border-stone-200 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                      >
+                        <Printer className="w-3.5 h-3.5 text-stone-600 shrink-0" />
+                        <span>🖨️ In phiếu</span>
+                      </button>
+
+                      {/* 4. Khóa / Mở khóa */}
+                      {teacher.status === 'locked' ? (
+                        <button
+                          onClick={() => handleOpenLockConfirm(teacher, 'active')}
+                          className="px-2.5 py-2 min-h-[36px] bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                        >
+                          <Unlock className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+                          <span>🔓 Mở khóa</span>
+                        </button>
+                      ) : (
+                        <button
+                          onClick={() => handleOpenLockConfirm(teacher, 'locked')}
+                          className="px-2.5 py-2 min-h-[36px] bg-rose-50 hover:bg-rose-100 text-rose-800 border border-rose-300 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5"
+                        >
+                          <Lock className="w-3.5 h-3.5 text-rose-600 shrink-0" />
+                          <span>🔒 Khóa</span>
+                        </button>
                       )}
                     </div>
                   </div>
@@ -1493,7 +1831,835 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL 4: PHIẾU CẤP LẠI MẬT KHẨU ================= */}
+      {/* Print Styles for Slip and List */}
+      <style>{`
+        @media print {
+          body * {
+            visibility: hidden !important;
+          }
+          #printable-slip, #printable-slip *,
+          #printable-list, #printable-list * {
+            visibility: visible !important;
+          }
+          #printable-slip, #printable-list {
+            position: fixed !important;
+            left: 0 !important;
+            top: 0 !important;
+            width: 100% !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            padding: 24px !important;
+            background: white !important;
+            color: #000 !important;
+            box-shadow: none !important;
+            border: none !important;
+            z-index: 999999 !important;
+          }
+          .no-print {
+            display: none !important;
+          }
+        }
+      `}</style>
+
+      {/* ================= MODAL: CHỈNH SỬA THÔNG TIN GIÁO VIÊN ================= */}
+      {isEditTeacherOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border-2 border-purple-300 space-y-4 animate-scale-in max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">✏️</span>
+                <h3 className="font-extrabold text-base sm:text-lg text-purple-950 font-display">
+                  Chỉnh sửa thông tin giáo viên
+                </h3>
+              </div>
+              <button 
+                onClick={() => setIsEditTeacherOpen(false)} 
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditTeacher} className="space-y-4 text-xs sm:text-sm">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div className="sm:col-span-2">
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Họ và tên giáo viên: *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={editTeacherForm.fullName}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, fullName: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-medium"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Xưng hô:
+                  </label>
+                  <select
+                    value={editTeacherForm.salutation}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, salutation: e.target.value as 'cô' | 'thầy' })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-medium bg-white"
+                  >
+                    <option value="cô">Cô giáo</option>
+                    <option value="thầy">Thầy giáo</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Email:
+                  </label>
+                  <input
+                    type="email"
+                    value={editTeacherForm.email}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, email: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-medium"
+                    placeholder="email@thnguyendu.edu.vn"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Số điện thoại:
+                  </label>
+                  <input
+                    type="tel"
+                    value={editTeacherForm.phone}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, phone: e.target.value })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-medium"
+                    placeholder="0912 345 678"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Vai trò hệ thống:
+                  </label>
+                  <select
+                    value={editTeacherForm.role}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, role: e.target.value as 'SUPER_ADMIN' | 'TEACHER' })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-medium bg-white"
+                  >
+                    <option value="TEACHER">Giáo viên bộ môn / Chủ nhiệm (TEACHER)</option>
+                    <option value="SUPER_ADMIN">👑 Quản trị viên chính (SUPER_ADMIN)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Trạng thái hoạt động:
+                  </label>
+                  <select
+                    value={editTeacherForm.status}
+                    onChange={(e) => setEditTeacherForm({ ...editTeacherForm, status: e.target.value as 'active' | 'locked' | 'inactive' })}
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-medium bg-white"
+                  >
+                    <option value="active">🟢 Đang hoạt động</option>
+                    <option value="locked">🔴 Đang bị khóa</option>
+                    <option value="inactive">⚪ Ngừng kích hoạt</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Class Assignment Multi-select Checkboxes */}
+              <div>
+                <label className="block text-xs font-bold text-stone-700 mb-1.5">
+                  Lớp được phân công phụ trách:
+                </label>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 p-3 bg-stone-50 rounded-2xl border border-stone-200 max-h-36 overflow-y-auto">
+                  {classes.map(c => {
+                    const isChecked = editTeacherForm.assignedClassIds.includes(c.id);
+                    return (
+                      <label 
+                        key={c.id} 
+                        className={`flex items-center gap-2 p-2 rounded-xl text-xs font-semibold cursor-pointer transition-colors border ${
+                          isChecked ? 'bg-purple-100 text-purple-950 border-purple-300' : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setEditTeacherForm({
+                                ...editTeacherForm,
+                                assignedClassIds: [...editTeacherForm.assignedClassIds, c.id]
+                              });
+                            } else {
+                              setEditTeacherForm({
+                                ...editTeacherForm,
+                                assignedClassIds: editTeacherForm.assignedClassIds.filter(id => id !== c.id)
+                              });
+                            }
+                          }}
+                          className="rounded text-purple-600 focus:ring-purple-500"
+                        />
+                        <span>{c.name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-3 border-t border-purple-100">
+                <button
+                  type="button"
+                  onClick={() => setIsEditTeacherOpen(false)}
+                  className="px-4 py-2.5 rounded-xl text-stone-600 font-bold hover:bg-stone-100 text-xs sm:text-sm"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black shadow-xs cursor-pointer text-xs sm:text-sm"
+                >
+                  Lưu thông tin
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: QUẢN LÝ TÀI KHOẢN (ĐỔI USERNAME / CẤP MẬT KHẨU) ================= */}
+      {isAccountModalOpen && selectedTeacher && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-lg w-full p-6 shadow-2xl border-2 border-amber-300 space-y-4 animate-scale-in">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b border-amber-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🔐</span>
+                <div>
+                  <h3 className="font-extrabold text-base sm:text-lg text-amber-950 font-display">
+                    Quản lý tài khoản giáo viên
+                  </h3>
+                  <p className="text-xs text-stone-500 font-medium">
+                    {selectedTeacher.fullName} • Mã GV: <strong className="font-mono text-purple-800">{selectedTeacher.id}</strong>
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsAccountModalOpen(false)} 
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* 2 Tabs switcher */}
+            <div className="flex rounded-2xl bg-stone-100 p-1 border border-stone-200">
+              <button
+                type="button"
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setAccountModalTab('username');
+                }}
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                  accountModalTab === 'username' 
+                    ? 'bg-white text-purple-950 shadow-xs' 
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                👤 Đổi tên đăng nhập (Username)
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setAccountModalTab('password');
+                }}
+                className={`flex-1 py-2 text-xs sm:text-sm font-bold rounded-xl transition-all cursor-pointer ${
+                  accountModalTab === 'password' 
+                    ? 'bg-white text-purple-950 shadow-xs' 
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                🔑 Cấp lại mật khẩu
+              </button>
+            </div>
+
+            {/* TAB 1: Change Username */}
+            {accountModalTab === 'username' && (
+              <form onSubmit={handleChangeUsername} className="space-y-4 text-xs sm:text-sm pt-2">
+                <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200">
+                  <span className="text-stone-500 text-xs block mb-0.5">Tên đăng nhập hiện tại:</span>
+                  <span className="font-mono font-bold text-stone-900 text-sm">{selectedTeacher.username}</span>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-stone-700 mb-1">
+                    Tên đăng nhập mới: *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={newUsernameInput}
+                    onChange={(e) => setNewUsernameInput(e.target.value.toLowerCase().trim())}
+                    placeholder="ví dụ: gv_minhtri"
+                    className="w-full p-2.5 rounded-xl border border-stone-300 focus:border-purple-500 focus:outline-hidden font-mono font-semibold"
+                  />
+                  <p className="text-[11px] text-stone-500 mt-1.5 leading-relaxed">
+                    ℹ️ Chỉ gồm 4–20 ký tự chữ thường không dấu, số và dấu gạch dưới (<code>a-z, 0-9, _</code>). Không được chứa khoảng trắng hoặc ký tự đặc biệt.
+                  </p>
+                </div>
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-amber-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsAccountModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-stone-600 font-bold hover:bg-stone-100"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black shadow-xs cursor-pointer"
+                  >
+                    Lưu tên đăng nhập mới
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* TAB 2: Reset Password */}
+            {accountModalTab === 'password' && (
+              <form onSubmit={handleConfirmResetPassword} className="space-y-4 text-xs sm:text-sm pt-2">
+                <div>
+                  <div className="flex items-center justify-between mb-1">
+                    <label className="text-xs font-bold text-stone-700">
+                      Mật khẩu mới: *
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        const randomSix = Math.floor(100000 + Math.random() * 900000);
+                        const autoPass = `GV${randomSix}`;
+                        setNewPasswordInput(autoPass);
+                        setConfirmPasswordInput(autoPass);
+                      }}
+                      className="text-xs font-bold text-purple-700 hover:text-purple-900 underline flex items-center gap-1 cursor-pointer"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5" />
+                      <span>Sinh ngẫu nhiên (GV + 6 số)</span>
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={newPasswordInput}
+                      onChange={(e) => {
+                        setNewPasswordInput(e.target.value);
+                        setConfirmPasswordInput(e.target.value);
+                      }}
+                      placeholder="Nhập hoặc tạo mật khẩu mới..."
+                      className="w-full pr-10 pl-3 py-2.5 rounded-xl border border-stone-300 focus:border-amber-500 focus:outline-hidden font-mono font-bold tracking-wider"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-stone-400 hover:text-stone-700"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="p-3 bg-amber-50/70 rounded-2xl border border-amber-200">
+                  <label className="flex items-start gap-2.5 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={requirePasswordChange}
+                      onChange={(e) => setRequirePasswordChange(e.target.checked)}
+                      className="mt-0.5 rounded text-amber-600 focus:ring-amber-500"
+                    />
+                    <div className="text-xs">
+                      <strong className="text-amber-950 block">Yêu cầu giáo viên đổi mật khẩu ở lần đăng nhập tiếp theo</strong>
+                      <span className="text-stone-600">
+                        Giáo viên sẽ nhận được thông báo yêu cầu đặt mật khẩu cá nhân mới ngay khi đăng nhập thành công.
+                      </span>
+                    </div>
+                  </label>
+                </div>
+
+                {/* If tempPasswordResult is available, show quick handover slip button */}
+                {tempPasswordResult && (
+                  <div className="p-4 bg-emerald-50 rounded-2xl border border-emerald-300 flex items-center justify-between gap-3 animate-fade-in">
+                    <div>
+                      <span className="text-xs font-bold text-emerald-900 block">✅ Đã cấp mật khẩu mới:</span>
+                      <span className="font-mono font-black text-emerald-950 text-base">{tempPasswordResult}</span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleOpenPrintSlip(selectedTeacher, 'handover', tempPasswordResult)}
+                      className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs flex items-center gap-1.5"
+                    >
+                      <Printer className="w-3.5 h-3.5" />
+                      <span>In phiếu bàn giao ngay</span>
+                    </button>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-end gap-2 pt-3 border-t border-amber-100">
+                  <button
+                    type="button"
+                    onClick={() => setIsAccountModalOpen(false)}
+                    className="px-4 py-2 rounded-xl text-stone-600 font-bold hover:bg-stone-100"
+                  >
+                    Đóng
+                  </button>
+                  <button
+                    type="submit"
+                    className="px-5 py-2.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-black shadow-xs cursor-pointer"
+                  >
+                    Cập nhật mật khẩu
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: IN PHIẾU TÀI KHOẢN GIÁO VIÊN (A4 PORTRAIT) ================= */}
+      {isPrintSlipOpen && slipTeacher && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-2xl w-full p-6 shadow-2xl border-2 border-purple-300 space-y-4 animate-scale-in my-auto">
+            {/* Action Bar (Not printed) */}
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3 no-print">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">🖨️</span>
+                <h3 className="font-extrabold text-base sm:text-lg text-purple-950 font-display">
+                  Xem trước phiếu tài khoản giáo viên
+                </h3>
+              </div>
+              <div className="flex items-center gap-2">
+                {/* Switcher Mode */}
+                <div className="flex rounded-xl bg-stone-100 p-0.5 border border-stone-200 text-xs">
+                  <button
+                    type="button"
+                    onClick={() => setSlipMode('info')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      slipMode === 'info' ? 'bg-white text-purple-900 shadow-2xs' : 'text-stone-600'
+                    }`}
+                  >
+                    Phiếu thông tin
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setSlipMode('handover')}
+                    className={`px-2.5 py-1 rounded-lg font-bold transition-all ${
+                      slipMode === 'handover' ? 'bg-white text-purple-900 shadow-2xs' : 'text-stone-600'
+                    }`}
+                  >
+                    Phiếu bàn giao (có MK)
+                  </button>
+                </div>
+
+                <button 
+                  onClick={() => setIsPrintSlipOpen(false)} 
+                  className="text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Printable Document Preview Area */}
+            <div id="printable-slip" className="p-6 bg-white border border-stone-200 rounded-2xl shadow-inner space-y-5 text-stone-900 font-sans">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b-2 border-purple-900 pb-4">
+                <div>
+                  <h4 className="font-bold text-xs uppercase text-stone-600 tracking-wider">
+                    {TEACHER_CONFIG.school}
+                  </h4>
+                  <h5 className="font-black text-sm text-purple-900 uppercase">
+                    VƯỜN CHỮ NỞ HOA • TRỢ LÝ TẬP LÀM VĂN TIỂU HỌC AI
+                  </h5>
+                  <p className="text-[11px] text-stone-500">
+                    Địa chỉ: P. Hàng Bạc, Q. Hoàn Kiếm, TP. Hà Nội
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] text-stone-500 block">Số phiếu: <strong>{slipTeacher.id}-{new Date().getFullYear()}</strong></span>
+                  <span className="text-[11px] text-stone-500 block">Ngày lập: {new Date().toLocaleDateString('vi-VN')}</span>
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="text-center py-2">
+                <h2 className="text-xl font-black text-purple-950 uppercase tracking-tight">
+                  {slipMode === 'handover' ? 'PHIẾU BÀN GIAO TÀI KHOẢN GIÁO VIÊN' : 'PHIẾU THÔNG TIN TÀI KHOẢN GIÁO VIÊN'}
+                </h2>
+                <p className="text-xs text-stone-600 italic">
+                  (Dùng để đăng nhập và quản lý lớp học trên nền tảng Vườn Chữ Nở Hoa)
+                </p>
+              </div>
+
+              {/* Information Table */}
+              <div className="border border-stone-300 rounded-xl overflow-hidden text-xs sm:text-sm">
+                <table className="w-full">
+                  <tbody>
+                    <tr className="border-b border-stone-200 bg-stone-50/60">
+                      <td className="p-2.5 font-bold text-stone-700 w-1/3">Họ và tên giáo viên:</td>
+                      <td className="p-2.5 font-extrabold text-stone-950 text-base">{slipTeacher.fullName}</td>
+                    </tr>
+                    <tr className="border-b border-stone-200">
+                      <td className="p-2.5 font-bold text-stone-700">Mã giáo viên (Mã GV):</td>
+                      <td className="p-2.5 font-mono font-bold text-purple-900">{slipTeacher.id}</td>
+                    </tr>
+                    <tr className="border-b border-stone-200 bg-stone-50/60">
+                      <td className="p-2.5 font-bold text-stone-700">Tên đăng nhập (Username):</td>
+                      <td className="p-2.5 font-mono font-bold text-stone-950 text-base">{slipTeacher.username}</td>
+                    </tr>
+                    {slipMode === 'handover' && (
+                      <tr className="border-b border-stone-200 bg-amber-50/70">
+                        <td className="p-2.5 font-bold text-amber-900">Mật khẩu tạm thời:</td>
+                        <td className="p-2.5 font-mono font-black text-amber-950 text-lg tracking-wider">
+                          {slipPassword || '(Đã bảo mật - Liên hệ Quản trị viên để đặt lại)'}
+                        </td>
+                      </tr>
+                    )}
+                    <tr className="border-b border-stone-200">
+                      <td className="p-2.5 font-bold text-stone-700">Lớp phụ trách:</td>
+                      <td className="p-2.5 font-semibold text-stone-800">
+                        {slipTeacher.assignedClassIds && slipTeacher.assignedClassIds.length > 0 ? (
+                          slipTeacher.assignedClassIds.map(cId => classes.find(c => c.id === cId)?.name || cId).join(', ')
+                        ) : 'Chưa phân công'}
+                      </td>
+                    </tr>
+                    <tr className="border-b border-stone-200 bg-stone-50/60">
+                      <td className="p-2.5 font-bold text-stone-700">Vai trò trong hệ thống:</td>
+                      <td className="p-2.5 font-bold text-stone-800">
+                        {slipTeacher.role === 'SUPER_ADMIN' ? '👑 Quản trị viên chính (SUPER_ADMIN)' : '👩‍🏫 Giáo viên (TEACHER)'}
+                      </td>
+                    </tr>
+                    <tr>
+                      <td className="p-2.5 font-bold text-stone-700">Địa chỉ truy cập:</td>
+                      <td className="p-2.5 font-mono text-purple-700 font-semibold">https://vuonchunohua.edu.vn</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Instructions & Security note */}
+              <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-xl text-xs space-y-1">
+                <strong className="text-purple-950 block">📌 Lưu ý bảo mật sư phạm:</strong>
+                <p className="text-stone-700">
+                  1. Giáo viên bảo quản thông tin tài khoản cẩn thận, không chia sẻ mật khẩu cho học sinh hoặc người ngoài.
+                </p>
+                <p className="text-stone-700">
+                  2. {slipMode === 'handover' ? 'Vui lòng đăng nhập và đổi sang mật khẩu cá nhân mới ngay lần đầu tiên truy cập.' : 'Khi quên mật khẩu, vui lòng liên hệ cô Nguyễn Thị Hải Duyên - Quản trị viên chính để được cấp lại.'}
+                </p>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-2 pt-6 text-center text-xs">
+                <div>
+                  <span className="font-bold text-stone-700 block">GIÁO VIÊN NHẬN TÀI KHOẢN</span>
+                  <span className="text-[11px] text-stone-400 italic block mb-12">(Ký và ghi rõ họ tên)</span>
+                  <span className="font-bold text-stone-900">{slipTeacher.fullName}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-purple-950 block">QUẢN TRỊ VIÊN HỆ THỐNG</span>
+                  <span className="text-[11px] text-stone-400 italic block mb-12">(Đã ký duyệt điện tử)</span>
+                  <span className="font-bold text-purple-950">{adminProfile.fullName || TEACHER_CONFIG.fullName}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions (Not printed) */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-100 no-print">
+              <button
+                type="button"
+                onClick={() => setIsPrintSlipOpen(false)}
+                className="px-4 py-2 rounded-xl text-stone-600 font-bold hover:bg-stone-100 text-xs sm:text-sm"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black shadow-xs cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm"
+              >
+                <Printer className="w-4 h-4" />
+                <span>In phiếu ngay</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: IN DANH SÁCH GIÁO VIÊN TOÀN TRƯỜNG (A4 PORTRAIT) ================= */}
+      {isPrintListOpen && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in overflow-y-auto">
+          <div className="bg-white rounded-3xl max-w-4xl w-full p-6 shadow-2xl border-2 border-purple-300 space-y-4 animate-scale-in my-auto">
+            {/* Action Bar (Not printed) */}
+            <div className="flex items-center justify-between border-b border-purple-100 pb-3 no-print">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">📋</span>
+                <div>
+                  <h3 className="font-extrabold text-base sm:text-lg text-purple-950 font-display">
+                    Xem trước danh sách giáo viên toàn trường
+                  </h3>
+                  <p className="text-xs text-stone-500">
+                    Định dạng trang in chuẩn A4 dọc • Bộ lọc hiện tại: {teachers.filter(t => {
+                      if (teacherSearch.trim()) {
+                        const q = teacherSearch.toLowerCase();
+                        const matchName = t.fullName?.toLowerCase().includes(q);
+                        const matchId = t.id?.toLowerCase().includes(q);
+                        const matchUser = (t.username || '').toLowerCase().includes(q);
+                        if (!matchName && !matchId && !matchUser) return false;
+                      }
+                      if (teacherClassFilter !== 'all') {
+                        if (teacherClassFilter === 'unassigned') {
+                          if (t.assignedClassIds && t.assignedClassIds.length > 0) return false;
+                        } else {
+                          if (!t.assignedClassIds || !t.assignedClassIds.includes(teacherClassFilter)) return false;
+                        }
+                      }
+                      if (teacherStatusFilter !== 'all') {
+                        if (t.status !== teacherStatusFilter) return false;
+                      }
+                      return true;
+                    }).length} giáo viên
+                  </p>
+                </div>
+              </div>
+              <button 
+                onClick={() => setIsPrintListOpen(false)} 
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Printable List Area */}
+            <div id="printable-list" className="p-6 bg-white border border-stone-200 rounded-2xl shadow-inner space-y-4 text-stone-900 font-sans">
+              {/* Header */}
+              <div className="flex items-start justify-between border-b-2 border-purple-900 pb-3">
+                <div>
+                  <h4 className="font-bold text-xs uppercase text-stone-600 tracking-wider">
+                    {TEACHER_CONFIG.school}
+                  </h4>
+                  <h5 className="font-black text-sm text-purple-900 uppercase">
+                    HỆ THỐNG TRỢ LÝ TẬP LÀM VĂN TIỂU HỌC AI - VƯỜN CHỮ NỞ HOA
+                  </h5>
+                  <p className="text-[11px] text-stone-500">
+                    Năm học: 2025 - 2026
+                  </p>
+                </div>
+                <div className="text-right">
+                  <span className="text-[11px] text-stone-500 block">Thời gian xuất: {new Date().toLocaleDateString('vi-VN')} {new Date().toLocaleTimeString('vi-VN')}</span>
+                  <span className="text-[11px] text-stone-500 block">Người xuất: <strong>{adminProfile.fullName || TEACHER_CONFIG.fullName}</strong></span>
+                </div>
+              </div>
+
+              {/* Title */}
+              <div className="text-center py-2">
+                <h2 className="text-xl font-black text-purple-950 uppercase tracking-tight">
+                  DANH SÁCH GIÁO VIÊN QUẢN LÝ VÀ GIẢNG DẠY
+                </h2>
+                <p className="text-xs text-stone-600 italic">
+                  Tổng số giáo viên: {teachers.filter(t => {
+                    if (teacherSearch.trim()) {
+                      const q = teacherSearch.toLowerCase();
+                      const matchName = t.fullName?.toLowerCase().includes(q);
+                      const matchId = t.id?.toLowerCase().includes(q);
+                      const matchUser = (t.username || '').toLowerCase().includes(q);
+                      if (!matchName && !matchId && !matchUser) return false;
+                    }
+                    if (teacherClassFilter !== 'all') {
+                      if (teacherClassFilter === 'unassigned') {
+                        if (t.assignedClassIds && t.assignedClassIds.length > 0) return false;
+                      } else {
+                        if (!t.assignedClassIds || !t.assignedClassIds.includes(teacherClassFilter)) return false;
+                      }
+                    }
+                    if (teacherStatusFilter !== 'all') {
+                      if (t.status !== teacherStatusFilter) return false;
+                    }
+                    return true;
+                  }).length} đồng chí
+                </p>
+              </div>
+
+              {/* Table */}
+              <div className="border border-stone-300 rounded-xl overflow-hidden text-xs">
+                <table className="w-full text-left">
+                  <thead className="bg-stone-100 border-b border-stone-300 font-bold text-stone-800">
+                    <tr>
+                      <th className="p-2 text-center w-10">STT</th>
+                      <th className="p-2">Mã GV</th>
+                      <th className="p-2">Họ và tên</th>
+                      <th className="p-2">Tên đăng nhập</th>
+                      <th className="p-2">Lớp phụ trách</th>
+                      <th className="p-2 text-center">Vai trò</th>
+                      <th className="p-2 text-center">Trạng thái</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-stone-200">
+                    {teachers
+                      .filter(t => {
+                        if (teacherSearch.trim()) {
+                          const q = teacherSearch.toLowerCase();
+                          const matchName = t.fullName?.toLowerCase().includes(q);
+                          const matchId = t.id?.toLowerCase().includes(q);
+                          const matchUser = (t.username || '').toLowerCase().includes(q);
+                          if (!matchName && !matchId && !matchUser) return false;
+                        }
+                        if (teacherClassFilter !== 'all') {
+                          if (teacherClassFilter === 'unassigned') {
+                            if (t.assignedClassIds && t.assignedClassIds.length > 0) return false;
+                          } else {
+                            if (!t.assignedClassIds || !t.assignedClassIds.includes(teacherClassFilter)) return false;
+                          }
+                        }
+                        if (teacherStatusFilter !== 'all') {
+                          if (t.status !== teacherStatusFilter) return false;
+                        }
+                        return true;
+                      })
+                      .map((t, index) => (
+                        <tr key={t.id} className="hover:bg-stone-50">
+                          <td className="p-2 text-center font-bold text-stone-400">{index + 1}</td>
+                          <td className="p-2 font-mono font-bold text-purple-900">{t.id}</td>
+                          <td className="p-2 font-bold text-stone-900">{t.fullName}</td>
+                          <td className="p-2 font-mono text-stone-700">{t.username}</td>
+                          <td className="p-2">
+                            {t.assignedClassIds && t.assignedClassIds.length > 0 ? (
+                              t.assignedClassIds.map(cId => classes.find(c => c.id === cId)?.name || cId).join(', ')
+                            ) : (
+                              <span className="italic text-stone-400">Chưa gán</span>
+                            )}
+                          </td>
+                          <td className="p-2 text-center font-semibold">
+                            {t.role === 'SUPER_ADMIN' ? '👑 Quản trị viên' : 'Giáo viên'}
+                          </td>
+                          <td className="p-2 text-center">
+                            <span className={`px-2 py-0.5 rounded-md font-bold text-[10px] ${
+                              t.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                            }`}>
+                              {t.status === 'active' ? 'Hoạt động' : 'Bị khóa'}
+                            </span>
+                          </td>
+                        </tr>
+                      ))}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* Signatures */}
+              <div className="grid grid-cols-2 pt-6 text-center text-xs">
+                <div>
+                  <span className="font-bold text-stone-700 block">NGƯỜI LẬP DANH SÁCH</span>
+                  <span className="text-[11px] text-stone-400 italic block mb-12">(Ký và ghi rõ họ tên)</span>
+                  <span className="font-bold text-stone-900">{adminProfile.fullName || TEACHER_CONFIG.fullName}</span>
+                </div>
+                <div>
+                  <span className="font-bold text-purple-950 block">HIỆU TRƯỞNG / BAN GIÁM HIỆU DUYỆT</span>
+                  <span className="text-[11px] text-stone-400 italic block mb-12">(Ký tên và đóng dấu)</span>
+                  <span className="font-bold text-purple-950">TS. Phạm Mai Lan</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Bottom Actions (Not printed) */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-purple-100 no-print">
+              <button
+                type="button"
+                onClick={() => setIsPrintListOpen(false)}
+                className="px-4 py-2 rounded-xl text-stone-600 font-bold hover:bg-stone-100 text-xs sm:text-sm"
+              >
+                Đóng
+              </button>
+              <button
+                type="button"
+                onClick={() => window.print()}
+                className="px-5 py-2.5 rounded-xl bg-purple-700 hover:bg-purple-800 text-white font-black shadow-xs cursor-pointer flex items-center gap-1.5 text-xs sm:text-sm"
+              >
+                <Printer className="w-4 h-4" />
+                <span>In danh sách ngay</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: XÁC NHẬN KHÓA / MỞ KHÓA TÀI KHOẢN ================= */}
+      {isLockConfirmOpen && lockTargetTeacher && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-rose-300 space-y-4 animate-scale-in">
+            <div className="flex items-center justify-between border-b border-rose-100 pb-3">
+              <div className="flex items-center gap-2">
+                <span className="text-2xl">{lockTargetStatus === 'locked' ? '🔒' : '🔓'}</span>
+                <h3 className="font-extrabold text-base sm:text-lg text-rose-950 font-display">
+                  {lockTargetStatus === 'locked' ? 'Khóa tài khoản giáo viên' : 'Mở khóa tài khoản giáo viên'}
+                </h3>
+              </div>
+              <button 
+                onClick={() => setIsLockConfirmOpen(false)} 
+                className="text-stone-400 hover:text-stone-700 p-1 rounded-lg"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="p-4 bg-rose-50 rounded-2xl border border-rose-200 space-y-2 text-xs sm:text-sm">
+              <p className="font-semibold text-rose-950">
+                {lockTargetStatus === 'locked' ? (
+                  <>Bạn có chắc chắn muốn <strong>KHÓA</strong> tài khoản của giáo viên sau không?</>
+                ) : (
+                  <>Bạn có chắc chắn muốn <strong>MỞ KHÓA</strong> tài khoản của giáo viên sau không?</>
+                )}
+              </p>
+              <div className="p-3 bg-white rounded-xl border border-rose-200">
+                <div className="font-bold text-stone-900 text-sm">{lockTargetTeacher.fullName}</div>
+                <div className="text-xs text-stone-500 font-mono">
+                  Mã: {lockTargetTeacher.id} • Username: {lockTargetTeacher.username}
+                </div>
+              </div>
+              {lockTargetStatus === 'locked' ? (
+                <p className="text-rose-800 text-xs leading-relaxed">
+                  ⚠️ <strong>Hệ quả:</strong> Giáo viên sẽ không thể đăng nhập vào ứng dụng cho đến khi được Quản trị viên mở khóa trở lại. Toàn bộ dữ liệu lớp học và học sinh vẫn được bảo toàn tuyệt đối.
+                </p>
+              ) : (
+                <p className="text-emerald-800 text-xs leading-relaxed">
+                  ✅ Giáo viên sẽ có thể tiếp tục đăng nhập và chấm bài bình thường.
+                </p>
+              )}
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-rose-100">
+              <button
+                type="button"
+                onClick={() => setIsLockConfirmOpen(false)}
+                className="px-4 py-2 rounded-xl text-stone-600 font-bold hover:bg-stone-100 text-xs sm:text-sm"
+              >
+                Hủy bỏ
+              </button>
+              <button
+                type="button"
+                onClick={handleExecuteLockToggle}
+                className={`px-5 py-2.5 rounded-xl text-white font-black shadow-xs cursor-pointer text-xs sm:text-sm ${
+                  lockTargetStatus === 'locked' ? 'bg-rose-600 hover:bg-rose-700' : 'bg-emerald-600 hover:bg-emerald-700'
+                }`}
+              >
+                {lockTargetStatus === 'locked' ? 'Xác nhận khóa' : 'Xác nhận mở khóa'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ================= MODAL: PHIẾU CẤP LẠI MẬT KHẨU (LEGACY COMPAT) ================= */}
       {isResetPassOpen && resetPassResult && (
         <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 animate-fade-in">
           <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border-2 border-purple-300 space-y-4 animate-scale-in">

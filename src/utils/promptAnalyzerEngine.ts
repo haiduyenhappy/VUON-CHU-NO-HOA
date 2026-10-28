@@ -292,6 +292,20 @@ export function isGrandparentLoveGrade2Prompt(text: string, grade: number = 2): 
 }
 
 /**
+ * Kiểm tra đề Bài miêu tả đồ vật Lớp 2 (3–5 câu): chiếc cặp sách, hộp bút hoặc cây thước kẻ
+ */
+export function isItemDescriptiveGrade2Prompt(text: string, grade: number = 2): boolean {
+  if (!text) return false;
+  const pLower = text.toLowerCase();
+  const isGrade2Scope = grade === 2 || pLower.includes('lớp 2') || pLower.includes('3–5 câu') || pLower.includes('3-5 câu') || pLower.includes('3 đến 5 câu');
+  const isDescriptive = pLower.includes('miêu tả') || pLower.includes('tả') || pLower.includes('đoạn văn');
+  const hasItems = (pLower.includes('cặp') || pLower.includes('cặp sách')) &&
+                   (pLower.includes('hộp bút')) &&
+                   (pLower.includes('thước kẻ') || pLower.includes('cây thước') || pLower.includes('thước'));
+  return isGrade2Scope && isDescriptive && hasItems;
+}
+
+/**
  * Kiểm tra đề Bài 6 Lớp 5: Kể lại kỷ niệm sâu sắc với thầy giáo hoặc cô giáo
  */
 export function isTeacherMemoryGrade5Prompt(text: string): boolean {
@@ -491,6 +505,9 @@ export function analyzePromptSemantics(
     (isAboutGrandmother(pLower) || isAboutGrandfather(pLower)) &&
     (pLower.includes('kính trọng') || pLower.includes('yêu mến') || (pLower.includes('tình cảm') && (pLower.includes('đoạn văn') || pLower.includes('3 đến 5 câu') || pLower.includes('3-5 câu') || pLower.includes('3–5 câu'))));
 
+  // BÀI MIÊU TẢ ĐỒ VẬT LỚP 2 (3–5 câu): chiếc cặp sách, hộp bút hoặc cây thước kẻ
+  const isItemDescriptiveGrade2 = isItemDescriptiveGrade2Prompt(pLower, grade);
+
   // BÀI 6 LỚP 5: Kể lại kỷ niệm sâu sắc giữa em và một thầy giáo hoặc cô giáo đã dạy dỗ, nâng đỡ em tiến bộ
   const isTeacherMemoryGrade5Prompt =
     (pLower.includes('thầy giáo') || pLower.includes('cô giáo') || pLower.includes('thầy cô') || (hasWord(pLower, 'thầy') && hasWord(pLower, 'cô'))) &&
@@ -524,7 +541,8 @@ export function analyzePromptSemantics(
   const isObjectSelectionPrompt = 
     !isTreeSelectionPrompt &&
     !isFamilyLoveGrade1Prompt &&
-    !isItemDescriptiveGrade1 && (
+    !isItemDescriptiveGrade1 &&
+    !isItemDescriptiveGrade2 && (
       pLower.includes('chọn một đồ vật') ||
       pLower.includes('chọn 1 đồ vật') ||
       pLower.includes('chọn đồ vật') ||
@@ -550,6 +568,7 @@ export function analyzePromptSemantics(
     !isFamilyLoveGrade1Prompt &&
     !isSelfIntroGrade1Prompt &&
     !isItemDescriptiveGrade1 &&
+    !isItemDescriptiveGrade2 &&
     (
       isCatObservationGrade1Prompt ||
       isMessageThanksOrApologyGrade2Prompt ||
@@ -590,6 +609,17 @@ export function analyzePromptSemantics(
     availableObjects = [
       { id: 'hop_but', name: 'Hộp bút', icon: '👝' },
       { id: 'but_chi', name: 'Chiếc bút chì', icon: '✏️' }
+    ];
+  }
+  // 2b. Phân nhánh BÀI MIÊU TẢ ĐỒ VẬT LỚP 2: Chiếc cặp sách, hộp bút hoặc cây thước kẻ (3–5 câu)
+  else if (isItemDescriptiveGrade2) {
+    choiceType = 'object_selection';
+    hasMultipleDirections = false;
+    objectChoiceQuestion = 'Con muốn chọn đồ vật nào để miêu tả?';
+    availableObjects = [
+      { id: 'chiec_cap', name: 'Chiếc cặp sách', icon: '🎒' },
+      { id: 'hop_but', name: 'Hộp bút', icon: '👝' },
+      { id: 'thuoc_ke', name: 'Cây thước kẻ', icon: '📏' }
     ];
   }
   // 2. Phân nhánh BÀI 3 LỚP 1: Quan sát tranh mèo con (Hình dáng hoặc Hành động)
@@ -1256,6 +1286,38 @@ export function analyzePromptSemantics(
       writingScope = `Đặc điểm màu sắc, hình dáng nổi bật và công dụng thiết thực của ${itemName.toLowerCase()} trong học tập hàng ngày`;
     }
   }
+  // Xử lý BÀI MIÊU TẢ ĐỒ VẬT LỚP 2 (Chiếc cặp sách, Hộp bút, Cây thước kẻ)
+  else if (isItemDescriptiveGrade2) {
+    topicCode = 'CD06';
+    topicName = 'Đồ vật';
+    genre = 'mieu_ta';
+    if (!detectedTaskCodes.includes('NV10')) {
+      detectedTaskCodes.unshift('NV10');
+      detectedTaskLabels.unshift('Viết đoạn văn miêu tả');
+    }
+    if (!detectedTaskCodes.includes('NV24')) {
+      detectedTaskCodes.push('NV24');
+      detectedTaskLabels.push('Tả đồ vật');
+    }
+
+    if (selectedObjectId === 'thuoc_ke') {
+      mainObject = 'Cây thước kẻ của em';
+      coreSubject = 'Viết đoạn văn ngắn (3–5 câu) miêu tả cây thước kẻ của em';
+      selectedObjectName = 'Cây thước kẻ';
+      writingScope = 'Chất liệu, chiều dài, màu sắc, vạch chia cm rõ nét và ích lợi giúp em kẻ những đường thẳng ngay ngắn';
+    } else if (selectedObjectId === 'hop_but') {
+      mainObject = 'Hộp bút của em';
+      coreSubject = 'Viết đoạn văn ngắn (3–5 câu) miêu tả hộp bút của em';
+      selectedObjectName = 'Hộp bút';
+      writingScope = 'Màu sắc, hình dáng, các ngăn đựng đồ dùng học tập và công dụng giữ bút thước tẩy luôn ngăn nắp';
+    } else {
+      // Mặc định hoặc khi chọn chiec_cap
+      mainObject = 'Chiếc cặp sách của em';
+      coreSubject = 'Viết đoạn văn ngắn (3–5 câu) miêu tả chiếc cặp sách của em';
+      selectedObjectName = 'Chiếc cặp sách';
+      writingScope = 'Hình dáng, màu sắc, quai đeo êm ái, các ngăn đựng sách vở và ích lợi đồng hành cùng em đến trường';
+    }
+  }
   // Xử lý LOẠI A - Lựa chọn đồ vật (Hộp bút, Cặp, Đồng hồ, Bảng...)
   else if (isObjectSelectionPrompt || choiceType === 'object_selection') {
     topicCode = 'CD06';
@@ -1448,6 +1510,19 @@ export function analyzePromptSemantics(
   } else if (isGrandparentLoveGrade2Prompt) {
     compulsoryConstraints.push('Viết đoạn văn ngắn từ 3 đến 5 câu nói lên tình cảm yêu mến, kính trọng');
     negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết lan man thành 7–9 câu hay bài văn 3 phần');
+  } else if (isItemDescriptiveGrade2) {
+    const objLabel = selectedObjectId === 'thuoc_ke' ? 'cây thước kẻ' : selectedObjectId === 'hop_but' ? 'hộp bút' : 'chiếc cặp sách';
+    compulsoryConstraints.push(`Miêu tả ${objLabel} của em`);
+    compulsoryConstraints.push('Miêu tả đặc điểm nổi bật (màu sắc, hình dáng, chất liệu hoặc chi tiết em thích)');
+    compulsoryConstraints.push(`Nêu ích lợi của ${objLabel} và tình cảm, sự giữ gìn của em`);
+    compulsoryConstraints.push('Dung lượng đúng 3–5 câu súc tích');
+    compulsoryConstraints.push('Viết hoa đầu câu và đặt dấu chấm ở cuối mỗi câu');
+
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG tự bổ sung đồng hồ, bảng lớp, đồ chơi hay đồ vật khác ngoài đề');
+    negativeConstraints.push('KHÔNG bắt buộc kể nguồn gốc, thời điểm được tặng hay cấu tạo bên trong phức tạp');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG chia bài văn thành các đoạn mở bài, thân bài, kết bài tách rời');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết thành 6–9 câu hay bài văn dài');
+    negativeConstraints.push('KHÔNG sử dụng biện pháp nhân hóa phức tạp');
   } else if (isTeacherMemoryGrade5Prompt) {
     compulsoryConstraints.push('Viết bài văn hoàn chỉnh gồm 3 phần (Mở bài, Thân bài, Kết bài) kể kỷ niệm với thầy/cô giáo');
     negativeConstraints.push('TUYỆT ĐỐI KHÔNG chuyển sang ông bà, gia đình hay bạn bè');
@@ -1477,7 +1552,7 @@ export function analyzePromptSemantics(
   } else if (isMessageThanksOrApologyGrade2Prompt) {
     writingFormat = 'Tin nhắn ngắn (3–4 câu)';
     suggestedLength = 'Tin nhắn ngắn từ 3 đến 4 câu';
-  } else if (isGrandparentLoveGrade2Prompt) {
+  } else if (isGrandparentLoveGrade2Prompt || isItemDescriptiveGrade2) {
     writingFormat = 'Đoạn văn ngắn (3–5 câu)';
     suggestedLength = 'Đoạn văn ngắn từ 3 đến 5 câu';
   } else if (isTeacherMemoryGrade5Prompt || isTreeSelectionPrompt || (grade >= 4 && (genre === 'ke_chuyen' || genre === 'mieu_ta') && !pLower.includes('đoạn văn'))) {
@@ -2262,6 +2337,292 @@ export function buildGenreStructure(
           { type: 'ket_bai', label: 'Kết đoạn', sentence: 'Em kính chúc bà luôn mạnh khỏe và hứa sẽ chăm ngoan để bà luôn vui lòng.', whyItIsGood: 'Khép lại trọn vẹn, đúng chuẩn lớp 2.' }
         ],
         creativeIdeas: ['Con hãy nhớ lại món ăn bà hay nấu hoặc trò chơi ông hay chỉ dạy để đưa vào câu văn nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT: MIÊU TẢ ĐỒ VẬT LỚP 2 (3–5 CÂU)
+  // Đề: "Viết một đoạn văn ngắn (3–5 câu) miêu tả chiếc cặp sách, hộp bút hoặc cây thước kẻ của em."
+  // -------------------------------------------------------------
+  if (isItemDescriptiveGrade2Prompt(pLower, grade)) {
+    const objId = semantics.selectedObjectId || 'chiec_cap';
+    const isRuler = objId === 'thuoc_ke';
+    const isPencilBox = objId === 'hop_but';
+    const chosenName = isRuler ? 'cây thước kẻ' : isPencilBox ? 'hộp bút' : 'chiếc cặp sách';
+
+    // 1. Lời khuyên của Hoa Nhỏ chuẩn mực sư phạm Lớp 2
+    hoaNhoUnderstand = isRuler
+      ? 'Con hãy quan sát cây thước kẻ của mình nhé! Thước làm bằng gì, dài bao nhiêu, màu sắc ra sao và giúp con kẻ những đường thẳng thế nào? Con hãy viết một đoạn văn ngắn 3–5 câu miêu tả cây thước kẻ nhé!'
+      : isPencilBox
+      ? 'Con hãy quan sát hộp bút của mình nhé! Hộp bút có màu sắc, hình dáng thế nào và đựng những đồ dùng học tập gì? Con hãy viết một đoạn văn ngắn 3–5 câu để miêu tả hộp bút nhé!'
+      : 'Con hãy quan sát chiếc cặp sách của mình nhé! Cặp có màu gì, hình dáng ra sao, có mấy ngăn và giúp con đựng sách vở thế nào? Con có thể viết 3–5 câu miêu tả chiếc cặp sách thân quen của mình.';
+
+    // 2. Yêu cầu cụ thể 3 ý rõ ràng
+    specificRequirements = [
+      `1. Giới thiệu đồ vật con chọn (${chosenName}).`,
+      '2. Miêu tả đặc điểm nổi bật (màu sắc, hình dáng, chất liệu hoặc chi tiết em thích).',
+      `3. Nêu ích lợi của đồ vật và tình cảm, sự giữ gìn của em (3–5 câu ngắn gọn).`
+    ];
+
+    // 3. Câu hỏi gợi mở Socratic
+    socraticQuestions = isRuler ? [
+      'Cây thước kẻ của con làm bằng nhựa trong suốt, nhựa dẻo hay bằng gỗ?',
+      'Thước dài bao nhiêu xăng-ti-mét và các vạch số, vạch chia trên thước có gì nổi bật?',
+      'Trong mỗi giờ học Toán hay Tiếng Việt, cây thước kẻ giúp con kẻ những đường thẳng ngay ngắn ra sao?',
+      'Sau mỗi giờ học, con cất thước vào hộp bút và giữ gìn cẩn thận thế nào?'
+    ] : isPencilBox ? [
+      'Hộp bút của con có hình dáng gì, làm bằng vải mềm hay bằng nhựa cứng cáp?',
+      'Hộp bút có màu sắc gì và in hình họa tiết ngộ nghĩnh nào làm con yêu thích nhất?',
+      'Bên trong hộp bút có mấy ngăn và con đựng những đồ dùng học tập nào?',
+      'Hộp bút giúp góc học tập và ngăn cặp của con luôn gọn gàng như thế nào?'
+    ] : [
+      'Chiếc cặp sách của con có màu sắc chủ đạo là gì và dáng vẻ bên ngoài ra sao?',
+      'Cặp có quai đeo êm ái, khóa kéo hoặc chiếc nắp bấm tiện lợi thế nào?',
+      'Các ngăn bên trong và ngăn phụ bên ngoài giúp con đựng sách vở, bình nước gọn gàng ra sao?',
+      'Mỗi ngày đến trường cùng chiếc cặp sách thân quen, con cảm thấy gắn bó và giữ gìn cặp thế nào?'
+    ];
+
+    // 4. Sơ đồ tư duy 5 nhánh thống nhất theo đồ vật đã chọn
+    branches = isRuler ? [
+      {
+        id: 'br-1',
+        title: '📏 Tên đồ vật',
+        icon: '📏',
+        color: 'emerald',
+        points: ['Cây thước kẻ bằng nhựa trong suốt', 'Cây thước kẻ dẻo sắc màu', 'Đồ dùng học tập gắn bó mỗi ngày', 'Món quà mẹ mua đầu năm học']
+      },
+      {
+        id: 'br-2',
+        title: '🎨 Hình dáng & Màu sắc',
+        icon: '🎨',
+        color: 'purple',
+        points: ['Thân thước thẳng tắp, dẹt phẳng', 'Chiều dài hai mươi xăng-ti-mét vừa vặn', 'Màu trắng trong suốt hoặc xanh dịu', 'Mép thước nhẵn bóng, trơn láng']
+      },
+      {
+        id: 'br-3',
+        title: '✨ Đặc điểm nổi bật',
+        icon: '✨',
+        color: 'amber',
+        points: ['Hàng vạch số chia xăng-ti-mét màu đen in rõ nét', 'Các con số thẳng hàng tinh tươm', 'Chất liệu nhựa dẻo khó gãy', 'In hình bông hoa hoặc chú gấu nhỏ ở góc']
+      },
+      {
+        id: 'br-4',
+        title: '🌟 Ích lợi / Công dụng',
+        icon: '🌟',
+        color: 'sky',
+        points: ['Giúp em kẻ những đoạn thẳng ngay ngắn', 'Gạch chân dưới các đề mục bài học sạch đẹp', 'Đo độ dài chính xác trong giờ Toán', 'Giúp trang vở luôn ngay ngắn, trật tự']
+      },
+      {
+        id: 'br-5',
+        title: '💖 Tình cảm & Giữ gìn',
+        icon: '💖',
+        color: 'rose',
+        points: ['Em rất yêu quý cây thước kẻ nhỏ xinh', 'Dùng xong cất ngay vào hộp bút gọn gàng', 'Không dùng thước đập nghịch xuống bàn', 'Hứa giữ gìn thước luôn sáng bóng, bền đẹp']
+      }
+    ] : isPencilBox ? [
+      {
+        id: 'br-1',
+        title: '👝 Tên đồ vật',
+        icon: '👝',
+        color: 'emerald',
+        points: ['Chiếc hộp bút xinh xắn của em', 'Hộp bút bằng vải mềm / nhựa cứng', 'Người bạn nhỏ đồng hành đến lớp', 'Món quà ý nghĩa mẹ tặng em']
+      },
+      {
+        id: 'br-2',
+        title: '🎨 Hình dáng & Màu sắc',
+        icon: '🎨',
+        color: 'purple',
+        points: ['Dáng hình chữ nhật thon gọn', 'Kích thước nhỏ nhắn vừa vặn trong cặp', 'Màu hồng phấn ngọt ngào hoặc xanh da trời dịu mát', 'Màu sắc tươi tắn, bắt mắt']
+      },
+      {
+        id: 'br-3',
+        title: '✨ Đặc điểm nổi bật',
+        icon: '✨',
+        color: 'amber',
+        points: ['Đường khóa kéo trơn tru, dễ mở', 'In hình chú thỏ trắng hoặc siêu nhân ngộ nghĩnh', 'Bên trong có ngăn lưới cài bút tiện lợi', 'Lớp vải lót êm ái chống va đập']
+      },
+      {
+        id: 'br-4',
+        title: '🌟 Ích lợi / Công dụng',
+        icon: '🌟',
+        color: 'sky',
+        points: ['Cất giữ bút mực, bút chì và thước kẻ', 'Bảo quản gôm tẩy và gọt bút gọn gàng', 'Giúp đồ dùng không bị thất lạc hay rơi vỡ', 'Bàn học và ngăn cặp luôn ngăn nắp']
+      },
+      {
+        id: 'br-5',
+        title: '💖 Tình cảm & Giữ gìn',
+        icon: '💖',
+        color: 'rose',
+        points: ['Em rất yêu quý chiếc hộp bút của mình', 'Luôn kéo khóa cẩn thận sau khi dùng', 'Không vẽ bậy lên thân hộp bút', 'Hứa giữ hộp bút luôn sạch sẽ như mới']
+      }
+    ] : [
+      {
+        id: 'br-1',
+        title: '🎒 Tên đồ vật',
+        icon: '🎒',
+        color: 'emerald',
+        points: ['Chiếc cặp sách thân quen của em', 'Chiếc ba lô đi học màu sắc tươi vui', 'Người bạn trung thành cùng em đến lớp', 'Bố mẹ mua tặng em dịp đầu năm học']
+      },
+      {
+        id: 'br-2',
+        title: '🎨 Hình dáng & Màu sắc',
+        icon: '🎨',
+        color: 'purple',
+        points: ['Dáng hình chữ nhật đứng vuông vắn', 'Kích thước vừa vặn trên lưng em', 'Màu xanh dương khỏe khoắn hoặc hồng tươi sáng', 'Chất liệu vải dù dày dặn, chống thấm nước']
+      },
+      {
+        id: 'br-3',
+        title: '✨ Đặc điểm nổi bật',
+        icon: '✨',
+        color: 'amber',
+        points: ['Hai quai đeo lót đệm êm ái, điều chỉnh được', 'Khóa bấm chắc chắn hoặc khóa kéo mạ đồng sáng loáng', 'Hai ngăn phụ dạng lưới hai bên hông đựng bình nước', 'In hình nhân vật hoạt hình đáng yêu phía trước']
+      },
+      {
+        id: 'br-4',
+        title: '🌟 Ích lợi / Công dụng',
+        icon: '🌟',
+        color: 'sky',
+        points: ['Chứa toàn bộ sách giáo khoa và vở viết', 'Bảo vệ đồ dùng học tập không bị ướt mưa', 'Ngăn nhỏ đựng hộp bút và đồ dùng cá nhân', 'Đồng hành cùng em trên mọi nẻo đường tới trường']
+      },
+      {
+        id: 'br-5',
+        title: '💖 Tình cảm & Giữ gìn',
+        icon: '💖',
+        color: 'rose',
+        points: ['Em coi chiếc cặp sách như một người bạn thân', 'Mỗi khi đi học về đều để cặp ngay ngắn trên bàn', 'Không kéo lê cặp trên nền đất bẩn', 'Thường xuyên lau chùi sạch sẽ để cặp luôn bền đẹp']
+      }
+    ];
+
+    // 5. Dàn ý chi tiết 3 phương án (3 câu, 4 câu, 5 câu)
+    const opt1Bullets = isRuler ? [
+      'Câu 1 (Giới thiệu): Cây thước kẻ bằng nhựa trong suốt là đồ dùng học tập gắn bó thân thiết cùng em mỗi ngày.',
+      'Câu 2 (Đặc điểm nổi bật): Thước thẳng tắp, dài hai mươi xăng-ti-mét với các vạch chia số màu đen in rõ nét.',
+      'Câu 3 (Ích lợi & Tình cảm): Nhờ có thước kẻ, em luôn kẻ được những hàng thẳng ngay ngắn và em luôn yêu quý giữ gìn thước cẩn thận.'
+    ] : isPencilBox ? [
+      'Câu 1 (Giới thiệu): Nhân dịp năm học mới, mẹ mua tặng em một chiếc hộp bút xinh xắn.',
+      'Câu 2 (Đặc điểm nổi bật): Hộp bút có màu xanh da trời dịu mát, in hình chú thỏ trắng vô cùng đáng yêu.',
+      'Câu 3 (Ích lợi & Tình cảm): Hộp bút giúp em giữ bút thước luôn gọn gàng nên em rất yêu quý và giữ gìn nó cẩn thận.'
+    ] : [
+      'Câu 1 (Giới thiệu): Đầu năm học lớp hai, bố mẹ mua tặng em một chiếc cặp sách rất đẹp.',
+      'Câu 2 (Đặc điểm nổi bật): Cặp có màu xanh dương tươi sáng, hai quai đeo êm ái và chiếc nắp bấm mở ra đóng vào rất tiện lợi.',
+      'Câu 3 (Ích lợi & Tình cảm): Chiếc cặp chứa đầy sách vở theo em đến lớp mỗi ngày và em luôn coi cặp như người bạn thân thiết.'
+    ];
+
+    const opt2Bullets = isRuler ? [
+      'Câu 1 (Giới thiệu): Cây thước kẻ là đồ dùng học tập em yêu quý nhất trong hộp bút.',
+      'Câu 2 (Hình dáng & Màu sắc): Thước làm bằng chất liệu nhựa dẻo trong suốt, dài hai mươi xăng-ti-mét với mép thước nhẵn bóng.',
+      'Câu 3 (Công dụng): Trong mỗi giờ Toán hay Tiếng Việt, thước giúp em kẻ những đoạn thẳng ngay ngắn và gạch chân đề mục sạch đẹp.',
+      'Câu 4 (Tình cảm & Giữ gìn): Mỗi khi dùng xong, em đều cất thước cẩn thận vào ngăn để thước không bị gãy hay trầy xước.'
+    ] : isPencilBox ? [
+      'Câu 1 (Giới thiệu): Em có một chiếc hộp bút bằng vải mềm rất xinh xắn.',
+      'Câu 2 (Hình dáng & Màu sắc): Hộp bút có hình chữ nhật nhỏ nhắn, nổi bật với màu hồng phấn và chiếc khóa kéo trơn tru.',
+      'Câu 3 (Công dụng): Các ngăn bên trong giúp em cất giữ bút chì, bút mực, thước kẻ và gôm tẩy thật ngăn nắp.',
+      'Câu 4 (Tình cảm & Giữ gìn): Em rất yêu quý chiếc hộp bút này và luôn giữ gìn sạch đẹp để dùng được thật lâu.'
+    ] : [
+      'Câu 1 (Giới thiệu): Chiếc cặp sách là người bạn đồng hành thân thiết cùng em mỗi ngày tới trường.',
+      'Câu 2 (Hình dáng & Màu sắc): Cặp có hình chữ nhật đứng vuông vắn, nổi bật với gam màu xanh pha đen rất khỏe khoắn.',
+      'Câu 3 (Công dụng): Bên trong cặp có ba ngăn rộng rãi giúp em đựng sách vở ngăn nắp và hai ngăn lưới bên hông để bình nước.',
+      'Câu 4 (Tình cảm & Giữ gìn): Em luôn yêu quý chiếc cặp của mình và cất đặt ngay ngắn trên bàn học sau mỗi buổi tan trường.'
+    ];
+
+    const opt3Bullets = isRuler ? [
+      'Câu 1 (Giới thiệu): Cây thước kẻ nhỏ xinh luôn đồng hành cùng em trong từng tiết học trên lớp.',
+      'Câu 2 (Màu sắc & Hình dáng): Thân thước thẳng tắp, dài hai mươi xăng-ti-mét và được làm bằng chất liệu nhựa dẻo trong suốt.',
+      'Câu 3 (Chi tiết đặc biệt): Trên mặt thước in những vạch số chia xăng-ti-mét màu đen rất đậm nét và ngay ngắn.',
+      'Câu 4 (Ích lợi): Cây thước giúp em kẻ những đường kẻ thẳng tắp, giúp trang vở của em luôn sạch sẽ và đạt điểm tốt.',
+      'Câu 5 (Lời hứa giữ gìn): Em hứa sẽ luôn giữ gìn cây thước kẻ cẩn thận để nó luôn sáng bóng như mới.'
+    ] : isPencilBox ? [
+      'Câu 1 (Giới thiệu): Chiếc hộp bút màu hồng phấn là món quà ý nghĩa mẹ thưởng cho em khi đạt thành tích học tập tốt.',
+      'Câu 2 (Màu sắc & Hình dáng): Hộp bút có hình chữ nhật nhỏ gọn, bên ngoài được may bằng vải dù mềm mịn, bền đẹp.',
+      'Câu 3 (Chi tiết đặc biệt): Nổi bật trên nắp hộp là hình chú gấu nhỏ đang mỉm cười cùng chiếc khóa kéo mạ bạc sáng bóng.',
+      'Câu 4 (Ích lợi): Nhờ có hộp bút tiện lợi, tất cả bút, thước và tẩy của em luôn được sắp xếp trật tự, không lo thất lạc.',
+      'Câu 5 (Lời hứa giữ gìn): Em luôn trân trọng chiếc hộp bút này và hứa sẽ giữ gìn nó luôn tinh tươm, sạch sẽ.'
+    ] : [
+      'Câu 1 (Giới thiệu): Chiếc cặp sách thân yêu luôn gắn bó cùng em trên mỗi chặng đường đến trường.',
+      'Câu 2 (Màu sắc & Hình dáng): Cặp có dáng hình chữ nhật vuông vắn, được may bằng chất liệu vải dù bền đẹp chống thấm nước.',
+      'Câu 3 (Chi tiết đặc biệt): Hai quai đeo phía sau được lót một lớp đệm dày êm ái, giúp em đeo không bao giờ bị đau vai.',
+      'Câu 4 (Ích lợi): Chiếc cặp như một ngôi nhà nhỏ bảo vệ sách vở, hộp bút và bình nước của em luôn an toàn, ngăn nắp.',
+      'Câu 5 (Lời hứa giữ gìn): Em luôn coi chiếc cặp như người bạn thân và hứa sẽ bảo quản cặp cẩn thận để dùng suốt năm học.'
+    ];
+
+    outline = {
+      moDoan: opt1Bullets.slice(0, 1),
+      phatTrienDoan: opt1Bullets.slice(1, 2),
+      ketDoan: opt1Bullets.slice(2),
+      genre: 'mieu_ta',
+      sections: [
+        {
+          id: 'sec-1',
+          title: 'Phương án 1 (3 câu - Vừa sức)',
+          icon: '1️⃣',
+          guideNote: 'Phù hợp viết nhanh, đủ ý: Câu 1 Giới thiệu, Câu 2 Tả đặc điểm nổi bật, Câu 3 Ích lợi và tình cảm',
+          bulletPoints: opt1Bullets
+        },
+        {
+          id: 'sec-2',
+          title: 'Phương án 2 (4 câu - Chuẩn mực)',
+          icon: '2️⃣',
+          guideNote: 'Đầy đủ, cân đối: Câu 1 Giới thiệu, Câu 2 Hình dáng & màu sắc, Câu 3 Công dụng, Câu 4 Tình cảm & giữ gìn',
+          bulletPoints: opt2Bullets
+        },
+        {
+          id: 'sec-3',
+          title: 'Phương án 3 (5 câu - Mở rộng nhẹ)',
+          icon: '3️⃣',
+          guideNote: 'Mở rộng chi tiết và cảm xúc: Câu 1 Giới thiệu, Câu 2 Màu sắc hình dáng, Câu 3 Chi tiết đặc biệt, Câu 4 Ích lợi, Câu 5 Lời hứa giữ gìn',
+          bulletPoints: opt3Bullets
+        }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: isRuler ? [
+          { word: 'thẳng tắp', meaningAndUsage: 'Rất thẳng, không một chút cong vênh' },
+          { word: 'trong suốt', meaningAndUsage: 'Trong vắt, có thể nhìn thấu qua mặt thước' },
+          { word: 'rõ nét', meaningAndUsage: 'Từng vạch số, nét chữ in đậm, dễ nhìn' },
+          { word: 'ngay ngắn', meaningAndUsage: 'Trật tự, thẳng hàng, sạch đẹp' }
+        ] : isPencilBox ? [
+          { word: 'xinh xắn', meaningAndUsage: 'Nhỏ nhắn và có nét đáng yêu, ưa nhìn' },
+          { word: 'ngăn nắp', meaningAndUsage: 'Được sắp xếp trật tự, gọn gàng' },
+          { word: 'trơn tru', meaningAndUsage: 'Khóa kéo lướt nhẹ nhàng, dễ mở đóng' },
+          { word: 'tiện lợi', meaningAndUsage: 'Rất dễ dùng, giúp ích thiết thực cho việc học' }
+        ] : [
+          { word: 'vuông vắn', meaningAndUsage: 'Dáng vẻ vuông vức, đứng dáng, ngay ngắn' },
+          { word: 'êm ái', meaningAndUsage: 'Lớp đệm mềm mại, đeo không gây đau vai' },
+          { word: 'chắc chắn', meaningAndUsage: 'Đường may và khóa cặp bền chặt' },
+          { word: 'gắn bó', meaningAndUsage: 'Gần gũi, thân thương mỗi ngày đến trường' }
+        ],
+        imageries: isRuler ? [
+          { type: 'Hình ảnh đẹp', example: 'Cây thước thẳng tắp như con đường thẳng dẫn bước em học tập', explanation: 'Gợi sự chuẩn xác, ngay ngắn' }
+        ] : isPencilBox ? [
+          { type: 'Hình ảnh đẹp', example: 'Chiếc hộp bút như ngôi nhà nhỏ ấm áp của đồ dùng học tập', explanation: 'Gợi sự ngăn nắp, bảo bọc' }
+        ] : [
+          { type: 'Hình ảnh đẹp', example: 'Chiếc cặp sách như người bạn nhỏ trung thành luôn đồng hành trên lưng em', explanation: 'Gợi sự thân thương, che chở' }
+        ],
+        sampleSentences: isRuler ? [
+          { type: 'mo_bai', label: 'Câu giới thiệu', sentence: 'Cây thước kẻ bằng nhựa trong suốt là đồ dùng học tập gắn bó thân thiết cùng em mỗi ngày.', whyItIsGood: 'Nêu tên đồ vật và chất liệu rõ ràng.' },
+          { type: 'mieu_ta', label: 'Câu miêu tả', sentence: 'Thước thẳng tắp, dài hai mươi xăng-ti-mét với các vạch chia số màu đen in rõ nét.', whyItIsGood: 'Tả đúng kích thước và đặc điểm nổi bật.' },
+          { type: 'ket_bai', label: 'Câu ích lợi và cảm xúc', sentence: 'Nhờ có thước kẻ, em luôn kẻ được những hàng thẳng ngay ngắn và em luôn giữ gìn thước cẩn thận.', whyItIsGood: 'Khép lại bằng công dụng và ý thức giữ gìn.' }
+        ] : isPencilBox ? [
+          { type: 'mo_bai', label: 'Câu giới thiệu', sentence: 'Nhân dịp năm học mới, mẹ mua tặng em một chiếc hộp bút xinh xắn.', whyItIsGood: 'Giới thiệu tự nhiên, gần gũi.' },
+          { type: 'mieu_ta', label: 'Câu miêu tả', sentence: 'Hộp bút có màu xanh da trời dịu mát, in hình chú thỏ trắng vô cùng đáng yêu.', whyItIsGood: 'Màu sắc và họa tiết tươi sáng.' },
+          { type: 'ket_bai', label: 'Câu ích lợi và cảm xúc', sentence: 'Hộp bút giúp em giữ bút thước luôn gọn gàng nên em rất yêu quý và bảo quản cẩn thận.', whyItIsGood: 'Nêu công dụng ngăn nắp.' }
+        ] : [
+          { type: 'mo_bai', label: 'Câu giới thiệu', sentence: 'Chiếc cặp sách thân yêu luôn là người bạn đồng hành cùng em mỗi ngày tới trường.', whyItIsGood: 'Ấm áp, giàu tình cảm.' },
+          { type: 'mieu_ta', label: 'Câu miêu tả', sentence: 'Cặp có dáng chữ nhật đứng, hai quai đeo êm ái và ba ngăn rộng rãi chứa đầy sách vở.', whyItIsGood: 'Tả đặc điểm hình dáng, quai đeo và các ngăn.' },
+          { type: 'ket_bai', label: 'Câu ích lợi và cảm xúc', sentence: 'Em luôn yêu quý chiếc cặp của mình và hứa sẽ bảo quản cặp luôn sạch đẹp, bền lâu.', whyItIsGood: 'Bộc lộ tình cảm và lời hứa chân thành.' }
+        ],
+        creativeIdeas: [
+          'Con hãy nhìn trực tiếp đồ vật trên bàn học của mình để chọn màu sắc và chi tiết thật nhất nhé!',
+          'Viết hoa chữ cái đầu câu và đặt dấu chấm tròn ở cuối mỗi câu con nhé!'
+        ]
       }
     };
   }
@@ -4785,6 +5146,13 @@ export function validatePromptAnalysisResult(
     if (allAnalysisText.includes('kim đồng hồ') || allAnalysisText.includes('phấn trắng') || allAnalysisText.includes('máng nhôm')) {
       directionSeparationCheck = false;
       directionSeparationNote = 'LỖI: Tả chiếc cặp bị lẫn chi tiết đồng hồ/bảng lớp';
+    }
+  } else if (analysis.selectedObjectId === 'thuoc_ke') {
+    if (allAnalysisText.includes('quai đeo') || allAnalysisText.includes('ba lô') || allAnalysisText.includes('bảng lớp') || allAnalysisText.includes('kim giờ') || allAnalysisText.includes('đồng hồ')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tả cây thước kẻ bị lẫn chi tiết cặp sách/đồng hồ/bảng lớp';
+    } else {
+      directionSeparationNote = '100% nội dung miêu tả cây thước kẻ (3–5 câu)';
     }
   } else if (analysis.selectedObjectId === 'bo') {
     if (allAnalysisText.includes('mẹ của em') || allAnalysisText.includes('mẹ yêu quý')) {

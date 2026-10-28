@@ -162,6 +162,7 @@ export interface TeacherAccount {
   lastLogin?: string;
   createdAt: string;
   temporaryPassword?: string;
+  mustChangePasswordNextLogin?: boolean;
 }
 
 export interface Classroom {

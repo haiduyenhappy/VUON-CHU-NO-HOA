@@ -58,7 +58,7 @@ import {
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
-import { isItemDescriptiveGrade1Prompt } from '../utils/promptAnalyzerEngine';
+import { isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
 
 interface DirectionDraft {
   mindMapBranches: MindMapBranch[];
@@ -225,6 +225,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const isOpinionPrompt = genre === 'neu_y_kien' || detectGenre(promptText) === 'neu_y_kien';
   const isEmotionPrompt = genre === 'tinh_cam_cam_xuc' || detectGenre(promptText) === 'tinh_cam_cam_xuc';
   const isItemGrade1Prompt = isItemDescriptiveGrade1Prompt(promptText, grade);
+  const isItemGrade2Prompt = isItemDescriptiveGrade2Prompt(promptText, grade);
   const hasCustomSections = Boolean(detailedOutline?.sections && detailedOutline.sections.length > 0);
   const isLetterMode = isLetterPrompt;
 
@@ -331,8 +332,18 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     'Dùng từ ngữ sinh động (xinh xắn, thon dài, gọn gàng)'
   ];
 
+  const grade2ItemQuickWishes = [
+    'Đoạn văn ngắn 3–5 câu',
+    'Tả hình dáng và màu sắc nổi bật',
+    'Nêu đặc điểm em thích nhất và ích lợi',
+    'Tình cảm gắn bó và lời hứa giữ gìn',
+    'Đầu câu viết hoa, cuối câu có dấu chấm'
+  ];
+
   const quickWishes = isItemGrade1Prompt
     ? grade1ItemQuickWishes
+    : isItemGrade2Prompt
+    ? grade2ItemQuickWishes
     : isLetterPrompt
     ? letterQuickWishes
     : isNotePrompt
@@ -2621,6 +2632,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               <h3 className="text-base font-bold text-stone-900 font-display">
                 {isItemGrade1Prompt
                   ? `Gợi ý viết 1–2 câu miêu tả ${selectedObjectName ? selectedObjectName.toLowerCase() : 'đồ vật'}`
+                  : isItemGrade2Prompt
+                  ? 'Gợi ý viết đoạn văn 3–5 câu'
                   : isLetterPrompt
                   ? 'Dàn ý 5 phần chuẩn mực của bức thư'
                   : isNotePrompt
@@ -2635,6 +2648,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
               {isItemGrade1Prompt
                 ? '1–2 câu hoàn chỉnh'
+                : isItemGrade2Prompt
+                ? '3–5 câu ngắn gọn'
                 : isLetterPrompt
                 ? '5 phần chuẩn mực của thư'
                 : isNotePrompt
@@ -2650,6 +2665,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           <p className="text-xs text-stone-600 font-medium">
             {isItemGrade1Prompt
               ? 'Hoa Nhỏ gợi ý con hai cách viết 1–2 câu miêu tả đồ vật. Con hãy chọn cách viết mình thích nhất nhé:'
+              : isItemGrade2Prompt
+              ? 'Hoa Nhỏ gợi ý 3 phương án viết đoạn văn 3–5 câu miêu tả đồ vật. Con hãy chọn phương án phù hợp với ý tưởng của mình nhé:'
               : isLetterPrompt
               ? 'Dàn ý bức thư chuẩn GDPT 2018 gồm 5 phần. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'
               : isNotePrompt
@@ -2999,6 +3016,13 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 placeholder="Con kể chi tiết kỷ niệm hoặc cảnh vật thật mà con nhớ nhất vào đây nhé..."
                 className="w-full p-2.5 rounded-xl border border-amber-300 focus:outline-hidden text-xs sm:text-sm bg-white"
               />
+
+              {isItemGrade2Prompt && (studentExperienceText.split(/[.!?…]+/).filter(s => s.trim().length > 0).length > 5) && (
+                <div className="p-2.5 bg-amber-100/90 text-amber-900 rounded-xl text-xs font-bold border border-amber-300 flex items-center gap-2 animate-fade-in">
+                  <AlertTriangle className="w-4 h-4 text-amber-700 shrink-0" />
+                  <span>Đề bài yêu cầu 3–5 câu. Con hãy chọn những ý hay nhất để viết đúng yêu cầu nhé!</span>
+                </div>
+              )}
               <div className="flex items-center justify-between gap-2">
                 <button
                   onClick={handleAnswerSocratic}

@@ -31,6 +31,7 @@ import {
   isPencilOrCaseGrade1Prompt,
   isMessageThanksOrApologyGrade2Prompt,
   isGrandparentLoveGrade2Prompt,
+  isItemDescriptiveGrade2Prompt,
   isTeacherMemoryGrade5Prompt
 } from './src/utils/promptAnalyzerEngine.ts';
 
@@ -978,7 +979,7 @@ app.post('/api/admin/teachers/update', (req, res) => {
     return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
   }
 
-  const { id, fullName, salutation, phone, email, school, assignedClassIds } = req.body;
+  const { id, fullName, salutation, phone, email, school, assignedClassIds, role, status } = req.body;
   const teacher = db.teachers.find(t => t.id === id);
   if (!teacher) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên.' });
@@ -986,7 +987,7 @@ app.post('/api/admin/teachers/update', (req, res) => {
 
   if (fullName && fullName.trim()) {
     teacher.fullName = fullName.trim();
-    const prefix = teacher.salutation === 'thầy' ? 'Thầy' : 'Cô';
+    const prefix = (salutation || teacher.salutation) === 'thầy' ? 'Thầy' : 'Cô';
     teacher.name = `${prefix} ${fullName.trim()}`;
   }
   if (salutation && ['cô', 'thầy'].includes(salutation)) {
@@ -998,13 +999,51 @@ app.post('/api/admin/teachers/update', (req, res) => {
   if (email !== undefined) teacher.email = email.trim();
   if (school !== undefined) teacher.school = school.trim();
 
+  // Role update with safeguard
+  if (role && (role === 'SUPER_ADMIN' || role === 'TEACHER') && role !== teacher.role) {
+    if (teacher.role === 'SUPER_ADMIN' && role !== 'SUPER_ADMIN') {
+      const activeSuperAdmins = db.teachers.filter(t => t.role === 'SUPER_ADMIN' && t.status === 'active' && t.id !== teacher.id);
+      if (activeSuperAdmins.length === 0) {
+        return res.status(400).json({ success: false, message: 'Không thể hạ quyền Quản trị viên chính duy nhất đang hoạt động.' });
+      }
+    }
+    teacher.role = role;
+  }
+
+  // Status update with safeguard
+  if (status && ['active', 'locked', 'inactive'].includes(status) && status !== teacher.status) {
+    if (teacher.id === actor.id && status !== 'active') {
+      return res.status(400).json({ success: false, message: 'Không thể khóa hoặc ngừng kích hoạt tài khoản của chính bạn.' });
+    }
+    if ((status === 'locked' || status === 'inactive') && teacher.role === 'SUPER_ADMIN') {
+      const activeSuperAdmins = db.teachers.filter(t => t.role === 'SUPER_ADMIN' && t.status === 'active' && t.id !== teacher.id);
+      if (activeSuperAdmins.length === 0) {
+        return res.status(400).json({ success: false, message: 'Không thể khóa Quản trị viên chính duy nhất đang hoạt động.' });
+      }
+    }
+    if (status === 'inactive' && teacher.assignedClassIds && teacher.assignedClassIds.length > 0) {
+      return res.status(400).json({ 
+        success: false, 
+        message: `Giáo viên đang phụ trách ${teacher.assignedClassIds.length} lớp học. Vui lòng chuyển giao các lớp học trước khi ngừng kích hoạt.` 
+      });
+    }
+    teacher.status = status;
+  }
+
   if (Array.isArray(assignedClassIds)) {
+    const oldAssigned = teacher.assignedClassIds || [];
     teacher.assignedClassIds = assignedClassIds;
     // Sync with classes
     db.classes.forEach(c => {
       if (assignedClassIds.includes(c.id)) {
         if (!c.teacherIds.includes(teacher.id)) c.teacherIds.push(teacher.id);
         if (!c.primaryTeacherId) c.primaryTeacherId = teacher.id;
+      } else if (oldAssigned.includes(c.id)) {
+        // Removed from class
+        c.teacherIds = c.teacherIds.filter(tid => tid !== teacher.id);
+        if (c.primaryTeacherId === teacher.id) {
+          c.primaryTeacherId = c.teacherIds[0] || '';
+        }
       }
     });
   }
@@ -1015,7 +1054,53 @@ app.post('/api/admin/teachers/update', (req, res) => {
     'UPDATE_TEACHER', 
     'teacher', 
     teacher.id, 
-    `Cập nhật hồ sơ giáo viên: ${teacher.name}`,
+    `Cập nhật hồ sơ giáo viên: ${teacher.name} (${teacher.role}, trạng thái: ${teacher.status})`,
+    teacher.fullName
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, teacher });
+});
+
+// Đổi tên đăng nhập giáo viên (Username Management)
+app.post('/api/admin/teachers/change-username', (req, res) => {
+  const db = loadDatabase();
+  const actor = getAuthTeacher(req, db);
+
+  if (!actor || actor.role !== 'SUPER_ADMIN') {
+    return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
+  }
+
+  const { id, newUsername } = req.body;
+  const teacher = db.teachers.find(t => t.id === id);
+  if (!teacher) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên.' });
+  }
+
+  const clean = (newUsername || '').trim().toLowerCase();
+  if (!clean || clean.length < 3 || clean.length > 30) {
+    return res.status(400).json({ success: false, message: 'Tên đăng nhập phải từ 3 đến 30 ký tự.' });
+  }
+  if (!/^[a-z0-9_.]+$/.test(clean)) {
+    return res.status(400).json({ success: false, message: 'Tên đăng nhập chỉ chứa chữ cái thường không dấu, số, dấu gạch dưới (_) hoặc dấu chấm (.).' });
+  }
+
+  const isTakenByTeacher = db.teachers.some(t => t.id !== teacher.id && t.username?.toLowerCase() === clean);
+  const isTakenByStudent = db.students.some(s => s.username?.toLowerCase() === clean);
+  if (isTakenByTeacher || isTakenByStudent) {
+    return res.status(400).json({ success: false, message: 'Tên đăng nhập này đã có người sử dụng. Vui lòng chọn tên khác.' });
+  }
+
+  const oldUsername = teacher.username;
+  teacher.username = clean;
+
+  createAuditLog(
+    db, 
+    actor, 
+    'UPDATE_TEACHER', 
+    'teacher', 
+    teacher.id, 
+    `Đổi tên đăng nhập giáo viên ${teacher.name} từ "${oldUsername}" sang "${clean}"`,
     teacher.fullName
   );
 
@@ -1039,7 +1124,15 @@ app.post('/api/admin/teachers/toggle-status', (req, res) => {
   }
 
   if (teacher.id === actor.id && status !== 'active') {
-    return res.status(400).json({ success: false, message: 'Không thể khóa hoặc ngừng kích hoạt tài khoản Quản trị viên chính.' });
+    return res.status(400).json({ success: false, message: 'Không thể khóa hoặc ngừng kích hoạt tài khoản Quản trị viên chính của chính bạn.' });
+  }
+
+  // Bảo vệ không cho khóa Quản trị viên chính duy nhất
+  if ((status === 'locked' || status === 'inactive') && teacher.role === 'SUPER_ADMIN') {
+    const activeSuperAdmins = db.teachers.filter(t => t.role === 'SUPER_ADMIN' && t.status === 'active' && t.id !== teacher.id);
+    if (activeSuperAdmins.length === 0) {
+      return res.status(400).json({ success: false, message: 'Không thể khóa Quản trị viên chính duy nhất đang hoạt động.' });
+    }
   }
 
   // If deactivating, ensure classes are transferred first
@@ -1075,7 +1168,7 @@ app.post('/api/admin/teachers/reset-password', (req, res) => {
     return res.status(403).json({ success: false, message: 'Từ chối: Quyền Quản trị viên chính là bắt buộc.' });
   }
 
-  const { id, newPassword } = req.body;
+  const { id, newPassword, mustChangePasswordNextLogin } = req.body;
   const teacher = db.teachers.find(t => t.id === id);
   if (!teacher) {
     return res.status(404).json({ success: false, message: 'Không tìm thấy giáo viên.' });
@@ -1083,6 +1176,9 @@ app.post('/api/admin/teachers/reset-password', (req, res) => {
 
   const pass = newPassword?.trim() || `GV${Math.floor(100000 + Math.random() * 900000)}`;
   teacher.temporaryPassword = pass;
+  if (mustChangePasswordNextLogin !== undefined) {
+    teacher.mustChangePasswordNextLogin = Boolean(mustChangePasswordNextLogin);
+  }
 
   createAuditLog(
     db, 
@@ -1090,7 +1186,7 @@ app.post('/api/admin/teachers/reset-password', (req, res) => {
     'RESET_TEACHER_PASSWORD', 
     'teacher', 
     teacher.id, 
-    `Cấp lại mật khẩu mới cho giáo viên ${teacher.name}`,
+    `Cấp lại mật khẩu mới cho giáo viên ${teacher.name}${teacher.mustChangePasswordNextLogin ? ' (Yêu cầu đổi mật khẩu ở lần đăng nhập tiếp theo)' : ''}`,
     teacher.fullName
   );
 
@@ -2453,6 +2549,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       isItemDescriptiveGrade1Prompt(prompt, numGrade) ||
       isMessageThanksOrApologyGrade2Prompt(prompt) ||
       isGrandparentLoveGrade2Prompt(prompt, numGrade) ||
+      isItemDescriptiveGrade2Prompt(prompt, numGrade) ||
       isTeacherMemoryGrade5Prompt(prompt);
 
     if (ai && !isSpecialPedagogicalPrompt && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
