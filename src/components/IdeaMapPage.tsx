@@ -58,6 +58,7 @@ import {
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
+import { isItemDescriptiveGrade1Prompt } from '../utils/promptAnalyzerEngine';
 
 interface DirectionDraft {
   mindMapBranches: MindMapBranch[];
@@ -223,6 +224,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const isSentencePrompt = genre === 'viet_cau' || detectGenre(promptText) === 'viet_cau';
   const isOpinionPrompt = genre === 'neu_y_kien' || detectGenre(promptText) === 'neu_y_kien';
   const isEmotionPrompt = genre === 'tinh_cam_cam_xuc' || detectGenre(promptText) === 'tinh_cam_cam_xuc';
+  const isItemGrade1Prompt = isItemDescriptiveGrade1Prompt(promptText, grade);
   const hasCustomSections = Boolean(detailedOutline?.sections && detailedOutline.sections.length > 0);
   const isLetterMode = isLetterPrompt;
 
@@ -322,7 +324,16 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     'Từ ngữ trong sáng, giàu cảm xúc'
   ];
 
-  const quickWishes = isLetterPrompt
+  const grade1ItemQuickWishes = [
+    'Viết đúng 1–2 câu hoàn chỉnh',
+    'Đầu câu viết hoa, cuối câu có dấu chấm',
+    'Tả một đặc điểm nổi bật hoặc công dụng',
+    'Dùng từ ngữ sinh động (xinh xắn, thon dài, gọn gàng)'
+  ];
+
+  const quickWishes = isItemGrade1Prompt
+    ? grade1ItemQuickWishes
+    : isLetterPrompt
     ? letterQuickWishes
     : isNotePrompt
     ? noteQuickWishes
@@ -331,7 +342,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     : isEmotionPrompt
     ? emotionQuickWishes
     : isSentencePrompt
-    ? sentenceQuickWishes
+    ? (grade === 1 ? grade1ItemQuickWishes : sentenceQuickWishes)
     : normalQuickWishes;
 
   // Image Rotation (Canvas-based)
@@ -809,7 +820,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       let isContaminated = false;
       if (objectId === 'dong_ho' && (cachedStr.includes('hộp bút') || cachedStr.includes('chiếc cặp') || cachedStr.includes('bảng lớp') || cachedStr.includes('quai đeo') || cachedStr.includes('khóa kéo'))) {
         isContaminated = true;
-      } else if (objectId === 'hop_but' && (cachedStr.includes('chiếc cặp') || cachedStr.includes('đồng hồ') || cachedStr.includes('bảng lớp') || cachedStr.includes('kim giờ') || cachedStr.includes('quai đeo'))) {
+      } else if (objectId === 'hop_but' && (cachedStr.includes('chiếc cặp') || cachedStr.includes('đồng hồ') || cachedStr.includes('bảng lớp') || cachedStr.includes('kim giờ') || cachedStr.includes('quai đeo') || cachedStr.includes('ngòi chì') || cachedStr.includes('thân bút chì') || cachedStr.includes('cục tẩy ở đuôi') || cachedStr.includes('vỏ gỗ') || cachedStr.includes('3 câu văn'))) {
+        isContaminated = true;
+      } else if (objectId === 'but_chi' && (cachedStr.includes('hộp bút') || cachedStr.includes('ngăn chứa bút') || cachedStr.includes('hộp nhựa') || cachedStr.includes('vải dù') || cachedStr.includes('khóa kéo') || cachedStr.includes('3 câu văn'))) {
         isContaminated = true;
       } else if (objectId === 'chiec_cap' && (cachedStr.includes('hộp bút') || cachedStr.includes('đồng hồ') || cachedStr.includes('bảng lớp') || cachedStr.includes('kim giờ') || cachedStr.includes('ngăn cài bút'))) {
         isContaminated = true;
@@ -2606,24 +2619,28 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 {isLetterPrompt ? '💌' : isNotePrompt ? '📌' : isSentencePrompt ? '✍️' : isOpinionPrompt ? '💡' : isEmotionPrompt ? '💖' : '📋'}
               </span>
               <h3 className="text-base font-bold text-stone-900 font-display">
-                {isLetterPrompt
+                {isItemGrade1Prompt
+                  ? `Gợi ý viết 1–2 câu miêu tả ${selectedObjectName ? selectedObjectName.toLowerCase() : 'đồ vật'}`
+                  : isLetterPrompt
                   ? 'Dàn ý 5 phần chuẩn mực của bức thư'
                   : isNotePrompt
                   ? 'Dàn ý 3 phần chuẩn mực của lời nhắn'
                   : isSentencePrompt
-                  ? 'Dàn ý 3 câu văn liền mạch theo đề bài'
+                  ? (grade === 1 ? 'Gợi ý viết 1–2 câu hoàn chỉnh' : 'Dàn ý các câu văn theo đề bài')
                   : hasCustomSections
                   ? 'Dàn ý chi tiết các phần của bài'
                   : 'Dàn ý chi tiết 3 phần của con'}
               </h3>
             </div>
             <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2.5 py-1 rounded-full border border-purple-200">
-              {isLetterPrompt
+              {isItemGrade1Prompt
+                ? '1–2 câu hoàn chỉnh'
+                : isLetterPrompt
                 ? '5 phần chuẩn mực của thư'
                 : isNotePrompt
                 ? '3 phần chuẩn mực của lời nhắn'
                 : isSentencePrompt
-                ? '3 câu văn liền mạch'
+                ? (grade === 1 ? '1–2 câu hoàn chỉnh' : 'Các câu văn mạch lạc')
                 : hasCustomSections
                 ? `${detailedOutline.sections!.length} phần chi tiết của bài`
                 : 'Mở đoạn • Phát triển đoạn • Kết đoạn'}
@@ -2631,7 +2648,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           </div>
 
           <p className="text-xs text-stone-600 font-medium">
-            {isLetterPrompt
+            {isItemGrade1Prompt
+              ? 'Hoa Nhỏ gợi ý con hai cách viết 1–2 câu miêu tả đồ vật. Con hãy chọn cách viết mình thích nhất nhé:'
+              : isLetterPrompt
               ? 'Dàn ý bức thư chuẩn GDPT 2018 gồm 5 phần. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'
               : isNotePrompt
               ? 'Dàn ý lời nhắn chuẩn GDPT 2018 gồm 3 phần rõ ràng. Con có thể thêm, bớt hoặc chỉnh sửa từng gạch đầu dòng theo ý mình:'

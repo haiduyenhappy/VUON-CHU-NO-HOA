@@ -27,6 +27,8 @@ import {
   isFamilyLoveGrade1Prompt,
   isSelfIntroGrade1Prompt,
   isCatObservationGrade1Prompt,
+  isItemDescriptiveGrade1Prompt,
+  isPencilOrCaseGrade1Prompt,
   isMessageThanksOrApologyGrade2Prompt,
   isGrandparentLoveGrade2Prompt,
   isTeacherMemoryGrade5Prompt
@@ -2448,6 +2450,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       isFamilyLoveGrade1Prompt(prompt, numGrade) ||
       isSelfIntroGrade1Prompt(prompt, numGrade) ||
       isCatObservationGrade1Prompt(prompt) ||
+      isItemDescriptiveGrade1Prompt(prompt, numGrade) ||
       isMessageThanksOrApologyGrade2Prompt(prompt) ||
       isGrandparentLoveGrade2Prompt(prompt, numGrade) ||
       isTeacherMemoryGrade5Prompt(prompt);

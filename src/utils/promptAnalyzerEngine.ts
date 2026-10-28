@@ -249,6 +249,29 @@ export function isCatObservationGrade1Prompt(text: string): boolean {
 }
 
 /**
+ * Kiểm tra đề Bài miêu tả đồ vật Lớp 1 (1–2 câu)
+ */
+export function isItemDescriptiveGrade1Prompt(text: string, grade: number = 1): boolean {
+  if (!text) return false;
+  const pLower = text.toLowerCase();
+  const isGrade1Scope = grade === 1 || pLower.includes('1–2 câu') || pLower.includes('1-2 câu') || pLower.includes('1 câu') || pLower.includes('2 câu');
+  const isDescriptive = pLower.includes('miêu tả') || pLower.includes('tả') || pLower.includes('xinh xắn') || pLower.includes('đặc điểm');
+  const isObject = pLower.includes('bút chì') || pLower.includes('hộp bút') || pLower.includes('cặp') || pLower.includes('thước') || pLower.includes('tẩy') || pLower.includes('đồ dùng') || pLower.includes('đồ vật') || pLower.includes('bảng con') || pLower.includes('quyển sách') || pLower.includes('vở viết');
+  const isExcluded = pLower.includes('mèo') || pLower.includes('chó') || pLower.includes('cún') || pLower.includes('con vật') || pLower.includes('bố') || pLower.includes('mẹ') || pLower.includes('ông') || pLower.includes('bà') || pLower.includes('giới thiệu họ tên');
+  return isGrade1Scope && isDescriptive && isObject && !isExcluded;
+}
+
+/**
+ * Kiểm tra đề Lớp 1 lựa chọn chiếc bút chì hoặc hộp bút
+ */
+export function isPencilOrCaseGrade1Prompt(text: string, grade: number = 1): boolean {
+  if (!text) return false;
+  const pLower = text.toLowerCase();
+  return isItemDescriptiveGrade1Prompt(text, grade) && 
+    (pLower.includes('bút chì') && pLower.includes('hộp bút') && (pLower.includes('hoặc') || pLower.includes('hay')));
+}
+
+/**
  * Kiểm tra đề Bài 4 Lớp 2: Tin nhắn ngắn cảm ơn hoặc xin lỗi bạn
  */
 export function isMessageThanksOrApologyGrade2Prompt(text: string): boolean {
@@ -452,6 +475,10 @@ export function analyzePromptSemantics(
     (pLower.includes('mèo') || pLower.includes('mèo con')) &&
     (pLower.includes('tranh') || pLower.includes('hình dáng') || pLower.includes('hành động'));
 
+  // BÀI MIÊU TẢ ĐỒ VẬT LỚP 1 (Hộp bút, Bút chì, Cặp sách...)
+  const isItemDescriptiveGrade1 = isItemDescriptiveGrade1Prompt(pLower, grade);
+  const isPencilOrCaseGrade1 = isPencilOrCaseGrade1Prompt(pLower, grade);
+
   // BÀI 4 LỚP 2: Tin nhắn ngắn cảm ơn hoặc xin lỗi
   const isMessageThanksOrApologyGrade2Prompt =
     (pLower.includes('tin nhắn') || pLower.includes('lời nhắn')) &&
@@ -496,7 +523,8 @@ export function analyzePromptSemantics(
   // LỰA CHỌN ĐỒ VẬT (Hộp bút, chiếc cặp, đồng hồ, bảng lớp...)
   const isObjectSelectionPrompt = 
     !isTreeSelectionPrompt &&
-    !isFamilyLoveGrade1Prompt && (
+    !isFamilyLoveGrade1Prompt &&
+    !isItemDescriptiveGrade1 && (
       pLower.includes('chọn một đồ vật') ||
       pLower.includes('chọn 1 đồ vật') ||
       pLower.includes('chọn đồ vật') ||
@@ -521,6 +549,7 @@ export function analyzePromptSemantics(
     !isTaskSelectionPrompt && 
     !isFamilyLoveGrade1Prompt &&
     !isSelfIntroGrade1Prompt &&
+    !isItemDescriptiveGrade1 &&
     (
       isCatObservationGrade1Prompt ||
       isMessageThanksOrApologyGrade2Prompt ||
@@ -551,6 +580,16 @@ export function analyzePromptSemantics(
       { id: 'me', name: 'Mẹ', icon: '👩' },
       { id: 'ong', name: 'Ông', icon: '👴' },
       { id: 'ba', name: 'Bà', icon: '👵' }
+    ];
+  }
+  // 2. Phân nhánh BÀI MIÊU TẢ BÚT CHÌ HOẶC HỘP BÚT LỚP 1 (Lựa chọn đối tượng)
+  else if (isPencilOrCaseGrade1) {
+    choiceType = 'object_selection';
+    hasMultipleDirections = false;
+    objectChoiceQuestion = 'Con muốn miêu tả chiếc bút chì hay hộp bút?';
+    availableObjects = [
+      { id: 'hop_but', name: 'Hộp bút', icon: '👝' },
+      { id: 'but_chi', name: 'Chiếc bút chì', icon: '✏️' }
     ];
   }
   // 2. Phân nhánh BÀI 3 LỚP 1: Quan sát tranh mèo con (Hình dáng hoặc Hành động)
@@ -1173,6 +1212,50 @@ export function analyzePromptSemantics(
       writingScope = 'Chọn một người thân (bố, mẹ, ông hoặc bà) để bộc lộ tình cảm yêu thương chân thành trong 1–2 câu';
     }
   }
+  // Xử lý BÀI MIÊU TẢ ĐỒ VẬT LỚP 1 (Hộp bút, Bút chì, Cặp sách...)
+  else if (isItemDescriptiveGrade1) {
+    topicCode = 'CD06';
+    topicName = 'Đồ dùng học tập';
+    genre = 'viet_cau';
+    if (!detectedTaskCodes.includes('NV01')) {
+      detectedTaskCodes.unshift('NV01');
+      detectedTaskLabels.unshift('Viết câu');
+    }
+    if (!detectedTaskCodes.includes('NV24')) {
+      detectedTaskCodes.push('NV24');
+      detectedTaskLabels.push('Miêu tả đồ vật');
+    }
+
+    if (isPencilOrCaseGrade1) {
+      if (selectedObjectId === 'but_chi') {
+        mainObject = 'Chiếc bút chì';
+        coreSubject = 'Viết 1–2 câu miêu tả chiếc bút chì giúp em tập viết mỗi ngày';
+        selectedObjectName = 'Chiếc bút chì';
+        writingScope = 'Màu sắc vỏ bút, thân thon dài, đặc điểm ngòi chì và cục tẩy nhỏ xinh, công dụng giúp em nắn nót từng nét chữ';
+      } else {
+        // Mặc định hoặc khi chọn hop_but
+        mainObject = 'Chiếc hộp bút xinh xắn';
+        coreSubject = 'Viết 1–2 câu miêu tả chiếc hộp bút xinh xắn giúp em tập viết mỗi ngày';
+        selectedObjectName = 'Hộp bút';
+        writingScope = 'Màu sắc tươi tắn, hình dáng nhỏ nhắn vừa tay, họa tiết đáng yêu và công dụng giữ đồ dùng học tập gọn gàng';
+      }
+    } else {
+      // Đề đồ vật lớp 1 khác (ví dụ: chiếc cặp sách, thước kẻ, bảng con...)
+      let itemName = 'Đồ dùng học tập';
+      if (pLower.includes('cặp') || pLower.includes('ba lô')) itemName = 'Chiếc cặp sách';
+      else if (pLower.includes('thước')) itemName = 'Chiếc thước kẻ';
+      else if (pLower.includes('bảng')) itemName = 'Chiếc bảng con';
+      else if (pLower.includes('hộp bút')) itemName = 'Chiếc hộp bút';
+      else if (pLower.includes('bút chì')) itemName = 'Chiếc bút chì';
+      else if (pLower.includes('tẩy') || pLower.includes('gôm')) itemName = 'Cục tẩy nhỏ';
+      else if (customObjectName && customObjectName.trim()) itemName = customObjectName.trim();
+
+      mainObject = itemName;
+      coreSubject = `Viết 1–2 câu miêu tả ${itemName.toLowerCase()}`;
+      selectedObjectName = itemName;
+      writingScope = `Đặc điểm màu sắc, hình dáng nổi bật và công dụng thiết thực của ${itemName.toLowerCase()} trong học tập hàng ngày`;
+    }
+  }
   // Xử lý LOẠI A - Lựa chọn đồ vật (Hộp bút, Cặp, Đồng hồ, Bảng...)
   else if (isObjectSelectionPrompt || choiceType === 'object_selection') {
     topicCode = 'CD06';
@@ -1339,7 +1422,18 @@ export function analyzePromptSemantics(
     'TUYỆT ĐỐI KHÔNG dùng một dàn ý mẫu chung sao chép cho các thể loại khác nhau'
   ];
 
-  if (isFamilyLoveGrade1Prompt) {
+  if (isItemDescriptiveGrade1) {
+    const objLabel = selectedObjectId === 'but_chi' ? 'chiếc bút chì' : (selectedObjectName || 'chiếc hộp bút');
+    compulsoryConstraints.push(`Miêu tả ${objLabel}`);
+    compulsoryConstraints.push('Chọn một hoặc hai đặc điểm nổi bật (màu sắc, hình dáng hoặc họa tiết/đặc điểm ngòi, tẩy)');
+    compulsoryConstraints.push(`Có thể nêu công dụng của ${objLabel}`);
+    compulsoryConstraints.push('Viết đúng 1–2 câu hoàn chỉnh');
+    compulsoryConstraints.push('Viết hoa đầu câu và đặt dấu chấm ở cuối câu');
+
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết thành đoạn văn ba câu hay bài văn 3 phần (Mở bài, Thân bài, Kết bài)');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG ép viết dài 4–6 câu hay yêu cầu cảm xúc, mong ước xa vời');
+    negativeConstraints.push('TUYỆT ĐỐI KHÔNG sử dụng biện pháp nhân hóa hoặc kể lể kỷ niệm không liên quan');
+  } else if (isFamilyLoveGrade1Prompt) {
     compulsoryConstraints.push('Viết đúng 1–2 câu trọn vẹn bày tỏ tình cảm yêu thương với người thân đã chọn');
     negativeConstraints.push('TUYỆT ĐỐI KHÔNG viết thành bài văn hay đoạn văn dài nhiều phần');
   } else if (isSelfIntroGrade1Prompt) {
@@ -1377,7 +1471,7 @@ export function analyzePromptSemantics(
   let suggestedLength = lengthConstraint.display;
 
   let writingFormat = 'Đoạn văn';
-  if (isFamilyLoveGrade1Prompt || isSelfIntroGrade1Prompt || isCatObservationGrade1Prompt || (grade === 1 && genre === 'viet_cau')) {
+  if (isItemDescriptiveGrade1 || isFamilyLoveGrade1Prompt || isSelfIntroGrade1Prompt || isCatObservationGrade1Prompt || (grade === 1 && genre === 'viet_cau')) {
     writingFormat = '1–2 câu hoàn chỉnh';
     suggestedLength = '1–2 câu hoàn chỉnh (đầu câu viết hoa, cuối câu có dấu chấm)';
   } else if (isMessageThanksOrApologyGrade2Prompt) {
@@ -1759,6 +1853,247 @@ export function buildGenreStructure(
           { type: 'ket_bai', label: 'Tả hành động', sentence: 'Chú mèo con vờn cuộn len thoăn thoắt trông thật đáng yêu.', whyItIsGood: 'Diễn tả hành động ngộ nghĩnh, trọn vẹn ý.' }
         ],
         creativeIdeas: ['Con hãy nhìn thật kỹ tranh xem mèo đang nhìn về hướng nào nhé!']
+      }
+    };
+  }
+
+  // -------------------------------------------------------------
+  // TRƯỜNG HỢP ĐẶC BIỆT: BÀI MIÊU TẢ HỘP BÚT / BÚT CHÌ / ĐỒ VẬT LỚP 1
+  // Đề: "Viết 1–2 câu miêu tả chiếc bút chì hoặc hộp bút xinh xắn giúp em tập viết mỗi ngày."
+  // -------------------------------------------------------------
+  if (isItemDescriptiveGrade1Prompt(pLower, grade)) {
+    const isPencil = semantics.selectedObjectId === 'but_chi';
+    const isAdvanced = semantics.difficultyLevel === 'nang_cao';
+    const objName = isPencil ? 'chiếc bút chì' : (semantics.selectedObjectName ? semantics.selectedObjectName.toLowerCase() : 'chiếc hộp bút');
+
+    // 1. Hoa Nhỏ cùng con hiểu đề (Chuẩn xác theo hướng dẫn sư phạm GDPT 2018)
+    if (isPencil) {
+      hoaNhoUnderstand = 'Con hãy quan sát chiếc bút chì của mình nhé! Bút chì có màu gì, thân bút thon dài hay ngắn, ngòi chì và cục tẩy ra sao? Con có thể chọn một vài chi tiết để viết 1–2 câu miêu tả chiếc bút chì.';
+      specificRequirements = [
+        'Miêu tả chiếc bút chì.',
+        'Chọn một hoặc hai đặc điểm nổi bật (thân bút, ngòi chì, tẩy nhỏ).',
+        'Có thể nêu công dụng của chiếc bút chì.',
+        'Viết đúng 1–2 câu.',
+        'Viết hoa đầu câu và đặt dấu chấm ở cuối câu.'
+      ];
+    } else {
+      hoaNhoUnderstand = 'Con hãy quan sát hộp bút của mình nhé! Hộp bút có màu gì, hình dáng ra sao hoặc có hình trang trí gì đặc biệt? Con có thể chọn một vài chi tiết để viết 1–2 câu miêu tả hộp bút.';
+      specificRequirements = [
+        'Miêu tả chiếc hộp bút.',
+        'Chọn một hoặc hai đặc điểm nổi bật.',
+        'Có thể nêu công dụng của hộp bút.',
+        'Viết đúng 1–2 câu.',
+        'Viết hoa đầu câu và đặt dấu chấm ở cuối câu.'
+      ];
+    }
+
+    // Kiểm tra xung đột yêu cầu (Conflict Detection: Nếu học sinh chọn mong ước mâu thuẫn như 4-6 câu, nhân hóa)
+    const hasLengthConflict = specialWishes && /(?:4[–-]6\s*câu|đoạn\s*văn\s*dài|bài\s*văn)/i.test(specialWishes);
+    const hasPersonificationConflict = specialWishes && /(?:nhân\s*hóa|kỷ\s*niệm|mong\s*ước)/i.test(specialWishes);
+    if (hasLengthConflict || hasPersonificationConflict) {
+      specificRequirements.push(
+        'Lưu ý từ Hoa Nhỏ: Với đề bài lớp 1 này, con chỉ cần viết đúng 1–2 câu miêu tả đặc điểm của đồ vật thôi nhé! Chưa cần viết dài hay dùng phép nhân hóa phức tạp đâu.'
+      );
+    }
+
+    // 2. Câu hỏi khơi gợi (Socratic Questions - 5 câu hỏi tuần tự)
+    if (isPencil) {
+      socraticQuestions = [
+        'Con đang cầm chiếc bút chì gỗ hay bút chì kim nhỏ nhắn?',
+        'Vỏ ngoài của bút chì có màu sắc gì mà con thích nhất?',
+        'Thân bút chì tròn hay có cạnh, cầm trên tay cảm giác thế nào?',
+        'Đầu ngòi chì nhọn hay tù và đuôi bút có gắn cục tẩy nhỏ không?',
+        'Chiếc bút chì giúp con làm những việc gì trong giờ tập viết mỗi ngày?'
+      ];
+    } else {
+      socraticQuestions = [
+        'Con đang quan sát chiếc hộp bút bằng vải hay bằng nhựa?',
+        'Hộp bút có màu gì mà con thích nhất?',
+        'Chiếc hộp bút trông như thế nào (dài, vuông vức hay có khóa kéo)?',
+        'Bên ngoài hộp bút có vẽ hình gì đáng yêu (chú thỏ, gấu bông, hoa lá)?',
+        'Hộp bút giúp con đựng những đồ dùng học tập nào cho thật ngăn nắp?'
+      ];
+    }
+
+    // 3. Sơ đồ tư duy 5 nhánh (Dạng câu hỏi khơi gợi và từ khóa ngắn, KHÔNG dùng câu văn áp đặt)
+    if (isPencil) {
+      branches = [
+        {
+          id: 'br-1',
+          title: '✏️ Chiếc bút chì của con',
+          icon: '✏️',
+          color: 'emerald',
+          points: isAdvanced
+            ? ['Bút chì gỗ nhỏ nhắn, quen thuộc', 'Người bạn đồng hành thân thiết khi tập viết', 'Chiếc bút chì mới tinh, thơm mùi gỗ']
+            : ['Bút chì gỗ nhỏ nhắn', 'Chiếc bút chì thân quen', 'Bạn đồng hành tập viết']
+        },
+        {
+          id: 'br-2',
+          title: '🎨 Màu sắc',
+          icon: '🎨',
+          color: 'amber',
+          points: isAdvanced
+            ? ['Vỏ sơn màu vàng tươi óng ả', 'Màu xanh lá cây mát mắt', 'Sọc kẻ nhiều màu rực rỡ', 'Màu hồng phấn dễ thương']
+            : ['Màu vàng tươi', 'Màu xanh lá cây', 'Sọc sọc nhiều màu', 'Màu hồng dễ thương']
+        },
+        {
+          id: 'br-3',
+          title: '📏 Hình dáng thân bút',
+          icon: '📏',
+          color: 'purple',
+          points: isAdvanced
+            ? ['Thân bút thon dài, vừa vặn tay cầm nhỏ xinh', 'Vỏ gỗ mịn màng, nhẹ êm', 'Dáng tròn lục giác chống lăn']
+            : ['Thon dài vừa vặn tay cầm', 'Thân gỗ nhẹ êm', 'Dáng tròn xinh xắn']
+        },
+        {
+          id: 'br-4',
+          title: '🔍 Đặc điểm ngòi và tẩy',
+          icon: '🔍',
+          color: 'sky',
+          points: isAdvanced
+            ? ['Ngòi chì đen nhánh, chuốt nhọn tinh tươm', 'Nét chì mịn màng trên trang giấy', 'Đầu bút gắn cục tẩy nhỏ màu hồng tiện lợi']
+            : ['Ngòi chì đen nhánh', 'Ngòi chuốt nhọn hoắt', 'Cục tẩy nhỏ tròn ở đuôi']
+        },
+        {
+          id: 'br-5',
+          title: '🌟 Công dụng',
+          icon: '🌟',
+          color: 'rose',
+          points: isAdvanced
+            ? ['Giúp em nắn nót từng nét chữ đầu đời', 'Vẽ tranh ngộ nghĩnh và tô màu sáng tạo', 'Kẻ những đường thẳng ngay ngắn trong vở']
+            : ['Giúp em viết chữ nắn nót', 'Vẽ hình và tô màu', 'Tập kẻ hàng thẳng tắp']
+        }
+      ];
+    } else {
+      branches = [
+        {
+          id: 'br-1',
+          title: '👝 Hộp bút của con',
+          icon: '👝',
+          color: 'emerald',
+          points: isAdvanced
+            ? ['Chiếc hộp bút bằng vải mềm xinh xắn', 'Hộp bút bằng nhựa bóng bẩy, bền đẹp', 'Món quà ý nghĩa mẹ tặng em']
+            : ['Hộp bút bằng vải / bằng nhựa', 'Hộp bút xinh xắn', 'Người bạn nhỏ của con']
+        },
+        {
+          id: 'br-2',
+          title: '🎨 Màu sắc',
+          icon: '🎨',
+          color: 'amber',
+          points: isAdvanced
+            ? ['Màu hồng phấn ngọt ngào', 'Màu xanh da trời dịu mát', 'Màu vàng tươi rực rỡ', 'Sắc màu tươi sáng, nổi bật']
+            : ['Màu hồng phấn', 'Màu xanh da trời', 'Màu vàng tươi', 'Màu sắc rực rỡ']
+        },
+        {
+          id: 'br-3',
+          title: '📐 Hình dáng',
+          icon: '📐',
+          color: 'purple',
+          points: isAdvanced
+            ? ['Dáng hình chữ nhật thon dài, gọn gàng', 'Nhỏ nhắn vừa vặn với ngăn cặp sách', 'Đường khóa kéo trơn tru, chắc chắn']
+            : ['Hình chữ nhật thon dài', 'Nhỏ nhắn vừa tay', 'Khóa kéo trơn tru']
+        },
+        {
+          id: 'br-4',
+          title: '✨ Họa tiết',
+          icon: '✨',
+          color: 'sky',
+          points: isAdvanced
+            ? ['In hình chú thỏ trắng ôm củ cà rốt đáng yêu', 'Chú gấu bông ngộ nghĩnh đang mỉm cười', 'Những ngôi sao lấp lánh và hoa lá sinh động']
+            : ['Hình chú thỏ trắng', 'Chú gấu bông ngộ nghĩnh', 'Những ngôi sao lấp lánh', 'Họa tiết hoa lá']
+        },
+        {
+          id: 'br-5',
+          title: '🌟 Công dụng',
+          icon: '🌟',
+          color: 'rose',
+          points: isAdvanced
+            ? ['Cất giữ bút mực, bút chì và thước kẻ an toàn', 'Giữ tẩy và gọt bút luôn sạch sẽ, gọn gàng', 'Giúp bàn học và ngăn cặp luôn ngăn nắp']
+            : ['Đựng bút và thước kẻ', 'Giữ tẩy và gọt bút gọn gàng', 'Giúp bàn học luôn ngăn nắp']
+        }
+      ];
+    }
+
+    // 4. Dàn ý gợi ý 1–2 câu (Tuyệt đối không có Mở bài - Thân bài - Kết bài, không ép 3 câu)
+    const way1 = isPencil
+      ? ['Gợi ý câu: "Chiếc bút chì bằng gỗ màu vàng giúp em tập viết những nét chữ đầu tiên." hoặc "Chiếc bút chì thon dài có ngòi chì đen nhánh giúp em nắn nót từng trang vở."']
+      : ['Gợi ý câu: "Chiếc hộp bút của em có màu hồng phấn và in hình chú thỏ rất xinh xắn." hoặc "Chiếc hộp bút màu xanh giúp em cất giữ bút thước thật gọn gàng."'];
+
+    const way2 = isPencil
+      ? [
+          'Câu 1 (Màu sắc hoặc hình dáng): Miêu tả màu sắc hoặc thân bút chì. (Ví dụ: "Chiếc bút chì của em thon dài và có màu vàng tươi.")',
+          'Câu 2 (Chi tiết khác hoặc công dụng): Miêu tả ngòi, tẩy hoặc công dụng của bút chì. (Ví dụ: "Đầu bút có gắn một cục tẩy nhỏ màu trắng giúp em tẩy xóa vết bẩn thật tiện lợi.")'
+        ]
+      : [
+          'Câu 1 (Màu sắc hoặc hình dáng): Miêu tả màu sắc hoặc dáng vẻ của hộp bút. (Ví dụ: "Chiếc hộp bút của em có màu xanh da trời rất đẹp mắt.")',
+          'Câu 2 (Chi tiết khác hoặc công dụng): Miêu tả họa tiết trang trí hoặc công dụng giữ bút thước. (Ví dụ: "Bên trong hộp bút có thể đựng được nhiều bút mực và thước kẻ của em.")'
+        ];
+
+    outline = {
+      moDoan: way1,
+      phatTrienDoan: [],
+      ketDoan: way2,
+      genre: 'viet_cau',
+      sections: [
+        {
+          id: 'sec-1',
+          title: 'Cách 1 – Viết một câu',
+          icon: '1️⃣',
+          guideNote: `Miêu tả một đặc điểm nổi bật nhất của ${objName}`,
+          bulletPoints: way1
+        },
+        {
+          id: 'sec-2',
+          title: 'Cách 2 – Viết hai câu',
+          icon: '2️⃣',
+          guideNote: `Câu 1 tả màu sắc/hình dáng, Câu 2 tả chi tiết hoặc công dụng của ${objName}`,
+          bulletPoints: way2
+        }
+      ]
+    };
+
+    return {
+      branches,
+      outline,
+      socraticQuestions,
+      hoaNhoUnderstand,
+      specificRequirements,
+      vocabularySuggestions: {
+        goodWords: isPencil
+          ? [
+              { word: 'thon dài', meaningAndUsage: 'Dáng dài và thon gọn, cầm vừa tay' },
+              { word: 'nhỏ nhắn', meaningAndUsage: 'Kích thước bé và xinh xắn' },
+              { word: 'đen nhánh', meaningAndUsage: 'Màu đen đậm bóng bẩy của ngòi chì' },
+              { word: 'nắn nót', meaningAndUsage: 'Cẩn thận, tỉ mỉ từng nét chữ' }
+            ]
+          : [
+              { word: 'xinh xắn', meaningAndUsage: 'Nhỏ nhắn và có nét ưa nhìn, dễ thương' },
+              { word: 'gọn gàng', meaningAndUsage: 'Ngăn nắp, trật tự, sạch đẹp' },
+              { word: 'tươi tắn', meaningAndUsage: 'Màu sắc tươi sáng, bắt mắt' },
+              { word: 'tiện lợi', meaningAndUsage: 'Giúp ích dễ dàng cho việc học' }
+            ],
+        imageries: isPencil
+          ? [
+              { type: 'Hình ảnh đẹp', example: 'Chiếc bút chì thon dài như ngón tay nhỏ', explanation: 'Gợi sự thon gọn, vừa vặn' }
+            ]
+          : [
+              { type: 'Hình ảnh đẹp', example: 'Chiếc hộp bút xinh như ngôi nhà nhỏ của đồ dùng học tập', explanation: 'Gợi sự ngăn nắp, ấm cúng' }
+            ],
+        sampleSentences: isPencil
+          ? [
+              { type: 'mo_bai', label: 'Cách 1 câu', sentence: 'Chiếc bút chì bằng gỗ màu vàng giúp em tập viết những nét chữ đầu tiên.', whyItIsGood: 'Trọn vẹn 1 câu, nêu cả đặc điểm và công dụng.' },
+              { type: 'mieu_ta', label: 'Câu 1 trong bài 2 câu', sentence: 'Chiếc bút chì của em thon dài và có màu vàng tươi.', whyItIsGood: 'Miêu tả hình dáng và màu sắc tự nhiên.' },
+              { type: 'ket_bai', label: 'Câu 2 trong bài 2 câu', sentence: 'Đầu bút có gắn một cục tẩy nhỏ giúp em tẩy xóa vết chì rất tiện lợi.', whyItIsGood: 'Nêu chi tiết ngòi/tẩy và công dụng thiết thực.' }
+            ]
+          : [
+              { type: 'mo_bai', label: 'Cách 1 câu', sentence: 'Chiếc hộp bút màu hồng phấn in hình chú thỏ rất xinh xắn.', whyItIsGood: 'Trọn vẹn 1 câu, nêu màu sắc và họa tiết đáng yêu.' },
+              { type: 'mieu_ta', label: 'Câu 1 trong bài 2 câu', sentence: 'Chiếc hộp bút của em có màu xanh da trời rất đẹp mắt.', whyItIsGood: 'Miêu tả màu sắc tươi tắn.' },
+              { type: 'ket_bai', label: 'Câu 2 trong bài 2 câu', sentence: 'Bên trong hộp có thể cất giữ bút mực và thước kẻ thật gọn gàng.', whyItIsGood: 'Nêu công dụng ngăn nắp.' }
+            ],
+        creativeIdeas: [
+          'Con nhớ viết hoa chữ cái đầu câu và đặt dấu chấm ở cuối mỗi câu nhé!',
+          'Hãy chọn màu sắc thật mà con đang nhìn thấy trên chiếc bàn học của mình.'
+        ]
       }
     };
   }
@@ -2437,41 +2772,82 @@ export function buildGenreStructure(
   // THỂ LOẠI 3: VIẾT CÂU (viet_cau - Lớp 1 & Lớp 2)
   // -------------------------------------------------------------
   else if (genre === 'viet_cau') {
-    hoaNhoUnderstand = `Đề bài rèn cho con kỹ năng viết câu trọn vẹn (khoảng 2–3 câu): đầu câu viết hoa, cuối câu có dấu chấm, dùng từ ngữ sinh động và tự nhiên nhé!`;
-    specificRequirements = [
-      'Nhiệm vụ: Viết 2–3 câu hoàn chỉnh, mạch lạc theo đúng yêu cầu đề',
-      'Hình thức: Đầu câu viết hoa, cuối câu có dấu câu phù hợp (. ! ?)',
-      'Nội dung: Trả lời rõ ràng các câu hỏi gợi mở của Hoa Nhỏ',
-      'Liên kết: Các câu văn nối tiếp tự nhiên, không rời rạc'
-    ];
-    socraticQuestions = [
-      'Câu 1: Con muốn giới thiệu ai hoặc điều gì đáng yêu nhất?',
-      'Câu 2: Người ấy hoặc sự vật ấy có đặc điểm hay việc làm gì nổi bật?',
-      'Câu 3: Con có cảm xúc hoặc mong ước gì gắn bó với đối tượng?'
-    ];
-    branches = [
-      { id: 'br-1', title: '🌱 Câu 1: Giới thiệu', icon: '🌱', color: 'emerald', points: ['Nêu tên đối tượng', 'Ấn tượng đầu tiên'] },
-      { id: 'br-2', title: '🌿 Câu 2: Đặc điểm / Hành động', icon: '🌿', color: 'purple', points: ['Nét nổi bật nhất', 'Từ ngữ gợi tả, gợi cảm'] },
-      { id: 'br-3', title: '🌸 Câu 3: Cảm xúc / Tình cảm', icon: '🌸', color: 'rose', points: ['Tình cảm của con', 'Mong ước gắn bó'] },
-      { id: 'br-4', title: '✍️ Quy tắc chính tả câu', icon: '✍️', color: 'sky', points: ['Đầu câu viết hoa', 'Cuối câu có dấu chấm'] },
-      { id: 'br-5', title: '✨ Sáng tạo từ ngữ', icon: '✨', color: 'amber', points: ['Dùng từ ngữ giản dị, trong sáng', 'Diễn đạt tự nhiên'] }
-    ];
+    const isOneTwoSentences = grade === 1 || pLower.includes('1–2 câu') || pLower.includes('1-2 câu') || pLower.includes('1 câu') || pLower.includes('2 câu');
 
-    const c1 = [`Câu 1 (Giới thiệu): Giới thiệu đối tượng chính của đề bài một cách tự nhiên và ấm áp.`];
-    const c2 = [`Câu 2 (Chi tiết / Hành động): Miêu tả một nét đặc sắc, một việc làm hoặc cử chỉ khiến con nhớ nhất.`];
-    const c3 = [`Câu 3 (Cảm xúc): Bày tỏ tình cảm yêu mến, gắn bó và mong ước tốt đẹp của con.`];
+    if (isOneTwoSentences) {
+      hoaNhoUnderstand = `Đề bài rèn cho con kỹ năng viết 1–2 câu trọn vẹn: đầu câu viết hoa, cuối câu có dấu chấm, dùng từ ngữ sinh động và tự nhiên nhé!`;
+      specificRequirements = [
+        'Nhiệm vụ: Viết 1–2 câu hoàn chỉnh, mạch lạc theo đúng yêu cầu đề',
+        'Hình thức: Đầu câu viết hoa, cuối câu có dấu chấm kết thúc',
+        'Nội dung: Trả lời rõ ràng các câu hỏi gợi mở của Hoa Nhỏ',
+        'Quy tắc: Không viết thành đoạn văn dài hay bài văn 3 phần'
+      ];
+      socraticQuestions = [
+        `Con muốn miêu tả hoặc giới thiệu điều gì nổi bật nhất về ${mainObject}?`,
+        'Đặc điểm màu sắc, hình dáng hoặc hành động nào làm con ấn tượng nhất?',
+        'Con đã kiểm tra đầu câu viết hoa và cuối câu có dấu chấm chưa?'
+      ];
+      branches = [
+        { id: 'br-1', title: `🌱 Đối tượng: ${mainObject}`, icon: '🌱', color: 'emerald', points: ['Nêu tên đối tượng', 'Ấn tượng nổi bật'] },
+        { id: 'br-2', title: '🎨 Đặc điểm nổi bật', icon: '🎨', color: 'amber', points: ['Màu sắc tươi tắn', 'Hình dáng xinh xắn'] },
+        { id: 'br-3', title: '🔍 Chi tiết gắn bó', icon: '🔍', color: 'purple', points: ['Nét đáng yêu', 'Cử chỉ / đường nét gần gũi'] },
+        { id: 'br-4', title: '🌟 Công dụng / Cảm xúc', icon: '🌟', color: 'sky', points: ['Giúp ích cho con', 'Tình cảm thân thiết'] },
+        { id: 'br-5', title: '✍️ Quy tắc viết câu', icon: '✍️', color: 'rose', points: ['Đầu câu viết hoa', 'Cuối câu có dấu chấm'] }
+      ];
 
-    outline = {
-      moDoan: c1,
-      phatTrienDoan: c2,
-      ketDoan: c3,
-      genre: 'viet_cau',
-      sections: [
-        { id: 'sec-1', title: 'Câu 1. Mở đầu & Giới thiệu', icon: '🌱', guideNote: 'Giới thiệu đối tượng một cách rõ ràng, trọn vẹn', bulletPoints: c1 },
-        { id: 'sec-2', title: 'Câu 2. Chi tiết & Cảm xúc', icon: '💖', guideNote: 'Nêu chi tiết nổi bật nhất hoặc hành động đáng nhớ', bulletPoints: c2 },
-        { id: 'sec-3', title: 'Câu 3. Kết lại & Mong ước', icon: '🌸', guideNote: 'Bộc lộ tình cảm gắn bó và lời hứa hẹn chân thành', bulletPoints: c3 }
-      ]
-    };
+      const way1 = [`Gợi ý câu đơn: Viết 1 câu hoàn chỉnh giới thiệu và nêu đặc điểm hoặc cảm nghĩ nổi bật về ${mainObject}.`];
+      const way2 = [
+        `Câu 1: Giới thiệu hoặc miêu tả nét nổi bật nhất của ${mainObject}.`,
+        `Câu 2: Nêu chi tiết cụ thể, công dụng hoặc cảm xúc gắn bó của con.`
+      ];
+
+      outline = {
+        moDoan: way1,
+        phatTrienDoan: [],
+        ketDoan: way2,
+        genre: 'viet_cau',
+        sections: [
+          { id: 'sec-1', title: 'Cách 1 – Viết một câu', icon: '1️⃣', guideNote: `Viết 1 câu hoàn chỉnh về ${mainObject}`, bulletPoints: way1 },
+          { id: 'sec-2', title: 'Cách 2 – Viết hai câu', icon: '2️⃣', guideNote: `Viết 2 câu nối tiếp mạch lạc về ${mainObject}`, bulletPoints: way2 }
+        ]
+      };
+    } else {
+      hoaNhoUnderstand = `Đề bài rèn cho con kỹ năng viết câu trọn vẹn (khoảng 2–3 câu): đầu câu viết hoa, cuối câu có dấu chấm, dùng từ ngữ sinh động và tự nhiên nhé!`;
+      specificRequirements = [
+        'Nhiệm vụ: Viết 2–3 câu hoàn chỉnh, mạch lạc theo đúng yêu cầu đề',
+        'Hình thức: Đầu câu viết hoa, cuối câu có dấu câu phù hợp (. ! ?)',
+        'Nội dung: Trả lời rõ ràng các câu hỏi gợi mở của Hoa Nhỏ',
+        'Liên kết: Các câu văn nối tiếp tự nhiên, không rời rạc'
+      ];
+      socraticQuestions = [
+        'Câu 1: Con muốn giới thiệu ai hoặc điều gì đáng yêu nhất?',
+        'Câu 2: Người ấy hoặc sự vật ấy có đặc điểm hay việc làm gì nổi bật?',
+        'Câu 3: Con có cảm xúc hoặc mong ước gì gắn bó với đối tượng?'
+      ];
+      branches = [
+        { id: 'br-1', title: '🌱 Câu 1: Giới thiệu', icon: '🌱', color: 'emerald', points: ['Nêu tên đối tượng', 'Ấn tượng đầu tiên'] },
+        { id: 'br-2', title: '🌿 Câu 2: Đặc điểm / Hành động', icon: '🌿', color: 'purple', points: ['Nét nổi bật nhất', 'Từ ngữ gợi tả, gợi cảm'] },
+        { id: 'br-3', title: '🌸 Câu 3: Cảm xúc / Tình cảm', icon: '🌸', color: 'rose', points: ['Tình cảm của con', 'Mong ước gắn bó'] },
+        { id: 'br-4', title: '✍️ Quy tắc chính tả câu', icon: '✍️', color: 'sky', points: ['Đầu câu viết hoa', 'Cuối câu có dấu chấm'] },
+        { id: 'br-5', title: '✨ Sáng tạo từ ngữ', icon: '✨', color: 'amber', points: ['Dùng từ ngữ giản dị, trong sáng', 'Diễn đạt tự nhiên'] }
+      ];
+
+      const c1 = [`Câu 1 (Giới thiệu): Giới thiệu đối tượng chính của đề bài một cách tự nhiên và ấm áp.`];
+      const c2 = [`Câu 2 (Chi tiết / Hành động): Miêu tả một nét đặc sắc, một việc làm hoặc cử chỉ khiến con nhớ nhất.`];
+      const c3 = [`Câu 3 (Cảm xúc): Bày tỏ tình cảm yêu mến, gắn bó và mong ước tốt đẹp của con.`];
+
+      outline = {
+        moDoan: c1,
+        phatTrienDoan: c2,
+        ketDoan: c3,
+        genre: 'viet_cau',
+        sections: [
+          { id: 'sec-1', title: 'Câu 1. Mở đầu & Giới thiệu', icon: '🌱', guideNote: 'Giới thiệu đối tượng một cách rõ ràng, trọn vẹn', bulletPoints: c1 },
+          { id: 'sec-2', title: 'Câu 2. Chi tiết & Cảm xúc', icon: '💖', guideNote: 'Nêu chi tiết nổi bật nhất hoặc hành động đáng nhớ', bulletPoints: c2 },
+          { id: 'sec-3', title: 'Câu 3. Kết lại & Mong ước', icon: '🌸', guideNote: 'Bộc lộ tình cảm gắn bó và lời hứa hẹn chân thành', bulletPoints: c3 }
+        ]
+      };
+    }
   }
 
   // -------------------------------------------------------------
@@ -4391,9 +4767,14 @@ export function validatePromptAnalysisResult(
       directionSeparationNote = 'LỖI: Tả đồng hồ bị lẫn chi tiết hộp bút/chiếc cặp/bảng lớp';
     }
   } else if (analysis.selectedObjectId === 'hop_but') {
-    if (allAnalysisText.includes('kim giờ') || allAnalysisText.includes('mặt số tròn') || allAnalysisText.includes('bảng lớp')) {
+    if (allAnalysisText.includes('kim giờ') || allAnalysisText.includes('mặt số tròn') || allAnalysisText.includes('bảng lớp') || allAnalysisText.includes('ngòi chì') || allAnalysisText.includes('thân bút chì') || allAnalysisText.includes('cục tẩy ở đuôi') || allAnalysisText.includes('vỏ gỗ')) {
       directionSeparationCheck = false;
-      directionSeparationNote = 'LỖI: Tả hộp bút bị lẫn chi tiết đồng hồ/bảng lớp';
+      directionSeparationNote = 'LỖI: Tả hộp bút bị lẫn chi tiết đồng hồ/bảng lớp/bút chì';
+    }
+  } else if (analysis.selectedObjectId === 'but_chi') {
+    if (allAnalysisText.includes('hộp bút') || allAnalysisText.includes('ngăn chứa bút') || allAnalysisText.includes('hộp nhựa') || allAnalysisText.includes('vải dù') || allAnalysisText.includes('khóa kéo')) {
+      directionSeparationCheck = false;
+      directionSeparationNote = 'LỖI: Tả bút chì bị lẫn chi tiết hộp bút';
     }
   } else if (analysis.selectedObjectId === 'bang_lop') {
     if (allAnalysisText.includes('quai đeo') || allAnalysisText.includes('khóa kéo') || allAnalysisText.includes('báo thức')) {
@@ -4428,7 +4809,7 @@ export function validatePromptAnalysisResult(
       id: 'CHECK 02',
       title: 'Nhiệm vụ chính có đúng không?',
       passed: Boolean(analysis.writingType === semantics.genre),
-      note: `Nhiệm vụ nhận diện chính xác: ${semantics.detectedTaskLabels[0] || analysis.writingType}`
+      note: `Nhiệm vụ nhận diện chính xác: ${semantics.detectedTaskLabels?.[0] || analysis.writingType}`
     },
     {
       id: 'CHECK 03',
