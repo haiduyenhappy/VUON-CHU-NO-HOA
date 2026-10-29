@@ -1285,56 +1285,115 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 </div>
               </div>
 
-              {/* Submissions list */}
-              <div className="space-y-3">
+              {/* Submissions list - Hiển thị toàn bộ nội dung bài viết không cắt chữ */}
+              <div className="space-y-4">
                 {filteredSubmissions.map(sub => {
                   const student = localStudents.find(s => s.id === sub.studentId);
                   const isSelected = selectedSubmission?.id === sub.id;
+                  const fullContent = sub.finalContent || sub.firstDraft || '';
 
                   return (
                     <div
                       key={sub.id}
-                      onClick={() => handleSelectSubmission(sub)}
-                      className={`p-4 rounded-3xl border-2 transition-all cursor-pointer bg-white ${
+                      className={`p-4 sm:p-5 rounded-3xl border-2 transition-all bg-white space-y-3.5 shadow-xs ${
                         isSelected
                           ? 'border-emerald-500 shadow-md ring-2 ring-emerald-200'
-                          : 'border-stone-200 hover:border-emerald-300 shadow-xs'
+                          : 'border-stone-200 hover:border-emerald-300'
                       }`}
                     >
-                      <div className="flex flex-wrap items-center justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <span className="text-xl">{student?.avatar || '🌸'}</span>
-                          <div>
-                            <span className="text-xs font-bold text-emerald-800">
-                              {settings.demoPrivacyMode ? student?.demoName : student?.name} ({sub.studentId})
+                      {/* DÒNG 1: Biểu tượng học sinh, Họ tên, Mã học sinh, Tên bài viết, Trạng thái */}
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 pb-2.5 border-b border-stone-100">
+                        <div className="flex items-center gap-2.5 flex-wrap">
+                          <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-lg shrink-0">
+                            {student?.avatar || '🌸'}
+                          </div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-extrabold text-xs sm:text-sm text-stone-900 font-display">
+                              {settings.demoPrivacyMode ? student?.demoName : student?.name}
                             </span>
-                            <h4 className="font-extrabold text-sm sm:text-base text-stone-900 font-display">
+                            <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 border border-stone-200">
+                              {sub.studentId}
+                            </span>
+                            <span className="text-stone-300 hidden sm:inline">•</span>
+                            <h4 className="font-bold text-xs sm:text-sm text-emerald-950 font-display">
                               {sub.taskTitle}
                             </h4>
                           </div>
                         </div>
 
+                        {/* Trạng thái bài viết */}
                         <div className="flex items-center gap-2">
                           {sub.status === 'reviewed' && sub.teacherFeedback?.status === 'published' ? (
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300 shadow-2xs">
                               ✓ Đã công bố nhận xét
                             </span>
                           ) : sub.teacherFeedback?.status === 'draft' ? (
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300">
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-purple-100 text-purple-900 border border-purple-300 shadow-2xs">
                               📝 Bản nháp của cô
                             </span>
+                          ) : sub.lifecycleStatus === 'CAN_CHINH_SUA' ? (
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-rose-100 text-rose-900 border border-rose-300 shadow-2xs">
+                              ⚠️ Cần chỉnh sửa
+                            </span>
                           ) : (
-                            <span className="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                            <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-amber-100 text-amber-900 border border-amber-300 shadow-2xs">
                               ⏳ Chờ cô đọc
                             </span>
                           )}
-                          <ChevronRight className="w-4 h-4 text-stone-400" />
                         </div>
                       </div>
 
-                      <p className="text-xs sm:text-sm text-stone-700 italic bg-stone-50 p-3 rounded-2xl border border-stone-100 mt-3 line-clamp-2">
-                        "{sub.finalContent}"
-                      </p>
+                      {/* DÒNG 2: Toàn bộ nội dung bài viết - Tự động xuống dòng, chiều cao linh hoạt, không cắt chữ */}
+                      <div 
+                        className="p-4 sm:p-5 rounded-2xl bg-amber-50/60 border border-amber-200/80 text-stone-900 text-sm sm:text-base font-medium leading-relaxed whitespace-pre-wrap break-words select-text"
+                        style={{ height: 'auto', maxHeight: 'none', overflow: 'visible' }}
+                      >
+                        {fullContent || (
+                          <span className="text-stone-400 italic">
+                            Bài đang trong quá trình thực hiện hoặc chưa có nội dung nháp.
+                          </span>
+                        )}
+                      </div>
+
+                      {/* DÒNG 3: Nút thao tác (Xem hành trình, Chấm & Nhận xét) */}
+                      <div className="flex flex-wrap items-center justify-between gap-2.5 pt-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* Nút Xem hành trình */}
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              playPop(settings.soundEnabled);
+                              setViewJourneySub(sub);
+                            }}
+                            className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition-all cursor-pointer shadow-xs"
+                          >
+                            <Eye className="w-3.5 h-3.5 text-emerald-700" />
+                            <span>Xem hành trình 7 bước</span>
+                          </button>
+
+                          {/* Nút Mở phiếu chấm / Đang chọn */}
+                          <button
+                            type="button"
+                            onClick={() => handleSelectSubmission(sub)}
+                            className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs ${
+                              isSelected
+                                ? 'bg-emerald-600 text-white border border-emerald-700 shadow-sm'
+                                : 'bg-white hover:bg-stone-100 text-stone-800 border border-stone-300'
+                            }`}
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>{isSelected ? '✓ Đang mở phiếu chấm' : 'Chấm & Nhận xét'}</span>
+                          </button>
+                        </div>
+
+                        {/* Lời dặn / Hoa điểm nếu đã nhận xét */}
+                        {sub.teacherFeedback && sub.teacherFeedback.status === 'published' && (
+                          <div className="flex items-center gap-1.5 text-xs text-emerald-800 font-bold bg-emerald-50 px-2.5 py-1 rounded-xl border border-emerald-200">
+                            <span>{sub.teacherFeedback.flowerSticker || '🌸 Bông hoa khen ngợi'}</span>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   );
                 })}
