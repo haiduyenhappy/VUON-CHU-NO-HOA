@@ -77,14 +77,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
       submitBtnBg: 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-emerald-200',
       submitText: 'Vào lớp quản lý',
       usernameLabel: 'Tên đăng nhập của giáo viên:',
-      usernamePlaceholder: 'cogaovietvan hoặc leductho',
+      usernamePlaceholder: 'haiduyen hoặc vanminh',
       passwordLabel: 'Mật khẩu bảo mật:',
       passwordPlaceholder: 'Nhập mật khẩu (Gợi ý: 2026)',
       mascotGreeting: `Kính ${timePeriod.greetingTitle.toLowerCase()} thầy/cô! Kính mời thầy/cô đăng nhập để quản lý học sinh, duyệt bài viết và gửi trao những nhận xét ân cần.`,
       demoPresets: [
-        { label: '👑 Admin (Cô Duyên)', u: 'haiduyen', p: '2026' },
-        { label: 'Thầy Minh (vanminh)', u: 'vanminh', p: '2026' },
-        { label: 'Cô Duyên (cogaovietvan)', u: 'cogaovietvan', p: '2026' }
+        { label: '👑 Cô Duyên — Quản trị & Giáo viên', u: 'haiduyen', p: '2026' },
+        { label: '👨‍🏫 Thầy Minh — Giáo viên', u: 'vanminh', p: '2026' }
       ]
     },
     family: {
@@ -203,7 +202,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
       if (role === 'teacher') {
         const normalized = (p || u).toLowerCase();
         const isMinh = normalized.includes('thayminh') || u.toLowerCase() === 'thayminh' || u.toLowerCase() === 'vanminh' || normalized.includes('vanminh');
-        const isDuyen = normalized.includes('haiduyen') || normalized.includes('cogaovietvan') || normalized.includes('leductho') || normalized === '2026' || p === '2026';
+        const isDuyen = normalized.includes('haiduyen') || normalized.includes('cogaovietvan') || normalized.includes('cogiaovietvan') || normalized.includes('leductho') || normalized === '2026' || p === '2026';
         if (isMinh || isDuyen) {
           playChime(settings.soundEnabled);
           onLoginSuccess({
@@ -260,9 +259,30 @@ export const LoginView: React.FC<LoginViewProps> = ({
     } catch (err) {
       console.warn('Network auth error, falling back locally:', err);
       // Local fallback for offline/demo
-      if (role === 'teacher' && (p === '2026' || u === 'cogaovietvan' || u === 'leductho')) {
+      if (role === 'teacher') {
+        const normalized = (p || u).toLowerCase();
+        const isMinh = normalized.includes('thayminh') || u.toLowerCase() === 'thayminh' || u.toLowerCase() === 'vanminh' || normalized.includes('vanminh');
         playChime(settings.soundEnabled);
-        onLoginSuccess({ role: 'teacher', teacherName: TEACHER_CONFIG.name });
+        onLoginSuccess({
+          role: 'teacher',
+          teacherId: isMinh ? 'GV002' : 'GV001',
+          teacherRole: isMinh ? 'TEACHER' : 'SUPER_ADMIN',
+          teacherName: isMinh ? 'Thầy Trần Văn Minh' : 'Cô Nguyễn Thị Hải Duyên',
+          assignedClassIds: isMinh ? ['L4B'] : ['L3A'],
+          teacherProfile: {
+            id: isMinh ? 'GV002' : 'GV001',
+            username: isMinh ? 'vanminh' : 'haiduyen',
+            fullName: isMinh ? 'Trần Văn Minh' : 'Nguyễn Thị Hải Duyên',
+            name: isMinh ? 'Thầy Trần Văn Minh' : 'Cô Nguyễn Thị Hải Duyên',
+            salutation: isMinh ? 'thầy' : 'cô',
+            role: isMinh ? 'TEACHER' : 'SUPER_ADMIN',
+            status: 'active',
+            school: 'Trường Tiểu học Lê Đức Thọ',
+            assignedClassIds: isMinh ? ['L4B'] : ['L3A'],
+            email: isMinh ? 'tranvanminh@leductho.edu.vn' : 'haiduyen@leductho.edu.vn',
+            createdAt: '2026-09-01T08:00:00.000Z'
+          }
+        });
       } else if (role === 'student' && students.length > 0) {
         playChime(settings.soundEnabled);
         onLoginSuccess({ role: 'student', student: students[0] });

@@ -97,6 +97,9 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Dynamic User Display Name
   const getUserDisplayName = () => {
     if (isTeacher) {
+      if (isSuperAdmin) {
+        return 'Cô Nguyễn Thị Hải Duyên';
+      }
       return currentUser.teacherName || currentUser.teacherProfile?.name || currentUser.teacherProfile?.fullName || 'Giáo viên';
     }
     if (isStudent) {
@@ -166,7 +169,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title="Không gian quản lý lớp học & sổ chấm bài"
               >
                 <GraduationCap className="w-3.5 h-3.5" />
-                <span>Lớp học của tôi</span>
+                <span>📚 Lớp học của tôi</span>
               </button>
 
               {/* 3. Quản trị hệ thống (Chỉ hiển thị DUY NHẤT một nút khi có quyền SUPER_ADMIN) */}
@@ -181,7 +184,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   title="Không gian Quản trị viên chính (Super Admin)"
                 >
                   <Shield className="w-3.5 h-3.5 text-amber-700" />
-                  <span>Quản trị hệ thống</span>
+                  <span>👑 Quản trị hệ thống</span>
                 </button>
               )}
             </>
@@ -511,7 +514,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                   }`}
                 >
                   <GraduationCap className="w-4 h-4 text-purple-700" />
-                  <span>Lớp học của tôi</span>
+                  <span>📚 Lớp học của tôi</span>
                 </button>
 
                 {isSuperAdmin && (
@@ -524,7 +527,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                     }`}
                   >
                     <Shield className="w-4 h-4 text-amber-700" />
-                    <span>Quản trị hệ thống</span>
+                    <span>👑 Quản trị hệ thống</span>
                   </button>
                 )}
               </>

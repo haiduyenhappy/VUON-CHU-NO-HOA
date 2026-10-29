@@ -781,25 +781,83 @@ function loadDatabase(): DatabaseStructure {
       }
     }
 
-    // Ensure teachers exist with Cô Nguyễn Thị Hải Duyên as SUPER_ADMIN
+    // Ensure teachers exist with Cô Nguyễn Thị Hải Duyên as single unified account (SUPER_ADMIN + TEACHER)
     if (!parsed.teachers || !Array.isArray(parsed.teachers) || parsed.teachers.length === 0) {
       parsed.teachers = SEED_TEACHERS;
     } else {
-      const duyen = parsed.teachers.find((t: any) => 
-        t.fullName === 'Nguyễn Thị Hải Duyên' || 
-        t.username === 'haiduyen' || 
-        t.id === 'GV001'
-      );
+      // 1. Identify primary account GV001
+      let duyen = parsed.teachers.find((t: any) => t.id === 'GV001');
+      if (!duyen) {
+        duyen = parsed.teachers.find((t: any) => 
+          t.fullName === 'Nguyễn Thị Hải Duyên' || 
+          t.username === 'haiduyen' ||
+          t.username === 'cogaovietvan' ||
+          t.username === 'cogiaovietvan'
+        );
+        if (duyen) duyen.id = 'GV001';
+      }
+
       if (duyen) {
+        duyen.id = 'GV001';
         duyen.role = 'SUPER_ADMIN';
         duyen.status = 'active';
         duyen.fullName = 'Nguyễn Thị Hải Duyên';
         duyen.name = 'Cô Nguyễn Thị Hải Duyên';
+        duyen.username = 'haiduyen';
+        duyen.salutation = 'cô';
+        duyen.school = 'Trường Tiểu học Lê Đức Thọ';
         if (!duyen.assignedClassIds || duyen.assignedClassIds.length === 0) {
           duyen.assignedClassIds = ['L3A'];
         }
       } else {
-        parsed.teachers.unshift(SEED_TEACHERS[0]);
+        duyen = { ...SEED_TEACHERS[0] };
+        parsed.teachers.unshift(duyen);
+      }
+
+      // 2. Identify duplicate teacher records for Cô Duyên (e.g. secondary accounts with username cogaovietvan/cogiaovietvan or secondary IDs)
+      const duplicateTeachers = parsed.teachers.filter((t: any) => 
+        t !== duyen && (
+          t.username === 'cogaovietvan' ||
+          t.username === 'cogiaovietvan' ||
+          (t.fullName === 'Nguyễn Thị Hải Duyên' && t.id !== 'GV001')
+        )
+      );
+
+      // 3. Consolidate any duplicate teacher's data to GV001
+      for (const dup of duplicateTeachers) {
+        if (dup.assignedClassIds && Array.isArray(dup.assignedClassIds)) {
+          for (const cid of dup.assignedClassIds) {
+            if (!duyen.assignedClassIds.includes(cid)) {
+              duyen.assignedClassIds.push(cid);
+            }
+          }
+        }
+        // Update any classes linked to duplicate ID to GV001
+        if (parsed.classes && Array.isArray(parsed.classes)) {
+          for (const cls of parsed.classes) {
+            if (cls.primaryTeacherId === dup.id) cls.primaryTeacherId = 'GV001';
+            if (cls.teacherIds && Array.isArray(cls.teacherIds)) {
+              cls.teacherIds = cls.teacherIds.map((tid: string) => tid === dup.id ? 'GV001' : tid);
+            }
+          }
+        }
+        // Update any assignments linked to duplicate ID to GV001
+        if (parsed.assignments && Array.isArray(parsed.assignments)) {
+          for (const asm of parsed.assignments) {
+            if (asm.teacherId === dup.id) {
+              asm.teacherId = 'GV001';
+              asm.teacherName = 'Cô Nguyễn Thị Hải Duyên';
+            }
+          }
+        }
+      }
+
+      // 4. Remove duplicate records from active teacher list so only 1 single unified account exists for Cô Duyên
+      parsed.teachers = parsed.teachers.filter((t: any) => !duplicateTeachers.includes(t));
+
+      // 5. Ensure Thầy Minh GV002 exists and is properly separated
+      if (!parsed.teachers.some((t: any) => t.id === 'GV002' || t.username === 'vanminh')) {
+        parsed.teachers.push(SEED_TEACHERS[1]);
       }
     }
 
@@ -965,7 +1023,7 @@ app.post('/api/auth', (req, res) => {
     // If no specific username entered or default login shortcut (cô Duyên)
     if (!matchedTeacher && (
       !rawInput ||
-      ['cogaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'].includes(lowerInput)
+      ['cogaovietvan', 'cogiaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'].includes(lowerInput)
     )) {
       matchedTeacher = db.teachers?.find((t: any) => t.id === 'GV001' || t.fullName === 'Nguyễn Thị Hải Duyên');
     }

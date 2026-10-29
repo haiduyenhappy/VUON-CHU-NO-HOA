@@ -181,11 +181,7 @@ export default function App() {
 
     if (view === 'teacher') {
       if (currentUser?.role === 'teacher') {
-        if (currentUser.teacherRole === 'SUPER_ADMIN') {
-          setCurrentView('admin_system');
-        } else {
-          setCurrentView('teacher');
-        }
+        setCurrentView('teacher');
       } else {
         setCurrentView('login-teacher');
       }
@@ -195,6 +191,8 @@ export default function App() {
     if (view === 'admin_system') {
       if (currentUser?.role === 'teacher' && currentUser.teacherRole === 'SUPER_ADMIN') {
         setCurrentView('admin_system');
+      } else if (currentUser?.role === 'teacher') {
+        setCurrentView('teacher');
       } else {
         setCurrentView('login-teacher');
       }
