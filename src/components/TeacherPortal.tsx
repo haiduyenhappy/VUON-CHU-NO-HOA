@@ -457,11 +457,16 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setSuccessMsg('');
   };
 
-  const handleSaveTeacherFeedback = async (targetStatus: 'draft' | 'published') => {
+  const handleSaveTeacherFeedback = async (
+    targetStatus: 'draft' | 'published',
+    isRevisionOverride?: boolean
+  ) => {
     if (!selectedSubmission) return;
 
     setIsSavingFeedback(true);
     playChime(settings.soundEnabled);
+
+    const isRevision = isRevisionOverride !== undefined ? isRevisionOverride : requestRevision;
 
     // Build the 7 skills evaluation array according to GDPT 2018
     const teacherSkillEvaluations = WRITING_SKILLS_META.map(meta => {
@@ -497,19 +502,19 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           status: targetStatus,
           teacherName: currentUser?.teacherName || TEACHER_CONFIG.name,
           teacherSkillEvaluations,
-          revisionRequestedByTeacher: requestRevision,
-          revisionRequestNote: revisionNote
+          revisionRequestedByTeacher: isRevision,
+          revisionRequestNote: isRevision ? (revisionNote || teacherAdvice || 'Con xem lại góp ý của cô để hoàn thiện bài văn nhé.') : undefined
         })
       });
 
       const data = await res.json();
       if (data.success) {
         setSuccessMsg(
-          requestRevision
-            ? '✓ Đã gửi yêu cầu chỉnh sửa và dặn dò cho học sinh hoàn thiện!'
-            : targetStatus === 'published' 
-              ? '✓ Đã công bố nhận xét và đánh giá 7 năng lực viết cho em thành công!'
-              : '✓ Đã lưu bản nháp nhận xét. Chỉ cô mới thấy nội dung này.'
+          targetStatus === 'draft'
+            ? '✓ Đã lưu bản nháp nhận xét. Chỉ cô mới thấy nội dung này.'
+            : isRevision
+              ? '✓ Đã gửi nhận xét và yêu cầu học sinh chỉnh sửa thêm (Trạng thái: Cần chỉnh sửa)!'
+              : '✓ Đã công bố nhận xét và đánh giá 7 năng lực viết cho em thành công! Cập nhật ngay vào Hành trình của con.'
         );
         fetchSubmissions();
         setSelectedSubmission(data.submission);
@@ -1372,18 +1377,40 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                             <span>Xem hành trình 7 bước</span>
                           </button>
 
-                          {/* Nút Mở phiếu chấm / Đang chọn */}
+                          {/* Nút Mở phiếu chấm / Đóng phiếu chấm */}
                           <button
                             type="button"
-                            onClick={() => handleSelectSubmission(sub)}
+                            onClick={() => {
+                              playPop(settings.soundEnabled);
+                              if (isSelected) {
+                                setSelectedSubmission(null);
+                              } else {
+                                handleSelectSubmission(sub);
+                                setTimeout(() => {
+                                  const el = document.getElementById(`assessment-form-${sub.id}`);
+                                  if (el) {
+                                    el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                                  }
+                                }, 80);
+                              }
+                            }}
                             className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer shadow-xs ${
                               isSelected
-                                ? 'bg-emerald-600 text-white border border-emerald-700 shadow-sm'
-                                : 'bg-white hover:bg-stone-100 text-stone-800 border border-stone-300'
+                                ? 'bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300'
+                                : 'bg-emerald-600 hover:bg-emerald-700 text-white border border-emerald-700 shadow-2xs'
                             }`}
                           >
-                            <Edit3 className="w-3.5 h-3.5" />
-                            <span>{isSelected ? '✓ Đang mở phiếu chấm' : 'Chấm & Nhận xét'}</span>
+                            {isSelected ? (
+                              <>
+                                <X className="w-3.5 h-3.5 text-rose-600" />
+                                <span>✕ Đóng phiếu chấm</span>
+                              </>
+                            ) : (
+                              <>
+                                <Edit3 className="w-3.5 h-3.5" />
+                                <span>✏️ Mở phiếu chấm</span>
+                              </>
+                            )}
                           </button>
                         </div>
 
@@ -1394,6 +1421,324 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                           </div>
                         )}
                       </div>
+
+                      {/* ========================================================================= */}
+                      {/* DÒNG 4: PHIẾU CHẤM BÀI INLINE TRỰC TIẾP DƯỚI BÀI VĂN                      */}
+                      {/* Gồm 5 phần A, B, C, D, E theo đúng chuẩn sư phạm Tiểu học                 */}
+                      {/* ========================================================================= */}
+                      {isSelected && (
+                        <div 
+                          id={`assessment-form-${sub.id}`}
+                          className="mt-4 pt-4 border-t-2 border-emerald-300 rounded-2xl bg-gradient-to-b from-emerald-50/60 via-white to-teal-50/30 p-4 sm:p-5 border border-emerald-200 shadow-sm space-y-4 animate-fade-in"
+                        >
+                          {/* =================================================================== */}
+                          {/* PHẦN A: THÔNG TIN BÀI VIẾT                                          */}
+                          {/* =================================================================== */}
+                          <div className="p-3.5 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-2.5">
+                            <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-xl">👩‍🏫</span>
+                                <div>
+                                  <h4 className="font-black text-sm sm:text-base text-emerald-950 font-display">
+                                    Phiếu Nhận Xét & Đánh Giá Bài Viết – {currentUser?.teacherName || TEACHER_CONFIG.name}
+                                  </h4>
+                                  <p className="text-[11px] text-stone-500 font-semibold">
+                                    Đánh giá thường xuyên theo định hướng phát triển năng lực (GDPT 2018)
+                                  </p>
+                                </div>
+                              </div>
+
+                              {/* Chuyển đổi chế độ kiểm tra định kỳ */}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = !isPeriodicExamReview;
+                                  setIsPeriodicExamReview(next);
+                                  if (!next) setExamScore('');
+                                  else if (examScore === '') setExamScore(9);
+                                }}
+                                className={`px-2.5 py-1 rounded-xl text-[11px] font-black border transition-all cursor-pointer ${
+                                  isPeriodicExamReview
+                                    ? 'bg-amber-100 text-amber-900 border-amber-300 ring-1 ring-amber-200'
+                                    : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
+                                }`}
+                              >
+                                {isPeriodicExamReview ? '📝 Kiểm tra định kỳ (Điểm 1-10)' : '🌸 Luyện tập thường xuyên'}
+                              </button>
+                            </div>
+
+                            {/* Lưới thông tin bài viết */}
+                            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2 text-xs">
+                              <div className="bg-stone-50 p-2 rounded-xl border border-stone-200">
+                                <span className="text-[10px] text-stone-400 font-bold block">Học sinh</span>
+                                <span className="font-extrabold text-stone-900">{settings.demoPrivacyMode ? student?.demoName : student?.name}</span>
+                              </div>
+                              <div className="bg-stone-50 p-2 rounded-xl border border-stone-200">
+                                <span className="text-[10px] text-stone-400 font-bold block">Mã học sinh</span>
+                                <span className="font-mono font-bold text-stone-700">{sub.studentId}</span>
+                              </div>
+                              <div className="bg-stone-50 p-2 rounded-xl border border-stone-200">
+                                <span className="text-[10px] text-stone-400 font-bold block">Lớp học</span>
+                                <span className="font-bold text-stone-800">{student?.className || 'Lớp 3A'}</span>
+                              </div>
+                              <div className="bg-stone-50 p-2 rounded-xl border border-stone-200 col-span-2 sm:col-span-1 lg:col-span-2">
+                                <span className="text-[10px] text-stone-400 font-bold block">Đề bài</span>
+                                <span className="font-bold text-emerald-950 truncate block" title={sub.taskTitle}>{sub.taskTitle}</span>
+                              </div>
+                              <div className="bg-stone-50 p-2 rounded-xl border border-stone-200">
+                                <span className="text-[10px] text-stone-400 font-bold block">Thời gian nộp</span>
+                                <span className="font-medium text-stone-700 text-[11px]">
+                                  {sub.completedAt || sub.lastSavedAt || sub.startedAt
+                                    ? new Date(sub.completedAt || sub.lastSavedAt || sub.startedAt!).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' })
+                                    : 'Đã nộp bài'}
+                                </span>
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* Điểm số định kỳ (nếu đang ở chế độ kiểm tra định kỳ) */}
+                          {isPeriodicExamReview && (
+                            <div className="p-3 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-300 space-y-2 animate-fade-in">
+                              <div className="flex items-center justify-between">
+                                <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
+                                  <Star className="w-4 h-4 text-amber-600 fill-amber-500" />
+                                  <span>Điểm số định kỳ (Thang điểm 10 theo Thông tư 27 GDPT 2018):</span>
+                                </span>
+                                <span className="text-xs font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
+                                  {examScore !== '' ? `Điểm: ${examScore} / 10` : 'Chưa nhập điểm'}
+                                </span>
+                              </div>
+                              <div className="flex flex-wrap gap-1.5 items-center pt-1">
+                                {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(val => (
+                                  <button
+                                    key={val}
+                                    type="button"
+                                    onClick={() => setExamScore(val)}
+                                    className={`w-8 h-8 rounded-xl font-black text-xs transition-all cursor-pointer ${
+                                      examScore === val
+                                        ? 'bg-amber-500 text-white shadow-md scale-110 ring-2 ring-amber-300'
+                                        : 'bg-white hover:bg-amber-100 text-stone-800 border border-amber-200 shadow-2xs'
+                                    }`}
+                                  >
+                                    {val}
+                                  </button>
+                                ))}
+                              </div>
+                            </div>
+                          )}
+
+                          {/* =================================================================== */}
+                          {/* PHẦN B: ĐÁNH GIÁ 7 KỸ NĂNG GDPT 2018 (4 MỨC ĐỘ)                     */}
+                          {/* =================================================================== */}
+                          <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-2.5">
+                            <div className="flex items-center justify-between">
+                              <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                                <span>📊</span>
+                                <span>B. Đánh giá 7 Năng lực viết (Bấm chọn mức độ rèn luyện):</span>
+                              </span>
+                              <span className="text-[11px] text-stone-500 font-semibold">Cô bấm chọn mức độ phù hợp</span>
+                            </div>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                              {WRITING_SKILLS_META.map(meta => {
+                                const currentScore = skillScores[meta.id] ?? 85;
+                                return (
+                                  <div key={meta.id} className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 space-y-1.5">
+                                    <div className="flex justify-between items-center text-xs font-bold text-stone-800">
+                                      <span className="flex items-center gap-1">
+                                        <span>{meta.icon}</span>
+                                        <span>{meta.name}</span>
+                                      </span>
+                                      <span className="text-[10px] text-emerald-800 font-extrabold bg-emerald-100/80 px-2 py-0.5 rounded-md">
+                                        {getLevelFromScore(currentScore).label} ({currentScore}đ)
+                                      </span>
+                                    </div>
+                                    <div className="grid grid-cols-4 gap-1 text-[10px] font-bold">
+                                      {[
+                                        { label: 'Rèn thêm', score: 50 },
+                                        { label: 'Tiến bộ', score: 70 },
+                                        { label: 'Tốt', score: 85 },
+                                        { label: 'Xuất sắc', score: 95 }
+                                      ].map(lvl => (
+                                        <button
+                                          key={lvl.score}
+                                          type="button"
+                                          onClick={() => setSkillScores(prev => ({ ...prev, [meta.id]: lvl.score }))}
+                                          className={`py-1 rounded-lg border text-center transition-all cursor-pointer ${
+                                            currentScore === lvl.score
+                                              ? 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-xs'
+                                              : 'bg-white text-stone-700 border-stone-200 hover:bg-stone-100'
+                                          }`}
+                                        >
+                                          {lvl.label}
+                                        </button>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+
+                          {/* =================================================================== */}
+                          {/* PHẦN C: NHẬN XÉT CỦA GIÁO VIÊN (4 Ô NHẬP)                          */}
+                          {/* =================================================================== */}
+                          <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-3">
+                            <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                              <span>✍️</span>
+                              <span>C. Lời nhận xét định tính của cô giáo (Tự do nhập & chỉnh sửa):</span>
+                            </span>
+
+                            <div className="space-y-3">
+                              <div>
+                                <label className="text-xs font-bold text-rose-900 block mb-1">
+                                  🌸 1. Khen ngợi điểm nổi bật của bài viết:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={praiseIdea}
+                                  onChange={e => setPraiseIdea(e.target.value)}
+                                  placeholder="Ví dụ: Ý tưởng gắn kết tình cảm gia đình rất gần gũi, nét quan sát chân thật..."
+                                  className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-rose-200 focus:border-rose-400 focus:outline-hidden bg-rose-50/30 font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-emerald-900 block mb-1">
+                                  ✏️ 2. Góp ý về cách dùng từ và đặt câu:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={wordSentenceSuggestions}
+                                  onChange={e => setWordSentenceSuggestions(e.target.value)}
+                                  placeholder="Ví dụ: Em dùng từ ngữ gợi cảm rất tốt, chú ý thêm dấu chấm ngắt câu rõ ý..."
+                                  className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-emerald-200 focus:border-emerald-400 focus:outline-hidden bg-emerald-50/30 font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-amber-900 block mb-1">
+                                  💖 3. Khích lệ cảm xúc và sáng tạo:
+                                </label>
+                                <input
+                                  type="text"
+                                  value={emotionCreativityEncouragement}
+                                  onChange={e => setEmotionCreativityEncouragement(e.target.value)}
+                                  placeholder="Ví dụ: Cảm xúc chân thành và nụ cười rạng rỡ của con làm bài văn bừng sáng..."
+                                  className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-amber-200 focus:border-amber-400 focus:outline-hidden bg-amber-50/30 font-medium"
+                                />
+                              </div>
+
+                              <div>
+                                <label className="text-xs font-bold text-purple-900 block mb-1">
+                                  💌 4. Lời dặn dò của cô dành cho học sinh:
+                                </label>
+                                <textarea
+                                  rows={2}
+                                  value={teacherAdvice}
+                                  onChange={e => setTeacherAdvice(e.target.value)}
+                                  placeholder="Ví dụ: Con hãy bổ sung thêm 1 hình ảnh so sánh và kiểm tra lại chữ viết hoa nhé!"
+                                  className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-purple-200 focus:border-purple-400 focus:outline-hidden bg-purple-50/30 font-medium"
+                                />
+                              </div>
+                            </div>
+                          </div>
+
+                          {/* =================================================================== */}
+                          {/* PHẦN D: YÊU CẦU CHỈNH SỬA                                            */}
+                          {/* =================================================================== */}
+                          <div className="p-3.5 bg-amber-50 rounded-2xl border border-amber-300 space-y-2">
+                            <label className="flex items-center gap-2 cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={requestRevision}
+                                onChange={e => setRequestRevision(e.target.checked)}
+                                className="w-4 h-4 text-amber-600 rounded-md focus:ring-amber-400 cursor-pointer"
+                              />
+                              <span className="text-xs font-black text-amber-950">
+                                ⚠️ Yêu cầu học sinh chỉnh sửa và hoàn thiện thêm (Chuyển trạng thái sang "Cần chỉnh sửa")
+                              </span>
+                            </label>
+                            {requestRevision && (
+                              <input
+                                type="text"
+                                value={revisionNote}
+                                onChange={e => setRevisionNote(e.target.value)}
+                                placeholder="Ghi chú điểm con cần chỉnh sửa (ví dụ: Bổ sung câu kết đoạn và sửa 2 lỗi chính tả)..."
+                                className="w-full p-2.5 text-xs rounded-xl border border-amber-300 bg-white font-medium"
+                              />
+                            )}
+                          </div>
+
+                          {/* Thông báo kết quả thao tác */}
+                          {successMsg && (
+                            <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-pulse flex items-center gap-2">
+                              <span>✓</span>
+                              <span>{successMsg}</span>
+                            </div>
+                          )}
+
+                          {/* =================================================================== */}
+                          {/* PHẦN E: CÁC NÚT CHỨC NĂNG CUỐI PHIẾU CHẤM                           */}
+                          {/* =================================================================== */}
+                          <div className="flex flex-wrap items-center justify-between gap-3 pt-3 border-t border-emerald-200 bg-white p-3.5 rounded-2xl border">
+                            <div className="flex items-center gap-2">
+                              <span className="text-xs font-bold text-stone-600">Hoa khen tặng:</span>
+                              <select
+                                value={flowerSticker}
+                                onChange={e => setFlowerSticker(e.target.value)}
+                                className="text-xs font-bold p-2 rounded-xl border border-emerald-300 bg-white"
+                              >
+                                <option value="🌸 Bông hoa chăm ngoan">🌸 Bông hoa chăm ngoan</option>
+                                <option value="🌻 Bông hoa sáng tạo">🌻 Bông hoa sáng tạo</option>
+                                <option value="🌷 Bông hoa viết hay">🌷 Bông hoa viết hay</option>
+                                <option value="🌺 Bông hoa giàu cảm xúc">🌺 Bông hoa giàu cảm xúc</option>
+                                <option value="🌼 Bông hoa tiến bộ vượt bậc">🌼 Bông hoa tiến bộ vượt bậc</option>
+                                <option value="🐝 Chú ong chăm chỉ">🐝 Chú ong chăm chỉ</option>
+                              </select>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2">
+                              {/* 1. Nút Lưu bản nháp nhận xét */}
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTeacherFeedback('draft', false)}
+                                disabled={isSavingFeedback}
+                                className="px-3.5 py-2 rounded-xl border-2 border-stone-300 hover:bg-stone-100 text-stone-700 font-bold text-xs transition-all cursor-pointer shadow-2xs"
+                                title="Lưu lại bản nháp, học sinh và phụ huynh chưa nhìn thấy"
+                              >
+                                💾 Lưu bản nháp nhận xét
+                              </button>
+
+                              {/* 2. Nút Gửi nhận xét cho học sinh (hoặc yêu cầu chỉnh sửa) */}
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTeacherFeedback('published', requestRevision)}
+                                disabled={isSavingFeedback}
+                                className={`px-4 py-2 rounded-xl font-bold text-xs transition-all cursor-pointer shadow-2xs flex items-center gap-1.5 ${
+                                  requestRevision
+                                    ? 'bg-amber-500 hover:bg-amber-600 text-white border border-amber-600'
+                                    : 'bg-teal-600 hover:bg-teal-700 text-white border border-teal-700'
+                                }`}
+                                title={requestRevision ? 'Chuyển bài sang trạng thái Cần chỉnh sửa để con viết tiếp' : 'Gửi nhận xét góp ý cho học sinh'}
+                              >
+                                <Send className="w-3.5 h-3.5" />
+                                <span>{requestRevision ? 'Gửi yêu cầu chỉnh sửa' : 'Gửi nhận xét cho học sinh'}</span>
+                              </button>
+
+                              {/* 3. Nút Công bố nhận xét (Hoàn thành bài & cập nhật biểu đồ tiến bộ) */}
+                              <button
+                                type="button"
+                                onClick={() => handleSaveTeacherFeedback('published', false)}
+                                disabled={isSavingFeedback}
+                                className="px-5 py-2 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5 cursor-pointer"
+                                title="Công bố nhận xét chính thức và cập nhật điểm vào Hành trình của con"
+                              >
+                                <span>🌟 Công bố nhận xét</span>
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
@@ -1404,261 +1749,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   </div>
                 )}
               </div>
-
-              {/* Formative Teacher Assessment Form */}
-              {selectedSubmission && (
-                <div className="bg-white rounded-3xl border-3 border-emerald-400 p-5 sm:p-6 shadow-xl space-y-4 animate-fade-in">
-                  <div className="flex flex-wrap items-center justify-between gap-3 border-b border-emerald-100 pb-3">
-                    <div className="flex items-center gap-2">
-                      <span className="text-2xl">👩‍🏫</span>
-                      <div>
-                        <h3 className="text-base sm:text-lg font-black text-emerald-950 font-display">
-                          {isPeriodicExamReview ? 'Phiếu Đánh Giá Định Kỳ (Kèm Điểm Số Thang Điểm 10)' : 'Phiếu Nhận Xét Định Tính – ' + (currentUser?.teacherName || TEACHER_CONFIG.name)}
-                        </h3>
-                        <p className="text-xs text-stone-500 font-semibold">
-                          Bài của em {localStudents.find(s => s.id === selectedSubmission.studentId)?.name} • {isPeriodicExamReview ? 'Đánh giá định kỳ theo Thông tư 27 GDPT 2018' : 'Đánh giá thường xuyên định hướng phát triển năng lực'}
-                        </p>
-                      </div>
-                    </div>
-
-                    {/* Dual Mode Switcher Button */}
-                    <div className="flex items-center gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setViewJourneySub(selectedSubmission)}
-                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition-all cursor-pointer shadow-xs"
-                      >
-                        <Eye className="w-3.5 h-3.5 text-emerald-700" />
-                        <span>Xem hành trình 7 bước</span>
-                      </button>
-
-                      <button
-                        type="button"
-                        onClick={() => {
-                          const next = !isPeriodicExamReview;
-                          setIsPeriodicExamReview(next);
-                          if (!next) setExamScore('');
-                          else if (examScore === '') setExamScore(9);
-                        }}
-                        className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
-                          isPeriodicExamReview
-                            ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-200'
-                            : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
-                        }`}
-                        title="Chuyển đổi giữa nhận xét thường xuyên (không chấm điểm) và đánh giá định kỳ (thang điểm 10)"
-                      >
-                        {isPeriodicExamReview ? '📝 Chế độ: Kiểm tra định kỳ (Có điểm 1-10)' : '🌸 Chế độ: Luyện tập thường xuyên'}
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Integer Score Field (1-10) for Periodic Exam */}
-                  {isPeriodicExamReview && (
-                    <div className="p-3.5 bg-gradient-to-r from-amber-50 to-orange-50 rounded-2xl border-2 border-amber-300 space-y-2 animate-fade-in">
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
-                          <Star className="w-4 h-4 text-amber-600 fill-amber-500" />
-                          <span>Điểm số định kỳ (Số nguyên từ 1 đến 10 theo Thông tư 27 GDPT 2018):</span>
-                        </span>
-                        <span className="text-xs font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
-                          {examScore !== '' ? `Điểm: ${examScore} / 10` : 'Chưa nhập điểm'}
-                        </span>
-                      </div>
-                      <div className="flex flex-wrap gap-1.5 items-center pt-1">
-                        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(val => (
-                          <button
-                            key={val}
-                            type="button"
-                            onClick={() => setExamScore(val)}
-                            className={`w-9 h-9 rounded-xl font-black text-sm transition-all cursor-pointer ${
-                              examScore === val
-                                ? 'bg-amber-500 text-white shadow-md scale-110 ring-2 ring-amber-300'
-                                : 'bg-white hover:bg-amber-100 text-stone-800 border border-amber-200 shadow-2xs'
-                            }`}
-                          >
-                            {val}
-                          </button>
-                        ))}
-                      </div>
-                      <p className="text-[11px] text-amber-800 font-medium">
-                        ℹ️ Điểm số định kỳ là số nguyên từ 1 đến 10, kết hợp cùng nhận xét chi tiết 4 tiêu chí bên dưới để gửi đến gia đình và học sinh.
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 7 Writing Skills Rubric (GDPT 2018) */}
-                  <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-3">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
-                        <span>📊</span>
-                        <span>Đánh giá 7 Năng lực viết (GDPT 2018):</span>
-                      </span>
-                      <span className="text-[11px] text-stone-500 font-semibold">Bấm chọn mức độ</span>
-                    </div>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
-                      {WRITING_SKILLS_META.map(meta => {
-                        const currentScore = skillScores[meta.id] ?? 85;
-                        return (
-                          <div key={meta.id} className="p-2.5 bg-white rounded-xl border border-stone-200 space-y-1.5">
-                            <div className="flex justify-between items-center text-xs font-bold text-stone-800">
-                              <span className="flex items-center gap-1">
-                                <span>{meta.icon}</span>
-                                <span>{meta.name}</span>
-                              </span>
-                              <span className="text-[10px] text-emerald-800 font-extrabold">
-                                {getLevelFromScore(currentScore).label} ({currentScore}đ)
-                              </span>
-                            </div>
-                            <div className="grid grid-cols-4 gap-1 text-[10px] font-bold">
-                              {[
-                                { label: 'Rèn thêm', score: 50 },
-                                { label: 'Tiến bộ', score: 70 },
-                                { label: 'Tốt', score: 85 },
-                                { label: 'Xuất sắc', score: 95 }
-                              ].map(lvl => (
-                                <button
-                                  key={lvl.score}
-                                  type="button"
-                                  onClick={() => setSkillScores(prev => ({ ...prev, [meta.id]: lvl.score }))}
-                                  className={`py-1 rounded-lg border text-center transition-all ${
-                                    currentScore === lvl.score
-                                      ? 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-xs'
-                                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
-                                  }`}
-                                >
-                                  {lvl.label}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Revision Request Checkbox */}
-                  <div className="p-3 bg-amber-50 rounded-2xl border border-amber-300 space-y-2">
-                    <label className="flex items-center gap-2 cursor-pointer">
-                      <input
-                        type="checkbox"
-                        checked={requestRevision}
-                        onChange={e => setRequestRevision(e.target.checked)}
-                        className="w-4 h-4 text-amber-600 rounded-md focus:ring-amber-400"
-                      />
-                      <span className="text-xs font-black text-amber-950">
-                        ⚠️ Yêu cầu con chỉnh sửa và hoàn thiện thêm (Chuyển trạng thái: Cần chỉnh sửa)
-                      </span>
-                    </label>
-                    {requestRevision && (
-                      <input
-                        type="text"
-                        value={revisionNote}
-                        onChange={e => setRevisionNote(e.target.value)}
-                        placeholder="Ghi chú điểm con cần chỉnh sửa (ví dụ: Bổ sung câu kết đoạn và sửa 2 lỗi chính tả)..."
-                        className="w-full p-2 text-xs rounded-xl border border-amber-300 bg-white"
-                      />
-                    )}
-                  </div>
-
-                  {successMsg && (
-                    <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-pulse">
-                      {successMsg}
-                    </div>
-                  )}
-
-                  {/* 4 Pedagogical Qualitative Fields */}
-                  <div className="space-y-3">
-                    <div>
-                      <label className="text-xs font-bold text-rose-900 block mb-1">
-                        🌸 1. Khen ngợi ý tưởng nổi bật của em:
-                      </label>
-                      <input
-                        type="text"
-                        value={praiseIdea}
-                        onChange={e => setPraiseIdea(e.target.value)}
-                        placeholder="Ví dụ: Ý tưởng gắn kết tình cảm gia đình rất gần gũi, chân thật..."
-                        className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-rose-200 focus:border-rose-400 focus:outline-hidden bg-rose-50/40"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-emerald-900 block mb-1">
-                        ✏️ 2. Góp ý về cách dùng từ và đặt câu:
-                      </label>
-                      <input
-                        type="text"
-                        value={wordSentenceSuggestions}
-                        onChange={e => setWordSentenceSuggestions(e.target.value)}
-                        placeholder="Ví dụ: Em dùng từ ngữ gợi cảm rất tốt, chú ý thêm dấu chấm ngắt câu..."
-                        className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-emerald-200 focus:border-emerald-400 focus:outline-hidden bg-emerald-50/40"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-amber-900 block mb-1">
-                        💖 3. Khích lệ cảm xúc và sáng tạo:
-                      </label>
-                      <input
-                        type="text"
-                        value={emotionCreativityEncouragement}
-                        onChange={e => setEmotionCreativityEncouragement(e.target.value)}
-                        placeholder="Ví dụ: Cảm xúc vui sướng và nụ cười rạng rỡ của con làm bài văn bừng sáng..."
-                        className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-amber-200 focus:border-amber-400 focus:outline-hidden bg-amber-50/40"
-                      />
-                    </div>
-
-                    <div>
-                      <label className="text-xs font-bold text-purple-900 block mb-1">
-                        💌 4. Lời dặn dò của cô dành cho em (để em viết bản sửa mới):
-                      </label>
-                      <textarea
-                        rows={2}
-                        value={teacherAdvice}
-                        onChange={e => setTeacherAdvice(e.target.value)}
-                        placeholder="Ví dụ: Con hãy bổ sung thêm 1 hình ảnh so sánh và kiểm tra lại chữ viết hoa để chuẩn bị viết bản sửa số 2 nhé!"
-                        className="w-full p-2.5 text-xs sm:text-sm rounded-xl border border-purple-200 focus:border-purple-400 focus:outline-hidden bg-purple-50/40"
-                      />
-                    </div>
-                  </div>
-
-                  {/* Flower Sticker & Actions */}
-                  <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-emerald-100">
-                    <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-stone-600">Hoa khen tặng:</span>
-                      <select
-                        value={flowerSticker}
-                        onChange={e => setFlowerSticker(e.target.value)}
-                        className="text-xs font-bold p-2 rounded-xl border border-emerald-300 bg-white"
-                      >
-                        <option value="🌸 Bông hoa chăm ngoan">🌸 Bông hoa chăm ngoan</option>
-                        <option value="🌻 Bông hoa sáng tạo">🌻 Bông hoa sáng tạo</option>
-                        <option value="🌷 Bông hoa viết hay">🌷 Bông hoa viết hay</option>
-                        <option value="🌺 Bông hoa giàu cảm xúc">🌺 Bông hoa giàu cảm xúc</option>
-                        <option value="🌼 Bông hoa tiến bộ vượt bậc">🌼 Bông hoa tiến bộ vượt bậc</option>
-                        <option value="🐝 Chú ong chăm chỉ">🐝 Chú ong chăm chỉ</option>
-                      </select>
-                    </div>
-
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={() => handleSaveTeacherFeedback('draft')}
-                        disabled={isSavingFeedback}
-                        className="px-4 py-2.5 rounded-2xl border-2 border-stone-300 hover:bg-stone-100 text-stone-700 font-bold text-xs"
-                      >
-                        Lưu bản nháp của cô
-                      </button>
-                      <button
-                        onClick={() => handleSaveTeacherFeedback('published')}
-                        disabled={isSavingFeedback}
-                        className="px-5 py-2.5 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-black text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5"
-                      >
-                        <Send className="w-4 h-4" />
-                        <span>Gửi lời nhận xét cho em</span>
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              )}
             </div>
           </div>
         </div>
