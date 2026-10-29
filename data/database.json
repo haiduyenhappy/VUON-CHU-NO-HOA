@@ -980,6 +980,146 @@
       ],
       "inviteCodes": [],
       "classId": "L3A"
+    },
+    {
+      "id": "HS041",
+      "name": "Lê Minh Khôi",
+      "demoName": "Minh Khôi",
+      "avatar": "🌸",
+      "pin": "2016",
+      "parentCode": "PH041",
+      "treeLevel": 3,
+      "flowersEarned": 7,
+      "starsEarned": 21,
+      "className": "Lớp 4B – Trường TH Lê Đức Thọ",
+      "username": "hs041",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Khôi",
+          "phone": "0910041001",
+          "code": "PH041",
+          "status": "active",
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS041-1"
+        }
+      ],
+      "inviteCodes": [],
+      "classId": "L4B"
+    },
+    {
+      "id": "HS042",
+      "name": "Nguyễn Hà Phương",
+      "demoName": "Hà Phương",
+      "avatar": "🌻",
+      "pin": "2016",
+      "parentCode": "PH042",
+      "treeLevel": 4,
+      "flowersEarned": 11,
+      "starsEarned": 33,
+      "className": "Lớp 4B – Trường TH Lê Đức Thọ",
+      "username": "hs042",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Phương",
+          "phone": "0910042002",
+          "code": "PH042",
+          "status": "active",
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS042-1"
+        }
+      ],
+      "inviteCodes": [],
+      "classId": "L4B"
+    },
+    {
+      "id": "HS043",
+      "name": "Vũ Gia Huy",
+      "demoName": "Gia Huy",
+      "avatar": "🌷",
+      "pin": "2016",
+      "parentCode": "PH043",
+      "treeLevel": 2,
+      "flowersEarned": 5,
+      "starsEarned": 15,
+      "className": "Lớp 4B – Trường TH Lê Đức Thọ",
+      "username": "hs043",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Huy",
+          "phone": "0910043003",
+          "code": "PH043",
+          "status": "active",
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS043-1"
+        }
+      ],
+      "inviteCodes": [],
+      "classId": "L4B"
+    },
+    {
+      "id": "HS044",
+      "name": "Đỗ Trúc Linh",
+      "demoName": "Trúc Linh",
+      "avatar": "🌼",
+      "pin": "2016",
+      "parentCode": "PH044",
+      "treeLevel": 3,
+      "flowersEarned": 8,
+      "starsEarned": 24,
+      "className": "Lớp 4B – Trường TH Lê Đức Thọ",
+      "username": "hs044",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Linh",
+          "phone": "0910044004",
+          "code": "PH044",
+          "status": "active",
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS044-1"
+        }
+      ],
+      "inviteCodes": [],
+      "classId": "L4B"
+    },
+    {
+      "id": "HS045",
+      "name": "Hoàng Nhật Nam",
+      "demoName": "Nhật Nam",
+      "avatar": "🌿",
+      "pin": "2016",
+      "parentCode": "PH045",
+      "treeLevel": 4,
+      "flowersEarned": 10,
+      "starsEarned": 30,
+      "className": "Lớp 4B – Trường TH Lê Đức Thọ",
+      "username": "hs045",
+      "accountStatus": "active",
+      "lastLogin": "Chưa đăng nhập",
+      "linkedCaregivers": [
+        {
+          "relation": "Bố / Mẹ",
+          "name": "Phụ huynh em Nam",
+          "phone": "0910045005",
+          "code": "PH045",
+          "status": "active",
+          "linkedAt": "2026-09-05",
+          "id": "cg-HS045-1"
+        }
+      ],
+      "inviteCodes": [],
+      "classId": "L4B"
     }
   ],
   "submissions": [
@@ -990,7 +1130,120 @@
       "taskTitle": "Kể lại một hoạt động đã làm cùng người thân",
       "gardenType": "ke_chuyen",
       "volume": 1,
+      "grade": 3,
       "isIndependentTest": false,
+      "lifecycleStatus": "DA_HOAN_THANH",
+      "currentStep": "giao_vien_cham",
+      "lastActiveStepLabel": "Bước 7: Cô giáo đã nhận xét",
+      "understandingStage": {
+        "promptRequirements": [
+          "Thể loại: Kể lại một sự việc / hoạt động",
+          "Đối tượng: Một hoạt động làm cùng người thân trong gia đình",
+          "Nhiệm vụ: Kể diễn biến việc làm và nêu cảm nghĩ của em"
+        ],
+        "selectedDirectionTitle": "Cùng mẹ nấu bữa cơm chiều ấm áp",
+        "studentWishes": "Có sử dụng từ ngữ gợi cảm xúc, tả cảnh gian bếp đầm ấm",
+        "advice": "Con hãy nhớ lại các hành động cụ thể khi hai mẹ con cùng chuẩn bị đồ ăn nhé!"
+      },
+      "ideaFindingStage": {
+        "questions": [
+          "Em và người thân cùng làm việc gì, vào thời gian nào?",
+          "Em đã giúp người thân làm những việc gì cụ thể?",
+          "Không khí lúc đó ra sao và em cảm thấy như thế nào?"
+        ],
+        "studentAnswers": {
+          "0": "Chiều chủ nhật vừa qua, em cùng mẹ chuẩn bị bữa cơm chiều cho cả nhà.",
+          "1": "Em nhặt rau muống, mẹ hướng dẫn em gọt cà rốt và xào thịt bò thơm nức.",
+          "2": "Gian bếp rộn rã tiếng cười, cả nhà quây quần ăn cơm rất hạnh phúc."
+        },
+        "customIdeas": [
+          "Mùi thơm của món canh rau muống ngọt mát",
+          "Lời khen của bố làm em rất vui"
+        ]
+      },
+      "mindMapStage": {
+        "branches": [
+          {
+            "id": "branch-1",
+            "title": "Khởi đầu ấm áp",
+            "icon": "🌅",
+            "color": "from-amber-400 to-orange-500",
+            "points": [
+              "Chiều chủ nhật nắng vàng nhẹ",
+              "Em cùng mẹ vào bếp"
+            ]
+          },
+          {
+            "id": "branch-2",
+            "title": "Cùng mẹ làm bếp",
+            "icon": "🥬",
+            "color": "from-emerald-400 to-teal-500",
+            "points": [
+              "Rửa tay sạch sẽ",
+              "Nhặt từng ngọn rau muống non",
+              "Nghe mẹ hướng dẫn gọt củ"
+            ]
+          },
+          {
+            "id": "branch-3",
+            "title": "Hương vị đầm ấm",
+            "icon": "🍲",
+            "color": "from-sky-400 to-blue-500",
+            "points": [
+              "Thịt bò xào thơm nức gian bếp",
+              "Mẹ con vừa làm vừa tíu tít trò chuyện"
+            ]
+          },
+          {
+            "id": "branch-4",
+            "title": "Mâm cơm hạnh phúc",
+            "icon": "💖",
+            "color": "from-rose-400 to-pink-500",
+            "points": [
+              "Cả nhà quây quần bên mâm cơm",
+              "Bố khen canh rau ngọt mát",
+              "Em thấy yêu gia đình nhiều hơn"
+            ]
+          }
+        ],
+        "lastSavedAt": "2026-10-27T15:43:38.105Z"
+      },
+      "outlineStage": {
+        "initialOutline": [
+          {
+            "id": "1",
+            "section": "Mở đoạn",
+            "content": "Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ nấu bữa cơm chiều."
+          },
+          {
+            "id": "2",
+            "section": "Thân đoạn",
+            "content": "Em giúp mẹ nhặt rau muống xanh non, mẹ hướng dẫn em gọt cà rốt và nghe em kể chuyện trường lớp."
+          },
+          {
+            "id": "3",
+            "section": "Kết đoạn",
+            "content": "Cả nhà quây quần bên mâm cơm thơm lừng, em cảm thấy rất vui và hạnh phúc."
+          }
+        ],
+        "developedOutline": [
+          {
+            "id": "1",
+            "section": "Mở đoạn",
+            "content": "Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ vào bếp nấu cơm."
+          },
+          {
+            "id": "2",
+            "section": "Thân đoạn",
+            "content": "Em rửa tay sạch sẽ, ngồi nhặt từng cọng rau muống xanh mướt bên cạnh mẹ. Gian bếp rộn rã tiếng cười vui."
+          },
+          {
+            "id": "3",
+            "section": "Kết đoạn",
+            "content": "Bữa cơm đầm ấm làm em thấy yêu gian bếp và gia đình mình tha thiết."
+          }
+        ]
+      },
       "initialOutline": [
         {
           "id": "1",
@@ -1053,9 +1306,89 @@
         "emotionCreativityEncouragement": "Cảm xúc vui sướng khi được bố khen ở đoạn kết làm bài văn bừng sáng.",
         "teacherAdvice": "Con hãy tiếp tục phát huy nét chữ đẹp và tâm hồn giàu cảm xúc này nhé!"
       },
+      "teacherSkillEvaluations": [
+        {
+          "skillId": "hieu_de",
+          "skillName": "Hiểu đề",
+          "score": 95,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Kể đúng trọng tâm hoạt động nấu cơm cùng mẹ, nêu rõ thời gian và ý nghĩa việc làm.",
+          "comment": "Con xác định đúng đề bài và bám sát chủ đề gia đình.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        },
+        {
+          "skillId": "tim_y",
+          "skillName": "Tìm ý",
+          "score": 92,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Chi tiết \"nhặt ngọn rau muống non mởn\", \"thịt bò xào thơm nức\", \"bố khen canh ngọt mát\".",
+          "comment": "Ý tưởng phong phú, quan sát rất tỉ mỉ.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        },
+        {
+          "skillId": "sap_xep_y",
+          "skillName": "Sắp xếp ý",
+          "score": 90,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Bố cục 3 phần rõ ràng, kể theo trình tự thời gian từ lúc chuẩn bị đến khi ăn cơm.",
+          "comment": "Đoạn văn liền mạch, chuyển ý mượt mà.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        },
+        {
+          "skillId": "dien_dat",
+          "skillName": "Diễn đạt",
+          "score": 88,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Dùng từ láy gợi cảm: \"ngoan ngoãn\", \"tíu tít\", \"rộn rã\".",
+          "comment": "Hành văn lưu loát, câu văn đủ chủ ngữ - vị ngữ.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        },
+        {
+          "skillId": "chinh_ta_dau_cau",
+          "skillName": "Chính tả & Dấu câu",
+          "score": 96,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Viết hoa chuẩn đầu câu, dấu phẩy ngắt các vế câu hợp lý, không sai lỗi chính tả.",
+          "comment": "Chữ viết và dấu câu rất cẩn thận, chuẩn mực.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        },
+        {
+          "skillId": "cam_xuc_sang_tao",
+          "skillName": "Cảm xúc & Sáng tạo",
+          "score": 94,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Cảm xúc hạnh phúc khi cả nhà quây quần bên mâm cơm thơm lừng.",
+          "comment": "Tình cảm gia đình chân thành, ấm áp.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        },
+        {
+          "skillId": "tu_chinh_sua",
+          "skillName": "Tự chỉnh sửa",
+          "score": 88,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Đã bổ sung câu văn miêu tả ánh nắng và tiếng cười sau bản nháp 1.",
+          "comment": "Con rất có ý thức tự hoàn thiện bài viết của mình.",
+          "evaluator": "TEACHER",
+          "evaluatedAt": "2026-10-28T15:43:38.105Z"
+        }
+      ],
       "status": "reviewed",
       "startedAt": "2026-10-21T02:51:31.431Z",
-      "completedAt": "2026-10-21T02:51:31.431Z"
+      "completedAt": "2026-10-21T02:51:31.431Z",
+      "lastSavedAt": "2026-10-27T15:43:38.105Z"
     },
     {
       "id": "sub-seed-02",
@@ -1064,7 +1397,84 @@
       "taskTitle": "Tả một đồ dùng học tập em yêu quý",
       "gardenType": "sac_mau",
       "volume": 1,
+      "grade": 3,
       "isIndependentTest": false,
+      "lifecycleStatus": "CHO_NHAN_XET",
+      "currentStep": "da_nop",
+      "lastActiveStepLabel": "Bước 6: Chờ cô đọc & nhận xét",
+      "understandingStage": {
+        "promptRequirements": [
+          "Thể loại: Đoạn văn miêu tả đồ vật",
+          "Đối tượng: Một đồ dùng học tập gần gũi",
+          "Nhiệm vụ: Miêu tả đặc điểm và ích lợi của đồ dùng"
+        ],
+        "selectedObject": "Hộp bút",
+        "selectedDirectionTitle": "Chiếc hộp bút màu hồng pastel",
+        "studentWishes": "Miêu tả cả hình dáng bên ngoài và các ngăn bên trong",
+        "advice": "Con hãy quan sát màu sắc, chất liệu và cách sắp xếp bút thước nhé!"
+      },
+      "ideaFindingStage": {
+        "questions": [
+          "Đồ dùng học tập đó là gì, do ai tặng hoặc em có từ khi nào?",
+          "Hình dáng, màu sắc, chi tiết bên ngoài và bên trong có gì đặc biệt?",
+          "Đồ vật giúp ích gì cho việc học của em?"
+        ],
+        "studentAnswers": {
+          "0": "Chiếc hộp bút màu hồng pastel bố tặng em nhân dịp đầu năm học mới.",
+          "1": "Hình chữ nhật thon gọn, vải dù mềm mại, in hình chú thỏ trắng ôm cà rốt.",
+          "2": "Có hai ngăn đựng bút chì, thước kẻ và tẩy ngay ngắn, giúp em học tập mỗi ngày."
+        },
+        "customIdeas": [
+          "Khóa kéo bằng kim loại sáng bóng, trơn tru"
+        ]
+      },
+      "mindMapStage": {
+        "branches": [
+          {
+            "id": "branch-hb-1",
+            "title": "Món quà đầu năm",
+            "icon": "🎁",
+            "color": "from-pink-400 to-rose-500",
+            "points": [
+              "Bố tặng đầu năm học lớp 3",
+              "Màu hồng pastel xinh xắn"
+            ]
+          },
+          {
+            "id": "branch-hb-2",
+            "title": "Đặc điểm bên ngoài",
+            "icon": "🐰",
+            "color": "from-amber-400 to-orange-500",
+            "points": [
+              "Vải dù mềm mại",
+              "Hình chú thỏ ôm củ cà rốt",
+              "Khóa kéo kim loại sáng bóng"
+            ]
+          },
+          {
+            "id": "branch-hb-3",
+            "title": "Các ngăn bên trong",
+            "icon": "✏️",
+            "color": "from-emerald-400 to-teal-500",
+            "points": [
+              "Hai ngăn tiện lợi",
+              "Ngăn để bút chì, bút mực",
+              "Ngăn để tẩy và thước kẻ"
+            ]
+          },
+          {
+            "id": "branch-hb-4",
+            "title": "Người bạn đồng hành",
+            "icon": "🎒",
+            "color": "from-sky-400 to-blue-500",
+            "points": [
+              "Nằm ngoan ngoãn trong cặp sách",
+              "Nhắc nhở giữ gìn đồ dùng ngăn nắp"
+            ]
+          }
+        ],
+        "lastSavedAt": "2026-10-29T10:43:38.105Z"
+      },
       "initialOutline": [
         {
           "id": "1",
@@ -1115,9 +1525,82 @@
         "suggestedStars": 5,
         "timestamp": "2026-10-22T22:51:31.431Z"
       },
+      "aiSkillEvaluations": [
+        {
+          "skillId": "hieu_de",
+          "skillName": "Hiểu đề",
+          "score": 96,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Miêu tả đúng trọng tâm chiếc hộp bút và nêu bật công dụng.",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.105Z"
+        },
+        {
+          "skillId": "tim_y",
+          "skillName": "Tìm ý",
+          "score": 90,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Chi tiết màu hồng pastel, chú thỏ ôm củ cà rốt, hai ngăn tiện lợi.",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.105Z"
+        },
+        {
+          "skillId": "sap_xep_y",
+          "skillName": "Sắp xếp ý",
+          "score": 88,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Trình tự từ bên ngoài vào bên trong và cảm nghĩ gắn bó.",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.105Z"
+        },
+        {
+          "skillId": "dien_dat",
+          "skillName": "Diễn đạt",
+          "score": 87,
+          "level": "thuc_hien_tot",
+          "levelLabel": "Thực hiện tốt",
+          "evidence": "Dùng từ gợi cảm: \"êm ái\", \"thon gọn\", \"ngay ngắn\", \"nằm ngoan ngoãn\".",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.105Z"
+        },
+        {
+          "skillId": "chinh_ta_dau_cau",
+          "skillName": "Chính tả & Dấu câu",
+          "score": 95,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Không có lỗi chính tả, ngắt câu rõ ràng bằng dấu chấm và dấu phẩy.",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.105Z"
+        },
+        {
+          "skillId": "cam_xuc_sang_tao",
+          "skillName": "Cảm xúc & Sáng tạo",
+          "score": 91,
+          "level": "xuat_sac",
+          "levelLabel": "Xuất sắc",
+          "evidence": "Nhân hóa hộp bút thành \"người bạn nhỏ nằm ngoan ngoãn\".",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.106Z"
+        },
+        {
+          "skillId": "tu_chinh_sua",
+          "skillName": "Tự chỉnh sửa",
+          "score": 85,
+          "level": "thuc_hien_tot",
+          "levelLabel": "Thực hiện tốt",
+          "evidence": "Đã mở rộng bản nháp 1 từ 4 câu ngắn thành đoạn văn miêu tả hoàn chỉnh.",
+          "evaluator": "AI",
+          "evaluatedAt": "2026-10-29T11:43:38.106Z"
+        }
+      ],
       "status": "submitted",
       "startedAt": "2026-10-22T21:51:31.431Z",
-      "completedAt": "2026-10-22T22:51:31.431Z"
+      "completedAt": "2026-10-22T22:51:31.431Z",
+      "lastSavedAt": "2026-10-29T11:43:38.106Z"
     },
     {
       "id": "sub-seed-03",
@@ -1126,7 +1609,11 @@
       "taskTitle": "Kể lại một hoạt động đã làm cùng người thân",
       "gardenType": "ke_chuyen",
       "volume": 1,
+      "grade": 3,
       "isIndependentTest": true,
+      "lifecycleStatus": "CHO_NHAN_XET",
+      "currentStep": "da_nop",
+      "lastActiveStepLabel": "Bước 6: Đã nộp bài cho cô",
       "initialOutline": [],
       "developedOutline": [],
       "firstDraft": "Sáng chủ nhật em cùng bố tưới cây ngoài ban công. Hai bố con cùng bắt sâu và nhổ cỏ. Em thấy cây hoa hồng nở rất đẹp.",
@@ -1135,6 +1622,105 @@
       "status": "submitted",
       "startedAt": "2026-10-22T18:51:31.431Z",
       "completedAt": "2026-10-22T19:51:31.431Z"
+    },
+    {
+      "id": "sub-seed-04",
+      "studentId": "HS041",
+      "classId": "L4B",
+      "taskId": "ASM-003",
+      "taskTitle": "Viết đoạn văn ngắn tả một con vật nuôi trong nhà mà em yêu quý",
+      "gardenType": "sac_mau",
+      "volume": 1,
+      "grade": 4,
+      "isIndependentTest": false,
+      "lifecycleStatus": "CHO_NHAN_XET",
+      "currentStep": "da_nop",
+      "lastActiveStepLabel": "Bước 6: Đã nộp bài cho thầy",
+      "initialOutline": [
+        {
+          "id": "1",
+          "section": "Mở đoạn",
+          "content": "Giới thiệu chú mèo Miu Miu mà em rất yêu quý."
+        },
+        {
+          "id": "2",
+          "section": "Thân đoạn",
+          "content": "Tả bộ lông vàng óng, đôi mắt bi ve và cử chỉ nũng nịu."
+        },
+        {
+          "id": "3",
+          "section": "Kết đoạn",
+          "content": "Tình cảm gắn bó của em với chú mèo."
+        }
+      ],
+      "developedOutline": [],
+      "firstDraft": "Nhà em có nuôi một chú mèo mướp rất đáng yêu. Chú có bộ lông màu vàng sọc đen mượt mà...",
+      "drafts": [],
+      "finalContent": "Nhà em có nuôi một chú mèo mướp rất đáng yêu, tên là Miu Miu. Toàn thân chú khoác bộ lông màu vàng cam óng ả điểm những sọc đen mềm mại như nhung. Đôi mắt Miu Miu tròn xoe, trong veo như hai hòn bi ve xanh biếc. Mỗi khi em đi học về, chú lại chạy ra cửa dụi đầu vào chân em kêu \"meo meo\" âu yếm. Em rất yêu quý chú mèo nhỏ này và luôn chăm sóc chú thật cẩn thận.",
+      "status": "submitted",
+      "startedAt": "2026-10-23T08:00:00.000Z",
+      "completedAt": "2026-10-23T08:45:00.000Z",
+      "understandingStage": {
+        "promptRequirements": [
+          "Thể loại: Đoạn văn nêu tình cảm, cảm xúc",
+          "Đối tượng: Một cảnh đẹp quê hương em (cánh đồng lúa, bãi biển, dòng sông, công viên...)",
+          "Dung lượng: Đoạn văn từ 4–6 câu"
+        ],
+        "selectedDirectionTitle": "Cánh đồng lúa chín vàng quê ngoại",
+        "studentWishes": "Có hình ảnh so sánh cánh đồng với tấm thảm vàng",
+        "advice": "Con hãy nhớ lại mùi hương của lúa chín và cảm xúc khi đứng ngắm cánh đồng quê nhé!"
+      },
+      "ideaFindingStage": {
+        "questions": [
+          "Cảnh đẹp quê hương mà em muốn nói đến là cảnh nào?",
+          "Những hình ảnh, âm thanh hoặc mùi hương nào làm em ấn tượng nhất?",
+          "Tình cảm của em đối với cảnh đẹp quê hương đó như thế nào?"
+        ],
+        "studentAnswers": {
+          "0": "Em muốn viết về cánh đồng lúa chín vàng ở quê ngoại vào vụ gặt.",
+          "1": "Sóng lúa nhấp nhô trong gió sớm, mùi hương lúa mới thơm ngào ngạt.",
+          "2": "Em thấy quê hương thật thanh bình và yêu tha thiết mảnh đất quê ngoại."
+        },
+        "customIdeas": [
+          "Những cánh cò trắng chao lượn trên nền trời xanh biếc"
+        ]
+      },
+      "mindMapStage": {
+        "branches": [
+          {
+            "id": "branch-cd-1",
+            "title": "Về thăm quê ngoại",
+            "icon": "🏡",
+            "color": "from-amber-400 to-orange-500",
+            "points": [
+              "Kỳ nghỉ hè về quê",
+              "Cánh đồng lúa trải dài ngút ngàn"
+            ]
+          },
+          {
+            "id": "branch-cd-2",
+            "title": "Bức tranh sắc màu",
+            "icon": "🌾",
+            "color": "from-yellow-400 to-amber-500",
+            "points": [
+              "Màu vàng óng ả như tấm thảm lụa",
+              "Từng làn sóng lúa nhấp nhô theo làn gió"
+            ]
+          },
+          {
+            "id": "branch-cd-3",
+            "title": "Hương thơm đồng nội",
+            "icon": "🍃",
+            "color": "from-emerald-400 to-teal-500",
+            "points": [
+              "Hương lúa ngọt dịu thoang thoảng",
+              "Cánh cò trắng chao liệng trong sương mai"
+            ]
+          }
+        ],
+        "lastSavedAt": "2026-10-29T13:43:38.106Z"
+      },
+      "lastSavedAt": "2026-10-29T13:43:38.106Z"
     }
   ],
   "teachers": [
@@ -1152,7 +1738,7 @@
       "assignedClassIds": [
         "L3A"
       ],
-      "lastLogin": "02:45:37 26/10/2026",
+      "lastLogin": "15:44:21 29/10/2026",
       "createdAt": "2026-08-15T08:00:00.000Z"
     },
     {
@@ -1169,7 +1755,7 @@
       "assignedClassIds": [
         "L4B"
       ],
-      "lastLogin": "02:45:37 26/10/2026",
+      "lastLogin": "15:44:16 29/10/2026",
       "createdAt": "2026-09-01T08:00:00.000Z"
     }
   ],
@@ -1236,6 +1822,22 @@
       "maxScore": 10,
       "status": "active",
       "instructions": "Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực."
+    },
+    {
+      "id": "ASM-003",
+      "classId": "L4B",
+      "teacherId": "GV002",
+      "teacherName": "Thầy Trần Văn Minh",
+      "title": "Tả một con vật nuôi trong nhà mà em yêu quý",
+      "prompt": "Viết đoạn văn từ 4–5 câu tả một con vật nuôi trong nhà mà em yêu quý nhất.",
+      "grade": 4,
+      "genre": "ta_do_vat",
+      "gardenType": "sac_mau",
+      "assignedDate": "2026-10-22",
+      "dueDate": "2026-10-30",
+      "isExam": false,
+      "status": "active",
+      "instructions": "Các em chú ý quan sát nét đặc biệt của con vật và cách em chăm sóc nhé."
     }
   ],
   "auditLogs": [

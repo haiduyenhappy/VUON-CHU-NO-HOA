@@ -90,6 +90,7 @@ export const Navbar: React.FC<NavbarProps> = ({
   // Determine user role and display name dynamically (no hardcoded user names)
   const isTeacher = currentUser?.role === 'teacher';
   const isSuperAdmin = isTeacher && currentUser.teacherRole === 'SUPER_ADMIN';
+  const teacherEmoji = currentUser?.teacherProfile?.salutation === 'thầy' || currentUser?.teacherName?.toLowerCase().includes('thầy') ? '👨‍🏫' : '👩‍🏫';
   const isStudent = currentUser?.role === 'student';
   const isFamily = currentUser?.role === 'family';
 
@@ -390,7 +391,7 @@ export const Navbar: React.FC<NavbarProps> = ({
                 title={`Đang đăng nhập: ${userDisplayName}`}
               >
                 <span className="flex items-center justify-center w-5 h-5 rounded-full bg-white text-xs shrink-0 shadow-2xs">
-                  {isTeacher ? (isSuperAdmin ? '👑' : '👩‍🏫') : isStudent ? (activeStudent?.avatar || '🌸') : '🏡'}
+                  {isTeacher ? (isSuperAdmin ? '👑' : teacherEmoji) : isStudent ? (activeStudent?.avatar || '🌸') : '🏡'}
                 </span>
                 <span className="truncate font-extrabold text-stone-900">
                   {userDisplayName}
@@ -430,7 +431,7 @@ export const Navbar: React.FC<NavbarProps> = ({
               onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
               className="flex items-center gap-1.5 px-2.5 py-1 h-9 rounded-xl bg-purple-50 text-purple-950 border border-purple-200 text-xs font-bold cursor-pointer"
             >
-              <span>{isTeacher ? (isSuperAdmin ? '👑' : '👩‍🏫') : isStudent ? (activeStudent?.avatar || '🌸') : '🏡'}</span>
+              <span>{isTeacher ? (isSuperAdmin ? '👑' : teacherEmoji) : isStudent ? (activeStudent?.avatar || '🌸') : '🏡'}</span>
               <span className="max-w-[90px] sm:max-w-[120px] truncate font-extrabold text-stone-900 text-[11px] sm:text-xs">
                 {userDisplayName}
               </span>

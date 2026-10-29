@@ -1,7 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
-import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { WRITING_SKILLS_META, getLevelFromScore } from '../utils/writingSkillsRubric';
 import { playPop, playChime } from '../utils/audio';
 import { getTeacherGreeting } from '../utils/timeGreeting';
@@ -65,12 +64,32 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   onRefreshStudents,
   onGoToAdminSystem
 }) => {
+  // Dynamic Teacher Identity & RBAC Configuration
+  const teacherName = currentUser?.teacherName || currentUser?.teacherProfile?.name || 'Giáo viên';
+  const teacherRole = currentUser?.teacherRole || 'TEACHER';
+  const isSuperAdmin = teacherRole === 'SUPER_ADMIN';
+  const teacherId = currentUser?.teacherId || 'GV001';
+  const teacherSalutation: 'thầy' | 'cô' = 
+    currentUser?.teacherProfile?.salutation === 'thầy' || teacherName.toLowerCase().includes('thầy') || teacherId === 'GV002' 
+      ? 'thầy' 
+      : 'cô';
+  const teacherSalutationCap = teacherSalutation === 'thầy' ? 'Thầy' : 'Cô';
+  const teacherEmoji = teacherSalutation === 'thầy' ? '👨‍🏫' : '👩‍🏫';
+  const teacherSchool = currentUser?.teacherProfile?.school || 'Trường Tiểu học Lê Đức Thọ';
+  const teacherAssignedClassIds: string[] = isSuperAdmin
+    ? []
+    : (currentUser?.assignedClassIds && currentUser.assignedClassIds.length > 0
+        ? currentUser.assignedClassIds
+        : (teacherId === 'GV002' ? ['L4B'] : ['L3A']));
+
   // Navigation tabs within Teacher Portal
   const [activeTab, setActiveTab] = useState<'reviews' | 'accounts' | 'classes' | 'assignments' | 'profile'>('reviews');
 
   // Multi-Class Management State
   const [assignedClasses, setAssignedClasses] = useState<Classroom[]>([]);
-  const [selectedClassId, setSelectedClassId] = useState<string>('all');
+  const [selectedClassId, setSelectedClassId] = useState<string>(() => {
+    return isSuperAdmin ? 'all' : (teacherAssignedClassIds[0] || 'L4B');
+  });
   const [isCreateClassOpen, setIsCreateClassOpen] = useState(false);
   const [newClassName, setNewClassName] = useState('');
   const [newClassGrade, setNewClassGrade] = useState<number>(3);
@@ -200,9 +219,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // Fetch classes assigned to this teacher
   const fetchClasses = async () => {
     try {
-      const token = currentUser?.token || (currentUser?.teacherRole === 'SUPER_ADMIN' ? 'admin' : undefined);
-      const res = await fetch(`/api/teacher/classes?teacherId=${currentUser?.teacherId || 'GV001'}`, {
-        headers: token ? { 'Authorization': `Bearer ${token}` } : {}
+      const token = currentUser?.token || (isSuperAdmin ? 'admin' : undefined);
+      const res = await fetch(`/api/teacher/classes?teacherId=${teacherId}`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-teacher-id': teacherId
+        }
       });
       const data = await res.json();
       if (data.classes && Array.isArray(data.classes)) {
@@ -216,7 +238,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // Fetch class assignments
   const fetchAssignments = async () => {
     try {
-      const res = await fetch(`/api/teacher/assignments?classId=${selectedClassId !== 'all' ? selectedClassId : ''}`);
+      const token = currentUser?.token || (isSuperAdmin ? 'admin' : undefined);
+      const res = await fetch(`/api/teacher/assignments?classId=${selectedClassId !== 'all' ? selectedClassId : ''}&teacherId=${teacherId}`, {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-teacher-id': teacherId
+        }
+      });
       const data = await res.json();
       if (data.assignments && Array.isArray(data.assignments)) {
         setAssignments(data.assignments);
@@ -225,6 +253,25 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
       console.warn('Error fetching assignments:', e);
     }
   };
+
+  // Clean transition and state reset when teacher session changes
+  useEffect(() => {
+    setSelectedStudent(null);
+    setSelectedSubmission(null);
+    setSuccessMsg('');
+    setClassActionMsg('');
+    setAssignmentActionMsg('');
+    setTeacherProfilePhone(currentUser?.teacherProfile?.phone || '');
+    setTeacherProfileEmail(currentUser?.teacherProfile?.email || '');
+    if (!isSuperAdmin && teacherAssignedClassIds.length > 0) {
+      setSelectedClassId(teacherAssignedClassIds[0]);
+    } else {
+      setSelectedClassId('all');
+    }
+    fetchClasses();
+    fetchAssignments();
+    fetchSubmissions();
+  }, [currentUser?.teacherId]);
 
   useEffect(() => {
     fetchClasses();
@@ -306,9 +353,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           prompt: newAssignPrompt.trim(),
           isExam: newAssignIsExam,
           dueDate: newAssignDueDate || undefined,
-          classId: selectedClassId !== 'all' ? selectedClassId : (assignedClasses[0]?.id || 'L3A'),
-          teacherId: currentUser?.teacherId || 'GV001',
-          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name,
+          classId: selectedClassId !== 'all' ? selectedClassId : (assignedClasses[0]?.id || (teacherId === 'GV002' ? 'L4B' : 'L3A')),
+          teacherId: teacherId,
+          teacherName: teacherName,
           difficultyLevel: newAssignDifficulty,
           topicCode: newAssignTopicCode,
           customOutline: aiPreviewData?.outline || undefined
@@ -376,7 +423,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const fetchSubmissions = async () => {
     setIsLoadingSubmissions(true);
     try {
-      const res = await fetch('/api/submissions');
+      const token = currentUser?.token || (isSuperAdmin ? 'admin' : undefined);
+      const res = await fetch('/api/submissions', {
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-teacher-id': teacherId
+        }
+      });
       const data = await res.json();
       setSubmissions(data.submissions || []);
     } catch (e) {
@@ -390,8 +443,14 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     fetchSubmissions();
   }, []);
 
+  // Students accessible by this teacher based on RBAC
+  const accessibleStudents = localStudents.filter(s => {
+    if (isSuperAdmin) return true;
+    return teacherAssignedClassIds.includes(s.classId || '');
+  });
+
   // Filter students for review view and account list
-  const filteredStudents = localStudents.filter(s => {
+  const filteredStudents = accessibleStudents.filter(s => {
     if (selectedClassId !== 'all' && s.classId && s.classId !== selectedClassId) {
       return false;
     }
@@ -400,9 +459,21 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
            s.id.toLowerCase().includes(searchTerm.toLowerCase());
   });
 
+  // Submissions accessible by this teacher based on RBAC
+  const accessibleSubmissions = submissions.filter(sub => {
+    if (isSuperAdmin) return true;
+    if (sub.classId && teacherAssignedClassIds.includes(sub.classId)) return true;
+    const st = localStudents.find(s => s.id === sub.studentId);
+    return st && teacherAssignedClassIds.includes(st.classId || '');
+  });
+
   // Filter submissions
-  const filteredSubmissions = submissions.filter(sub => {
-    if (selectedClassId !== 'all' && sub.classId && sub.classId !== selectedClassId) return false;
+  const filteredSubmissions = accessibleSubmissions.filter(sub => {
+    if (selectedClassId !== 'all') {
+      const st = localStudents.find(s => s.id === sub.studentId);
+      const subClass = sub.classId || st?.classId;
+      if (subClass && subClass !== selectedClassId) return false;
+    }
     if (selectedStudent && sub.studentId !== selectedStudent.id) return false;
     if (filterStatus === 'submitted') return sub.status === 'submitted';
     if (filterStatus === 'reviewed') return sub.status === 'reviewed' && sub.teacherFeedback?.status === 'published';
@@ -412,11 +483,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   });
 
   // Class statistics for "Cả lớp mình hôm nay"
-  const completedCount = submissions.filter(s => s.status === 'submitted' || s.status === 'reviewed').length;
-  const reviewedCount = submissions.filter(s => s.status === 'reviewed' && s.teacherFeedback?.status === 'published').length;
-  const pendingCount = submissions.filter(s => s.status === 'submitted').length;
-  const independentCount = submissions.filter(s => s.isIndependentTest).length;
-  const needingHelpCount = localStudents.filter(s => s.flowersEarned < 6).length;
+  const completedCount = accessibleSubmissions.filter(s => s.status === 'submitted' || s.status === 'reviewed').length;
+  const reviewedCount = accessibleSubmissions.filter(s => s.status === 'reviewed' && s.teacherFeedback?.status === 'published').length;
+  const pendingCount = accessibleSubmissions.filter(s => s.status === 'submitted').length;
+  const independentCount = accessibleSubmissions.filter(s => s.isIndependentTest).length;
+  const needingHelpCount = accessibleStudents.filter(s => s.flowersEarned < 6).length;
 
   const handleSelectSubmission = (sub: Submission) => {
     playPop(settings.soundEnabled);
@@ -478,7 +549,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         score,
         level,
         levelLabel: label,
-        evidence: `Được ${currentUser?.teacherName || TEACHER_CONFIG.name} đánh giá trong bài viết "${selectedSubmission.taskTitle}"`,
+        evidence: `Được ${teacherName} đánh giá trong bài viết "${selectedSubmission.taskTitle}"`,
         evaluator: 'TEACHER' as const,
         evaluatedAt: new Date().toISOString()
       };
@@ -500,10 +571,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           editedAiNotes,
           score: isPeriodicExamReview && examScore !== '' ? Math.round(Number(examScore)) : undefined,
           status: targetStatus,
-          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name,
+          teacherName: teacherName,
           teacherSkillEvaluations,
           revisionRequestedByTeacher: isRevision,
-          revisionRequestNote: isRevision ? (revisionNote || teacherAdvice || 'Con xem lại góp ý của cô để hoàn thiện bài văn nhé.') : undefined
+          revisionRequestNote: isRevision ? (revisionNote || teacherAdvice || `Con xem lại góp ý của ${teacherSalutation} để hoàn thiện bài văn nhé.`) : undefined
         })
       });
 
@@ -511,7 +582,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
       if (data.success) {
         setSuccessMsg(
           targetStatus === 'draft'
-            ? '✓ Đã lưu bản nháp nhận xét. Chỉ cô mới thấy nội dung này.'
+            ? `✓ Đã lưu bản nháp nhận xét. Chỉ ${teacherSalutation} mới thấy nội dung này.`
             : isRevision
               ? '✓ Đã gửi nhận xét và yêu cầu học sinh chỉnh sửa thêm (Trạng thái: Cần chỉnh sửa)!'
               : '✓ Đã công bố nhận xét và đánh giá 7 năng lực viết cho em thành công! Cập nhật ngay vào Hành trình của con.'
@@ -615,7 +686,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setEditName(st.name);
     setEditDemoName(st.demoName || st.name.split(' ').slice(-1)[0] || st.name);
     setEditUsername(st.username || st.id.toLowerCase());
-    setEditClassName(st.className || `${TEACHER_CONFIG.className} – ${TEACHER_CONFIG.schoolShort}`);
+    setEditClassName(st.className || (st.classId === 'L4B' ? 'Lớp 4B – Trường TH Lê Đức Thọ' : 'Lớp 3 – Trường TH Lê Đức Thọ'));
     setEditAccountStatus(st.accountStatus === 'locked' ? 'locked' : 'active');
     setEditAvatar(st.avatar || '🌸');
     setEditErrorMsg('');
@@ -924,7 +995,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
   // Action: Copy Invite Text
   const handleCopyInviteMessage = (code: string, customMsg?: string) => {
-    const text = customMsg || `Kính gửi Quý Phụ huynh em ${familyLinkStudent?.name},\nCô Nguyễn Thị Hải Duyên gửi mã mời kết nối ứng dụng "Vườn Chữ Nở Hoa" để theo dõi các bài viết và nhận xét của con: ${code} (Hạn dùng 7 ngày). Quý phụ huynh đăng nhập tại Góc Gia Đình nhé!`;
+    const text = customMsg || `Kính gửi Quý Phụ huynh em ${familyLinkStudent?.name},\n${teacherName} gửi mã mời kết nối ứng dụng "Vườn Chữ Nở Hoa" để theo dõi các bài viết và nhận xét của con: ${code} (Hạn dùng 7 ngày). Quý phụ huynh đăng nhập tại Góc Gia Đình nhé!`;
     navigator.clipboard?.writeText(text);
     setCopiedInviteCode(code);
     setTimeout(() => setCopiedInviteCode(null), 3000);
@@ -940,7 +1011,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         body: JSON.stringify({
           name: newStudentName,
           avatar: newStudentAvatar,
-          className: `${TEACHER_CONFIG.className} – ${TEACHER_CONFIG.schoolShort}`
+          className: `${assignedClasses.find(c => c.id === selectedClassId)?.name || 'Lớp học'} – ${teacherSchool}`
         })
       });
       const data = await res.json();
@@ -955,13 +1026,17 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     }
   };
 
-  // Filtered students for Account Management Table
-  const accountStudentsList = localStudents.filter(st => {
+  // Filtered students for Account Management Table (restricted to teacher's scope)
+  const accountStudentsList = accessibleStudents.filter(st => {
+    if (selectedClassId !== 'all' && st.classId && st.classId !== selectedClassId) {
+      return false;
+    }
     const matchSearch = st.name.toLowerCase().includes(accountSearch.toLowerCase()) ||
                         st.id.toLowerCase().includes(accountSearch.toLowerCase()) ||
                         st.parentCode.toLowerCase().includes(accountSearch.toLowerCase());
-    if (accountFilter === 'active') return matchSearch && st.accountStatus !== 'locked';
+    if (accountFilter === 'active') return matchSearch && st.accountStatus !== 'locked' && st.accountStatus !== 'deleted';
     if (accountFilter === 'locked') return matchSearch && st.accountStatus === 'locked';
+    if (accountFilter === 'deleted') return matchSearch && st.accountStatus === 'deleted';
     return matchSearch;
   });
 
@@ -983,19 +1058,21 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           </button>
 
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white border-2 border-emerald-400 flex items-center justify-center text-2xl sm:text-3xl shadow-xs">
-            👩‍🏫
+            {teacherEmoji}
           </div>
           <div>
             <div className="flex items-center gap-2">
               <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-600 text-white">
-                {currentUser?.teacherRole === 'SUPER_ADMIN' ? '👑 Ban Quản Trị / Góc Giáo Viên' : '👩‍🏫 Góc Giáo Viên'}
+                {isSuperAdmin ? '👑 Ban Quản Trị / Góc Giáo Viên' : `${teacherEmoji} Góc Giáo Viên`}
               </span>
               <span className="text-xs text-stone-600 font-bold">
-                {currentUser?.teacherName || TEACHER_CONFIG.name} – {TEACHER_CONFIG.school}
+                {teacherName} – {teacherSchool}
               </span>
             </div>
             <h2 className="text-xl sm:text-2xl font-black text-emerald-950 font-display">
-              {currentUser?.teacherRole === 'SUPER_ADMIN' ? 'Không Gian Quản Lý Lớp Học & Đánh Giá Bài Làm' : TEACHER_CONFIG.tagline}
+              {isSuperAdmin 
+                ? 'Không Gian Quản Lý Lớp Học & Đánh Giá Bài Làm' 
+                : `${teacherName} – Lớp ${assignedClasses.find(c => c.id === selectedClassId)?.name || assignedClasses[0]?.name || '4B'}`}
             </h2>
           </div>
         </div>
@@ -1011,7 +1088,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 onChange={e => setSelectedClassId(e.target.value)}
                 className="text-xs font-bold bg-transparent border-0 text-emerald-950 focus:outline-hidden cursor-pointer"
               >
-                <option value="all">Tất cả lớp ({assignedClasses.length})</option>
+                {isSuperAdmin && (
+                  <option value="all">Tất cả lớp ({assignedClasses.length})</option>
+                )}
                 {assignedClasses.map(c => (
                   <option key={c.id} value={c.id}>{c.name} (Khối {c.grade})</option>
                 ))}
@@ -1019,8 +1098,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
             </div>
           )}
 
-          {/* Super Admin Switcher Button */}
-          {currentUser?.teacherRole === 'SUPER_ADMIN' && onGoToAdminSystem && (
+          {/* Super Admin Switcher Button (Chỉ hiển thị khi có quyền SUPER_ADMIN) */}
+          {isSuperAdmin && onGoToAdminSystem && (
             <button
               onClick={() => {
                 playPop(settings.soundEnabled);
@@ -1092,7 +1171,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
               }`}
             >
               <Users className="w-3.5 h-3.5" />
-              <span>Tài Khoản HS ({localStudents.length})</span>
+              <span>Tài Khoản HS ({accessibleStudents.filter(s => s.accountStatus !== 'deleted').length})</span>
             </button>
 
             <button
@@ -1119,7 +1198,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           mood="happy"
           size="sm"
           reducedMotion={settings.reducedMotion}
-          message={getTeacherGreeting(TEACHER_CONFIG.name, pendingCount)}
+          message={getTeacherGreeting(
+            teacherName,
+            pendingCount,
+            teacherSalutation,
+            assignedClasses.find(c => c.id === selectedClassId)?.name || assignedClasses[0]?.name
+          )}
         />
       </div>
 
@@ -1133,10 +1217,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 Cả lớp mình hôm nay
               </span>
               <div className="text-2xl sm:text-3xl font-black text-emerald-900 mt-1 font-display">
-                {localStudents.length} / 35
+                {accessibleStudents.length} học sinh
               </div>
               <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-                Đủ 35 học sinh theo danh sách
+                {assignedClasses.find(c => c.id === selectedClassId)?.name || (isSuperAdmin ? 'Toàn trường' : (assignedClasses[0]?.name || 'Lớp phụ trách'))}
               </p>
             </div>
 
@@ -1148,7 +1232,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 {completedCount} bài
               </div>
               <p className="text-[11px] text-amber-700 font-semibold mt-0.5">
-                {reviewedCount} bài cô đã nhận xét
+                {reviewedCount} bài {teacherSalutation} đã nhận xét
               </p>
             </div>
 
@@ -1166,7 +1250,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
             <div className="bg-white p-4 rounded-3xl border-2 border-rose-200 shadow-xs">
               <span className="text-xs font-extrabold text-stone-500 uppercase tracking-wide">
-                Những cây bút cần cô giúp
+                Những cây bút cần {teacherSalutation} giúp
               </span>
               <div className="text-2xl sm:text-3xl font-black text-rose-900 mt-1 font-display">
                 {needingHelpCount} em
@@ -1179,11 +1263,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
           {/* Main Grid: Student List on Left, Submissions / Reviews on Right */}
           <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-            {/* Left Column: 35 Students List (4 cols) */}
+            {/* Left Column: Students List (4 cols) */}
             <div className="lg:col-span-4 bg-white rounded-3xl border-2 border-stone-200 p-4 shadow-xs space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-stone-100">
                 <span className="font-extrabold text-xs uppercase tracking-wider text-stone-700">
-                  Danh sách 35 học sinh Lớp 3
+                  Danh sách {filteredStudents.length} học sinh {assignedClasses.find(c => c.id === selectedClassId)?.name || (isSuperAdmin ? 'toàn trường' : (assignedClasses[0]?.name || ''))}
                 </span>
                 {selectedStudent && (
                   <button
@@ -1437,10 +1521,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                           <div className="p-3.5 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-2.5">
                             <div className="flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 pb-2">
                               <div className="flex items-center gap-2">
-                                <span className="text-xl">👩‍🏫</span>
+                                <span className="text-xl">{teacherEmoji}</span>
                                 <div>
                                   <h4 className="font-black text-sm sm:text-base text-emerald-950 font-display">
-                                    Phiếu Nhận Xét & Đánh Giá Bài Viết – {currentUser?.teacherName || TEACHER_CONFIG.name}
+                                    Phiếu Nhận Xét & Đánh Giá Bài Viết – {teacherName}
                                   </h4>
                                   <p className="text-[11px] text-stone-500 font-semibold">
                                     Đánh giá thường xuyên theo định hướng phát triển năng lực (GDPT 2018)
@@ -1585,7 +1669,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                           <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-3">
                             <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
                               <span>✍️</span>
-                              <span>C. Lời nhận xét định tính của cô giáo (Tự do nhập & chỉnh sửa):</span>
+                              <span>C. Lời nhận xét định tính của {teacherSalutation} giáo (Tự do nhập & chỉnh sửa):</span>
                             </span>
 
                             <div className="space-y-3">
@@ -1630,7 +1714,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
                               <div>
                                 <label className="text-xs font-bold text-purple-900 block mb-1">
-                                  💌 4. Lời dặn dò của cô dành cho học sinh:
+                                  💌 4. Lời dặn dò của {teacherSalutation} dành cho học sinh:
                                 </label>
                                 <textarea
                                   rows={2}
@@ -1759,10 +1843,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         <div className="space-y-6 animate-fade-in">
           {/* Header Summary for Accounts */}
           {(() => {
-            const totalNonDeleted = localStudents.filter(s => s.accountStatus !== 'deleted').length;
-            const activeStudents = localStudents.filter(s => s.accountStatus !== 'deleted' && s.accountStatus !== 'locked').length;
-            const lockedStudents = localStudents.filter(s => s.accountStatus === 'locked').length;
-            const deletedStudents = localStudents.filter(s => s.accountStatus === 'deleted').length;
+            const totalNonDeleted = accessibleStudents.filter(s => s.accountStatus !== 'deleted').length;
+            const activeStudents = accessibleStudents.filter(s => s.accountStatus !== 'deleted' && s.accountStatus !== 'locked').length;
+            const lockedStudents = accessibleStudents.filter(s => s.accountStatus === 'locked').length;
+            const deletedStudents = accessibleStudents.filter(s => s.accountStatus === 'deleted').length;
 
             return (
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 sm:gap-4">
@@ -1771,10 +1855,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     Sĩ số lớp em
                   </span>
                   <div className="text-2xl sm:text-3xl font-black text-emerald-900 mt-1 font-display">
-                    {totalNonDeleted} / {localStudents.length}
+                    {totalNonDeleted} / {accessibleStudents.length}
                   </div>
                   <p className="text-[11px] text-emerald-700 font-semibold mt-0.5">
-                    {TEACHER_CONFIG.className} • {TEACHER_CONFIG.schoolShort}
+                    {assignedClasses.find(c => c.id === selectedClassId)?.name || (isSuperAdmin ? 'Toàn trường' : (assignedClasses[0]?.name || 'Lớp phụ trách'))} • {teacherSchool}
                   </p>
                 </div>
 
@@ -1838,7 +1922,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     accountFilter === 'all' ? 'bg-stone-800 text-white' : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
                   }`}
                 >
-                  Tất cả ({localStudents.length})
+                  Tất cả ({accessibleStudents.length})
                 </button>
                 <button
                   onClick={() => setAccountFilter('active')}
@@ -1846,7 +1930,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     accountFilter === 'active' ? 'bg-emerald-600 text-white' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
                   }`}
                 >
-                  Đang hoạt động ({localStudents.filter(s => s.accountStatus !== 'deleted' && s.accountStatus !== 'locked').length})
+                  Đang hoạt động ({accessibleStudents.filter(s => s.accountStatus !== 'deleted' && s.accountStatus !== 'locked').length})
                 </button>
                 <button
                   onClick={() => setAccountFilter('locked')}
@@ -1854,7 +1938,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     accountFilter === 'locked' ? 'bg-rose-600 text-white' : 'bg-rose-50 text-rose-800 hover:bg-rose-100'
                   }`}
                 >
-                  Tạm khóa ({localStudents.filter(s => s.accountStatus === 'locked').length})
+                  Tạm khóa ({accessibleStudents.filter(s => s.accountStatus === 'locked').length})
                 </button>
                 <button
                   onClick={() => setAccountFilter('deleted')}
@@ -1862,7 +1946,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     accountFilter === 'deleted' ? 'bg-stone-600 text-white' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
                   }`}
                 >
-                  Đã xóa ({localStudents.filter(s => s.accountStatus === 'deleted').length})
+                  Đã xóa ({accessibleStudents.filter(s => s.accountStatus === 'deleted').length})
                 </button>
               </div>
             </div>
@@ -2380,23 +2464,26 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           <div className="bg-white p-6 rounded-3xl border-2 border-emerald-300 shadow-lg space-y-5">
             <div className="flex items-center gap-3 border-b border-stone-100 pb-4">
               <div className="w-14 h-14 rounded-2xl bg-emerald-100 text-emerald-800 border-2 border-emerald-300 flex items-center justify-center text-3xl shadow-xs">
-                👩‍🏫
+                {teacherEmoji}
               </div>
               <div>
                 <div className="flex items-center gap-2">
                   <h3 className="text-xl font-black text-emerald-950 font-display">
-                    {currentUser?.teacherProfile?.name || currentUser?.teacherName || TEACHER_CONFIG.name}
+                    {teacherName}
                   </h3>
                   <span className={`text-[10px] font-black px-2 py-0.5 rounded-full ${
-                    currentUser?.teacherRole === 'SUPER_ADMIN' 
+                    isSuperAdmin 
                       ? 'bg-amber-100 text-amber-900 border border-amber-300' 
                       : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
                   }`}>
-                    {currentUser?.teacherRole === 'SUPER_ADMIN' ? '👑 SUPER_ADMIN' : '👩‍🏫 GIÁO VIÊN'}
+                    {isSuperAdmin ? '👑 SUPER_ADMIN' : `${teacherEmoji} GIÁO VIÊN`}
                   </span>
                 </div>
                 <p className="text-xs text-stone-500 font-medium mt-0.5">
-                  Mã GV: <strong className="text-stone-800">{currentUser?.teacherId || 'GV001'}</strong> • Tên đăng nhập: <strong className="text-stone-800">{currentUser?.teacherProfile?.username || 'haiduyen'}</strong>
+                  Mã GV: <strong className="text-stone-800">{teacherId}</strong> • Tên đăng nhập: <strong className="text-stone-800">{currentUser?.teacherProfile?.username || (teacherId === 'GV002' ? 'vanminh' : 'haiduyen')}</strong>
+                </p>
+                <p className="text-xs text-stone-500 font-medium mt-0.5">
+                  Lớp phụ trách: <strong className="text-stone-800">{assignedClasses.map(c => c.name).join(', ') || 'Chưa phân công'}</strong> • Trường: <strong className="text-stone-800">{teacherSchool}</strong>
                 </p>
               </div>
             </div>
@@ -2956,7 +3043,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 Phiếu Bàn Giao Mật Khẩu Học Sinh
               </h3>
               <p className="text-xs text-stone-500 font-medium">
-                {TEACHER_CONFIG.school} • {TEACHER_CONFIG.className}
+                {teacherSchool} • {assignedClasses.find(c => c.id === selectedClassId)?.name || resetModalData.student.className || 'Lớp phụ trách'}
               </p>
             </div>
 
@@ -2969,7 +3056,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
               <div className="bg-white p-3.5 rounded-xl border border-amber-200 text-center space-y-1">
                 <span className="text-xs text-stone-500 font-bold block uppercase tracking-wider">
-                  Mật khẩu mới (Hiển thị cho cô bàn giao)
+                  Mật khẩu mới (Hiển thị cho {teacherSalutation} bàn giao)
                 </span>
                 <span className="text-2xl font-black font-mono text-amber-900 tracking-wider">
                   {resetModalData.newPassword}
@@ -2983,8 +3070,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
               <div className="text-xs text-stone-600 space-y-1 pt-1">
                 <p>• Tên đăng nhập: <strong>{resetModalData.student.id}</strong> hoặc <strong>{resetModalData.student.username || resetModalData.student.id.toLowerCase()}</strong></p>
-                <p>• Lớp: <strong>{resetModalData.student.className || TEACHER_CONFIG.className}</strong></p>
-                <p>• Giáo viên chủ nhiệm: <strong>{TEACHER_CONFIG.name}</strong></p>
+                <p>• Lớp: <strong>{resetModalData.student.className || assignedClasses.find(c => c.id === selectedClassId)?.name || 'Lớp phụ trách'}</strong></p>
+                <p>• Giáo viên phụ trách: <strong>{teacherName}</strong></p>
                 <p>• Thời gian cấp: {new Date(resetModalData.issuedAt).toLocaleString('vi-VN')}</p>
               </div>
             </div>

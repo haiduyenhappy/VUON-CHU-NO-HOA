@@ -570,6 +570,32 @@ const SEED_SUBMISSIONS = [
     status: 'submitted',
     startedAt: new Date(Date.now() - 3600000 * 8).toISOString(),
     completedAt: new Date(Date.now() - 3600000 * 7).toISOString()
+  },
+  {
+    id: 'sub-seed-04',
+    studentId: 'HS041',
+    classId: 'L4B',
+    taskId: 'ASM-003',
+    taskTitle: 'Viết đoạn văn ngắn tả một con vật nuôi trong nhà mà em yêu quý',
+    gardenType: 'sac_mau',
+    volume: 1,
+    grade: 4,
+    isIndependentTest: false,
+    lifecycleStatus: 'CHO_NHAN_XET',
+    currentStep: 'da_nop',
+    lastActiveStepLabel: 'Bước 6: Đã nộp bài cho thầy',
+    initialOutline: [
+      { id: '1', section: 'Mở đoạn', content: 'Giới thiệu chú mèo Miu Miu mà em rất yêu quý.' },
+      { id: '2', section: 'Thân đoạn', content: 'Tả bộ lông vàng óng, đôi mắt bi ve và cử chỉ nũng nịu.' },
+      { id: '3', section: 'Kết đoạn', content: 'Tình cảm gắn bó của em với chú mèo.' }
+    ],
+    developedOutline: [],
+    firstDraft: 'Nhà em có nuôi một chú mèo mướp rất đáng yêu. Chú có bộ lông màu vàng sọc đen mượt mà...',
+    drafts: [],
+    finalContent: 'Nhà em có nuôi một chú mèo mướp rất đáng yêu, tên là Miu Miu. Toàn thân chú khoác bộ lông màu vàng cam óng ả điểm những sọc đen mềm mại như nhung. Đôi mắt Miu Miu tròn xoe, trong veo như hai hòn bi ve xanh biếc. Mỗi khi em đi học về, chú lại chạy ra cửa dụi đầu vào chân em kêu "meo meo" âu yếm. Em rất yêu quý chú mèo nhỏ này và luôn chăm sóc chú thật cẩn thận.',
+    status: 'submitted',
+    startedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
+    completedAt: new Date(Date.now() - 3600000 * 4).toISOString()
   }
 ];
 
@@ -666,6 +692,22 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     maxScore: 10,
     status: 'active',
     instructions: 'Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực.'
+  },
+  {
+    id: 'ASM-003',
+    classId: 'L4B',
+    teacherId: 'GV002',
+    teacherName: 'Thầy Trần Văn Minh',
+    title: 'Tả một con vật nuôi trong nhà mà em yêu quý',
+    prompt: 'Viết đoạn văn từ 4–5 câu tả một con vật nuôi trong nhà mà em yêu quý nhất.',
+    grade: 4,
+    genre: 'ta_do_vat',
+    gardenType: 'sac_mau',
+    assignedDate: '2026-10-22',
+    dueDate: '2026-10-30',
+    isExam: false,
+    status: 'active',
+    instructions: 'Các em chú ý quan sát nét đặc biệt của con vật và cách em chăm sóc nhé.'
   }
 ];
 
@@ -685,7 +727,7 @@ const SEED_AUDIT_LOGS: AuditLogItem[] = [
 ];
 
 let memoryDb: DatabaseStructure = {
-  students: INITIAL_STUDENTS.map(s => ({ ...s, classId: 'L3A' })),
+  students: INITIAL_STUDENTS.map(s => ({ ...s, classId: s.classId || 'L3A' })),
   submissions: SEED_SUBMISSIONS,
   teachers: SEED_TEACHERS,
   classes: SEED_CLASSES,
@@ -700,7 +742,7 @@ function loadDatabase(): DatabaseStructure {
     }
     if (!fs.existsSync(DB_FILE)) {
       const initialDb: DatabaseStructure = {
-        students: INITIAL_STUDENTS.map(s => ({ ...s, classId: 'L3A' })),
+        students: INITIAL_STUDENTS.map(s => ({ ...s, classId: s.classId || 'L3A' })),
         submissions: SEED_SUBMISSIONS,
         teachers: SEED_TEACHERS,
         classes: SEED_CLASSES,
@@ -769,11 +811,47 @@ function loadDatabase(): DatabaseStructure {
     // Ensure assignments exist
     if (!parsed.assignments || !Array.isArray(parsed.assignments)) {
       parsed.assignments = SEED_ASSIGNMENTS;
+    } else {
+      for (const sa of SEED_ASSIGNMENTS) {
+        if (!parsed.assignments.some((a: any) => a.id === sa.id)) {
+          parsed.assignments.push(sa);
+        }
+      }
     }
 
     // Ensure audit logs exist
     if (!parsed.auditLogs || !Array.isArray(parsed.auditLogs)) {
       parsed.auditLogs = SEED_AUDIT_LOGS;
+    }
+
+    // Merge missing initial students (e.g. HS041-HS045 for L4B)
+    if (!parsed.students || !Array.isArray(parsed.students)) {
+      parsed.students = INITIAL_STUDENTS.map(s => ({ ...s, classId: s.classId || 'L3A' }));
+    } else {
+      for (const initSt of INITIAL_STUDENTS) {
+        if (!parsed.students.some((s: any) => s.id === initSt.id)) {
+          parsed.students.push({
+            ...initSt,
+            classId: initSt.classId || 'L3A',
+            className: initSt.className || 'Lớp 3 – Trường TH Lê Đức Thọ',
+            username: initSt.id.toLowerCase(),
+            accountStatus: 'active',
+            lastLogin: 'Chưa đăng nhập',
+            linkedCaregivers: [
+              {
+                id: `cg-${initSt.id}-1`,
+                relation: 'Bố / Mẹ',
+                name: `Phụ huynh em ${initSt.name.split(' ').slice(-1)[0]}`,
+                phone: '09100' + initSt.id.replace(/[^0-9]/g, '').padStart(5, '0'),
+                code: initSt.parentCode,
+                status: 'active',
+                linkedAt: '2026-09-05'
+              }
+            ],
+            inviteCodes: []
+          });
+        }
+      }
     }
 
     // Normalize student accounts with classId and full caregiver connections
@@ -811,7 +889,7 @@ function loadDatabase(): DatabaseStructure {
         return {
           ...s,
           classId: s.classId || 'L3A',
-          className: s.className || 'Lớp 3 – Trường TH Lê Đức Thọ',
+          className: s.className || (s.classId === 'L4B' ? 'Lớp 4B – Trường TH Lê Đức Thọ' : 'Lớp 3 – Trường TH Lê Đức Thọ'),
           username: s.username || studentId.toLowerCase(),
           accountStatus: s.accountStatus || 'active',
           lastLogin: s.lastLogin || (idx === 0 ? 'Hôm nay 08:15' : idx === 1 ? 'Hôm qua 15:30' : 'Chưa đăng nhập'),
@@ -1073,15 +1151,38 @@ app.post('/api/auth', (req, res) => {
 
 // 4. Submissions
 app.get('/api/submissions', (req, res) => {
-  const { studentId, taskId } = req.query;
+  const { studentId, taskId, classId } = req.query;
   const db = loadDatabase();
-  let list = db.submissions;
+  let list = db.submissions || [];
+
+  const teacher = getAuthTeacher(req, db);
 
   if (studentId) {
     list = list.filter(s => s.studentId === studentId);
   }
   if (taskId) {
     list = list.filter(s => s.taskId === taskId);
+  }
+
+  // Teacher RBAC: If requester is a regular teacher (not SUPER_ADMIN), filter to assigned classes
+  if (teacher && teacher.role !== 'SUPER_ADMIN') {
+    const teacherClassIds = teacher.assignedClassIds || [];
+    const teacherStudentIds = new Set(
+      db.students
+        .filter(s => teacherClassIds.includes(s.classId || ''))
+        .map(s => s.id)
+    );
+    list = list.filter(s => {
+      if (s.classId && teacherClassIds.includes(s.classId)) return true;
+      return teacherStudentIds.has(s.studentId);
+    });
+  }
+
+  if (classId && typeof classId === 'string' && classId !== 'all') {
+    const classStudentIds = new Set(
+      db.students.filter(s => s.classId === classId).map(s => s.id)
+    );
+    list = list.filter(s => s.classId === classId || classStudentIds.has(s.studentId));
   }
 
   res.json({ submissions: list });
@@ -1280,8 +1381,7 @@ function getAuthTeacher(req: express.Request, db: DatabaseStructure): TeacherAcc
     if (found) return found;
   }
 
-  if (token === 'admin' || !authHeader) {
-    // Default Super Admin for local internal preview requests without explicit token
+  if (token === 'admin') {
     return db.teachers?.find(t => t.role === 'SUPER_ADMIN' && t.status === 'active') || null;
   }
 

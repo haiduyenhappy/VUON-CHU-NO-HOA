@@ -119,6 +119,13 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
     [submissions]
   );
 
+  // Helper to format teacher name dynamically without hardcoding "Cô giáo"
+  const getTeacherLabel = (rawName?: string) => {
+    if (!rawName) return student.classId === 'L4B' || student.className?.includes('4B') ? 'Thầy Trần Văn Minh' : `Cô giáo ${TEACHER_CONFIG.name}`;
+    if (rawName.startsWith('Thầy') || rawName.startsWith('Cô') || rawName.startsWith('Giáo viên')) return rawName;
+    return `Giáo viên ${rawName}`;
+  };
+
   // Helper to extract genuine skill score (teacher or AI evaluation)
   const getSubmissionSkillScore = (sub: Submission, skillId: WritingSkillId): { score: number; evalItem: any; evaluator: string; evidence?: string; comment?: string } | null => {
     const teacherEval = sub.teacherSkillEvaluations?.find(e => e.skillId === skillId);
@@ -126,7 +133,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
       return {
         score: teacherEval.score,
         evalItem: teacherEval,
-        evaluator: `Cô giáo ${sub.teacherFeedback?.teacherName || TEACHER_CONFIG.name}`,
+        evaluator: getTeacherLabel(sub.teacherFeedback?.teacherName),
         evidence: teacherEval.evidence,
         comment: teacherEval.comment || sub.teacherFeedback?.comment
       };
@@ -152,7 +159,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
 
     if (sub.teacherSkillEvaluations && sub.teacherSkillEvaluations.length > 0) {
       scores = sub.teacherSkillEvaluations.map(e => e.score);
-      evaluator = `Cô giáo ${sub.teacherFeedback?.teacherName || TEACHER_CONFIG.name}`;
+      evaluator = getTeacherLabel(sub.teacherFeedback?.teacherName);
       comment = sub.teacherFeedback?.comment;
     } else if (sub.aiSkillEvaluations && sub.aiSkillEvaluations.length > 0) {
       scores = sub.aiSkillEvaluations.map(e => e.score);
@@ -162,7 +169,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
       // Fallback only if marked reviewed with confirmed stars
       const base = (sub.teacherFeedback?.confirmedStars || 5) * 18;
       scores = [base];
-      evaluator = `Cô giáo ${sub.teacherFeedback?.teacherName || TEACHER_CONFIG.name}`;
+      evaluator = getTeacherLabel(sub.teacherFeedback?.teacherName);
       comment = sub.teacherFeedback?.comment;
     }
 
@@ -325,7 +332,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
               Hành Trình Của {settings.demoPrivacyMode ? student.demoName : student.name}
             </h1>
             <p className="text-xs sm:text-sm text-emerald-800 font-medium">
-              Chủ nhiệm: <strong>{TEACHER_CONFIG.name}</strong> • Mã kết nối gia đình: <strong>{student.parentCode}</strong>
+              Chủ nhiệm: <strong>{getTeacherLabel()}</strong> • Mã kết nối gia đình: <strong>{student.parentCode}</strong>
             </p>
           </div>
         </div>
@@ -431,7 +438,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
               <span className="text-xs text-stone-500 font-medium ml-1">lời dặn</span>
             </div>
             <p className="text-[11px] text-stone-600 mt-1 font-medium">
-              Lời khen và hướng dẫn từ {TEACHER_CONFIG.name}
+              Lời khen và hướng dẫn từ {getTeacherLabel()}
             </p>
           </div>
 

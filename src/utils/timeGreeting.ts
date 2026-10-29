@@ -62,9 +62,28 @@ export function getStudentGreeting(studentName: string, flowersEarned: number): 
   return `${greetingTitle} ${studentName}! Chúc em một ${periodLabel} tràn đầy cảm hứng. Hôm nay con đã nở được ${flowersEarned} bông hoa chữ đẹp! Em hãy chọn nhiệm vụ để gieo hạt ý tưởng mới nhé!`;
 }
 
-export function getTeacherGreeting(teacherName: string, pendingCount: number): string {
+export function getTeacherGreeting(
+  teacherName: string,
+  pendingCount: number,
+  salutation?: 'thầy' | 'cô',
+  className?: string
+): string {
   const { greetingTitle, periodLabel } = getVietnamTimePeriod();
-  return `Kính ${greetingTitle.toLowerCase()} cô ${teacherName}! Chúc cô một ${periodLabel} tràn đầy năng lượng. Hôm nay lớp 3 có ${pendingCount > 0 ? `${pendingCount} bài viết mới đang chờ cô trao gửi nhận xét yêu thương` : 'các bạn đang hăng say tìm ý và hoàn thiện bài viết'}!`;
+  const sal = salutation || (teacherName.toLowerCase().includes('thầy') ? 'thầy' : 'cô');
+  const pronounCap = sal === 'thầy' ? 'Thầy' : 'Cô';
+  const pronounLow = sal === 'thầy' ? 'thầy' : 'cô';
+  
+  const cleanName = teacherName.startsWith('Thầy ') || teacherName.startsWith('Cô ')
+    ? teacherName
+    : `${pronounCap} ${teacherName}`;
+
+  const classText = className ? className : 'lớp mình';
+
+  return `Kính ${greetingTitle.toLowerCase()} ${cleanName}! Chúc ${pronounLow} một ${periodLabel} tràn đầy năng lượng và niềm vui giảng dạy. Hôm nay ${classText} có ${
+    pendingCount > 0 
+      ? `${pendingCount} bài viết mới đang chờ ${pronounLow} trao gửi nhận xét yêu thương!` 
+      : `các em học sinh đang hăng say tìm ý và hoàn thiện bài viết!`
+  }`;
 }
 
 export function getFamilyGreeting(studentName: string, flowersCount: number): string {
