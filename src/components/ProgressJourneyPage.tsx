@@ -24,6 +24,8 @@ import {
   Smile,
   ShieldCheck,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   TrendingUp,
   BarChart3,
   ListOrdered,
@@ -62,18 +64,25 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
   // Filter for Submissions list (Zone 4)
   const [statusFilter, setStatusFilter] = useState<'all' | 'DANG_LAM' | 'CHO_NHAN_XET' | 'DA_HOAN_THANH'>('all');
 
-  // Filter for Line Chart (Zone 2)
+  // Expanded essay card IDs (Zone 4: independent expand/collapse per submission)
+  const [expandedSubIds, setExpandedSubIds] = useState<Record<string, boolean>>({});
+
+  // Filter for Bar Chart (Zone 2)
   const [selectedSkillFilter, setSelectedSkillFilter] = useState<WritingSkillId | 'all'>('all');
-  const [timeRangeFilter, setTimeRangeFilter] = useState<'all' | 'month' | 'semester'>('all');
-  const [hoveredPoint, setHoveredPoint] = useState<{
+  const [timeRangeFilter, setTimeRangeFilter] = useState<'all' | 'semester1' | 'semester2' | 'month'>('all');
+  const [barChartMode, setBarChartMode] = useState<'composite' | 'grouped'>('composite');
+  
+  // Selected Bar Detail for inline viewing (non-blocking, mobile-friendly)
+  const [selectedBarDetail, setSelectedBarDetail] = useState<{
     subId: string;
     subTitle: string;
     date: string;
     skillName: string;
     score: number;
     levelLabel: string;
-    x: number;
-    y: number;
+    evaluator: string;
+    comment?: string;
+    evidence?: string;
   } | null>(null);
 
   useEffect(() => {
@@ -110,19 +119,97 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
     [submissions]
   );
 
-  // Submissions for Line Chart (Zone 2)
+  // Helper to extract genuine skill score (teacher or AI evaluation)
+  const getSubmissionSkillScore = (sub: Submission, skillId: WritingSkillId): { score: number; evalItem: any; evaluator: string; evidence?: string; comment?: string } | null => {
+    const teacherEval = sub.teacherSkillEvaluations?.find(e => e.skillId === skillId);
+    if (teacherEval && typeof teacherEval.score === 'number') {
+      return {
+        score: teacherEval.score,
+        evalItem: teacherEval,
+        evaluator: `Cô giáo ${sub.teacherFeedback?.teacherName || TEACHER_CONFIG.name}`,
+        evidence: teacherEval.evidence,
+        comment: teacherEval.comment || sub.teacherFeedback?.comment
+      };
+    }
+    const aiEval = sub.aiSkillEvaluations?.find(e => e.skillId === skillId);
+    if (aiEval && typeof aiEval.score === 'number') {
+      return {
+        score: aiEval.score,
+        evalItem: aiEval,
+        evaluator: 'AI trợ lý phân tích',
+        evidence: aiEval.evidence,
+        comment: sub.aiFeedback?.flowerPraise
+      };
+    }
+    return null;
+  };
+
+  // Helper to compute genuine composite score (average of evaluated skills only)
+  const getSubmissionCompositeScore = (sub: Submission): { score: number; count: number; evaluator: string; comment?: string } | null => {
+    let scores: number[] = [];
+    let evaluator = 'Chưa đánh giá';
+    let comment = sub.teacherFeedback?.comment;
+
+    if (sub.teacherSkillEvaluations && sub.teacherSkillEvaluations.length > 0) {
+      scores = sub.teacherSkillEvaluations.map(e => e.score);
+      evaluator = `Cô giáo ${sub.teacherFeedback?.teacherName || TEACHER_CONFIG.name}`;
+      comment = sub.teacherFeedback?.comment;
+    } else if (sub.aiSkillEvaluations && sub.aiSkillEvaluations.length > 0) {
+      scores = sub.aiSkillEvaluations.map(e => e.score);
+      evaluator = 'AI trợ lý phân tích';
+      comment = sub.aiFeedback?.flowerPraise;
+    } else if (sub.status === 'reviewed') {
+      // Fallback only if marked reviewed with confirmed stars
+      const base = (sub.teacherFeedback?.confirmedStars || 5) * 18;
+      scores = [base];
+      evaluator = `Cô giáo ${sub.teacherFeedback?.teacherName || TEACHER_CONFIG.name}`;
+      comment = sub.teacherFeedback?.comment;
+    }
+
+    if (scores.length === 0) return null;
+    const avg = Math.round(scores.reduce((a, b) => a + b, 0) / scores.length);
+    return { score: avg, count: scores.length, evaluator, comment };
+  };
+
+  // Submissions for Vertical Bar Chart (Zone 2)
+  // RULE: Only include submissions with actual evaluation data (teacher or AI), no unassessed drafts, no fake scores!
   const chartSubmissions = useMemo(() => {
-    const list = [...submissions].reverse(); // Oldest to newest
+    const list = [...submissions].reverse().filter(s => {
+      const hasTeacher = s.teacherSkillEvaluations && s.teacherSkillEvaluations.length > 0;
+      const hasAi = s.aiSkillEvaluations && s.aiSkillEvaluations.length > 0;
+      const isReviewed = s.status === 'reviewed';
+      return hasTeacher || hasAi || isReviewed;
+    });
+
     if (timeRangeFilter === 'month') {
       const monthAgo = Date.now() - 30 * 86400000;
       return list.filter(s => new Date(s.startedAt).getTime() >= monthAgo);
     }
-    if (timeRangeFilter === 'semester') {
-      const semesterAgo = Date.now() - 120 * 86400000;
-      return list.filter(s => new Date(s.startedAt).getTime() >= semesterAgo);
+    if (timeRangeFilter === 'semester1') {
+      // Semester 1: Sept (8), Oct (9), Nov (10), Dec (11), Jan (0)
+      return list.filter(s => {
+        const m = new Date(s.startedAt).getMonth();
+        return m >= 8 || m === 0;
+      });
+    }
+    if (timeRangeFilter === 'semester2') {
+      // Semester 2: Feb (1), Mar (2), Apr (3), May (4)
+      return list.filter(s => {
+        const m = new Date(s.startedAt).getMonth();
+        return m >= 1 && m <= 4;
+      });
     }
     return list;
   }, [submissions, timeRangeFilter]);
+
+  // Toggle independent essay expansion
+  const toggleExpandSub = (subId: string) => {
+    playPop(settings.soundEnabled);
+    setExpandedSubIds(prev => ({
+      ...prev,
+      [subId]: !prev[subId]
+    }));
+  };
 
   // Filtered submissions for Zone 4 list
   const filteredSubmissions = useMemo(() => {
@@ -401,18 +488,18 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
       </div>
 
       {/* ========================================================================= */}
-      {/* KHU VỰC 2: BIỂU ĐỒ TIẾN BỘ (BIỂU ĐỒ ĐƯỜNG)                                */}
+      {/* KHU VỰC 2: BIỂU ĐỒ CỘT TIẾN BỘ THEO THỜI GIAN                             */}
       {/* ========================================================================= */}
       <div className="bg-white rounded-3xl border-2 border-emerald-200 p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-stone-100 pb-3">
           <div className="flex items-center gap-2">
-            <span className="text-xl">📈</span>
+            <span className="text-xl">📊</span>
             <div>
               <h3 className="text-base sm:text-lg font-black text-stone-900 font-display">
-                Khu vực 2: Biểu Đồ Đường Tiến Bộ Theo Thời Gian
+                Khu vực 2: Biểu Đồ Cột Tiến Bộ Theo Thời Gian
               </h3>
               <p className="text-xs text-stone-500 font-medium">
-                Theo dõi sự biến thiên chỉ số năng lực qua từng bài viết
+                Theo dõi chỉ số đánh giá năng lực viết qua từng bài (GDPT 2018)
               </p>
             </div>
           </div>
@@ -421,30 +508,52 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-xs font-bold text-stone-500 mr-1">Thời gian:</span>
             <button
-              onClick={() => setTimeRangeFilter('all')}
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setTimeRangeFilter('all');
+              }}
               className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
                 timeRangeFilter === 'all'
-                  ? 'bg-stone-800 text-white'
+                  ? 'bg-stone-800 text-white shadow-xs'
                   : 'bg-stone-100 text-stone-600 hover:bg-stone-200'
               }`}
             >
               Cả năm học
             </button>
             <button
-              onClick={() => setTimeRangeFilter('semester')}
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setTimeRangeFilter('semester1');
+              }}
               className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
-                timeRangeFilter === 'semester'
-                  ? 'bg-emerald-600 text-white'
+                timeRangeFilter === 'semester1'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
               Học kỳ I
             </button>
             <button
-              onClick={() => setTimeRangeFilter('month')}
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setTimeRangeFilter('semester2');
+              }}
+              className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
+                timeRangeFilter === 'semester2'
+                  ? 'bg-emerald-600 text-white shadow-xs'
+                  : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+              }`}
+            >
+              Học kỳ II
+            </button>
+            <button
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setTimeRangeFilter('month');
+              }}
               className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
                 timeRangeFilter === 'month'
-                  ? 'bg-emerald-600 text-white'
+                  ? 'bg-emerald-600 text-white shadow-xs'
                   : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
               }`}
             >
@@ -453,184 +562,449 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
           </div>
         </div>
 
-        {/* Skill Filter Chips */}
-        <div className="flex items-center gap-1.5 flex-wrap pt-1">
-          <span className="text-xs font-bold text-stone-600 mr-1">Chọn kỹ năng:</span>
-          <button
-            onClick={() => setSelectedSkillFilter('all')}
-            className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
-              selectedSkillFilter === 'all'
-                ? 'bg-emerald-700 text-white shadow-xs'
-                : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
-            }`}
-          >
-            Tất cả 7 kỹ năng
-          </button>
-          {WRITING_SKILLS_META.map(m => (
+        {/* Skill Filter Chips & Mode Toggle */}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-xs font-bold text-stone-600 mr-1">Chọn kỹ năng:</span>
             <button
-              key={m.id}
-              onClick={() => setSelectedSkillFilter(m.id)}
-              className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
-                selectedSkillFilter === m.id
-                  ? 'bg-emerald-600 text-white shadow-xs'
-                  : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border border-stone-200'
+              onClick={() => {
+                playPop(settings.soundEnabled);
+                setSelectedSkillFilter('all');
+              }}
+              className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
+                selectedSkillFilter === 'all'
+                  ? 'bg-emerald-700 text-white shadow-xs'
+                  : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
               }`}
             >
-              <span>{m.icon}</span>
-              <span>{m.name}</span>
+              Tất cả 7 kỹ năng
             </button>
-          ))}
+            {WRITING_SKILLS_META.map(m => (
+              <button
+                key={m.id}
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setSelectedSkillFilter(m.id);
+                }}
+                className={`flex items-center gap-1 px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
+                  selectedSkillFilter === m.id
+                    ? 'bg-emerald-600 text-white shadow-xs'
+                    : 'bg-stone-50 hover:bg-stone-100 text-stone-700 border border-stone-200'
+                }`}
+              >
+                <span>{m.icon}</span>
+                <span>{m.name}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Grouped vs Composite Toggle for "All Skills" */}
+          {selectedSkillFilter === 'all' && (
+            <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-2xl border border-stone-200 text-xs font-bold">
+              <button
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setBarChartMode('composite');
+                }}
+                className={`px-2.5 py-1 rounded-xl transition-all ${
+                  barChartMode === 'composite'
+                    ? 'bg-white text-emerald-900 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                📊 Cột tổng hợp
+              </button>
+              <button
+                onClick={() => {
+                  playPop(settings.soundEnabled);
+                  setBarChartMode('grouped');
+                }}
+                className={`px-2.5 py-1 rounded-xl transition-all ${
+                  barChartMode === 'grouped'
+                    ? 'bg-white text-emerald-900 shadow-xs'
+                    : 'text-stone-600 hover:text-stone-900'
+                }`}
+              >
+                📶 Cột nhóm 7 kỹ năng
+              </button>
+            </div>
+          )}
         </div>
 
-        {/* SVG Line Chart */}
-        <div className="relative pt-3 pb-2">
+        {/* Vertical Bar Chart Graphic */}
+        <div className="relative pt-3 pb-2 space-y-3">
           {chartSubmissions.length > 0 ? (
             <div className="w-full overflow-x-auto">
-              <div className="min-w-[500px]">
-                <svg viewBox="0 0 600 240" className="w-full h-56">
-                  {/* Grid lines and Qualitative Zone Labels */}
-                  <g className="opacity-30">
-                    <line x1="60" y1="30" x2="570" y2="30" stroke="#10b981" strokeDasharray="3 3" />
-                    <line x1="60" y1="80" x2="570" y2="80" stroke="#0ea5e9" strokeDasharray="3 3" />
-                    <line x1="60" y1="130" x2="570" y2="130" stroke="#f59e0b" strokeDasharray="3 3" />
-                    <line x1="60" y1="180" x2="570" y2="180" stroke="#f43f5e" strokeDasharray="3 3" />
-                  </g>
+              {(() => {
+                const chartWidth = Math.max(560, chartSubmissions.length * 120 + 120);
+                const chartHeight = 255;
+                const startX = 95;
+                const endX = chartWidth - 30;
+                const slotWidth = (endX - startX) / Math.max(1, chartSubmissions.length);
 
-                  {/* Y-Axis Labels */}
-                  <text x="50" y="34" textAnchor="end" fontSize="10" fill="#047857" fontWeight="bold">Xuất sắc (90)</text>
-                  <text x="50" y="84" textAnchor="end" fontSize="10" fill="#0284c7" fontWeight="bold">Tốt (75)</text>
-                  <text x="50" y="134" textAnchor="end" fontSize="10" fill="#d97706" fontWeight="bold">Tiến bộ (60)</text>
-                  <text x="50" y="184" textAnchor="end" fontSize="10" fill="#e11d48" fontWeight="bold">Rèn thêm (45)</text>
+                return (
+                  <div className="min-w-[540px]">
+                    <svg viewBox={`0 0 ${chartWidth} ${chartHeight}`} className="w-full h-64">
+                      {/* Grid guidelines for 4 qualitative levels */}
+                      <g className="opacity-35">
+                        {/* 90 - Xuất sắc */}
+                        <line x1="85" y1="42.5" x2={chartWidth - 20} y2="42.5" stroke="#10b981" strokeDasharray="3 3" strokeWidth="1.2" />
+                        {/* 75 - Tốt */}
+                        <line x1="85" y1="68.75" x2={chartWidth - 20} y2="68.75" stroke="#0ea5e9" strokeDasharray="3 3" strokeWidth="1.2" />
+                        {/* 60 - Tiến bộ */}
+                        <line x1="85" y1="95" x2={chartWidth - 20} y2="95" stroke="#f59e0b" strokeDasharray="3 3" strokeWidth="1.2" />
+                        {/* 45 - Rèn thêm */}
+                        <line x1="85" y1="121.25" x2={chartWidth - 20} y2="121.25" stroke="#f43f5e" strokeDasharray="3 3" strokeWidth="1.2" />
+                      </g>
 
-                  {/* Axes lines */}
-                  <line x1="60" y1="20" x2="60" y2="200" stroke="#cbd5e1" strokeWidth="2" />
-                  <line x1="60" y1="200" x2="570" y2="200" stroke="#cbd5e1" strokeWidth="2" />
+                      {/* Y-Axis Labels */}
+                      <text x="78" y="46" textAnchor="end" fontSize="10" fill="#047857" fontWeight="bold">Xuất sắc (90)</text>
+                      <text x="78" y="72" textAnchor="end" fontSize="10" fill="#0284c7" fontWeight="bold">Tốt (75)</text>
+                      <text x="78" y="98" textAnchor="end" fontSize="10" fill="#d97706" fontWeight="bold">Tiến bộ (60)</text>
+                      <text x="78" y="124" textAnchor="end" fontSize="10" fill="#e11d48" fontWeight="bold">Rèn thêm (45)</text>
+                      <text x="78" y="204" textAnchor="end" fontSize="10" fill="#64748b" fontWeight="bold">0</text>
 
-                  {/* Render Lines for each skill */}
-                  {WRITING_SKILLS_META.filter(m => selectedSkillFilter === 'all' || selectedSkillFilter === m.id).map((meta, metaIdx) => {
-                    const colorMap: Record<string, string> = {
-                      hieu_de: '#10b981',
-                      tim_y: '#f59e0b',
-                      sap_xep_y: '#0284c7',
-                      dien_dat: '#6366f1',
-                      chinh_ta_dau_cau: '#0d9488',
-                      cam_xuc_sang_tao: '#f43f5e',
-                      tu_chinh_sua: '#a855f7'
-                    };
-                    const strokeColor = colorMap[meta.id] || '#10b981';
+                      {/* Axes lines */}
+                      <line x1="85" y1="20" x2="85" y2="200" stroke="#cbd5e1" strokeWidth="2" />
+                      <line x1="85" y1="200" x2={chartWidth - 20} y2="200" stroke="#cbd5e1" strokeWidth="2" />
 
-                    const points = chartSubmissions.map((sub, sIdx) => {
-                      const totalSteps = Math.max(1, chartSubmissions.length - 1);
-                      const x = chartSubmissions.length === 1 
-                        ? 315 
-                        : 90 + (sIdx / totalSteps) * 450;
-                      
-                      // Score calculation for this skill on this submission
-                      const evalItem = sub.teacherSkillEvaluations?.find(e => e.skillId === meta.id) ||
-                                       sub.aiSkillEvaluations?.find(e => e.skillId === meta.id);
-                      let score = evalItem?.score;
-                      if (!score) {
-                        // Estimate score according to submission status and index
-                        const base = 70 + (metaIdx % 4) * 5;
-                        score = Math.min(95, base + sIdx * 6);
-                      }
-                      // Map score (40 to 100) to y coordinate (190 to 30)
-                      const clamped = Math.max(40, Math.min(100, score));
-                      const y = 200 - ((clamped - 40) / 60) * 170;
-                      return { x, y, score, sub };
-                    });
+                      {/* Render Vertical Bars */}
+                      {chartSubmissions.map((sub, sIdx) => {
+                        const subCenter = startX + sIdx * slotWidth + slotWidth / 2;
+                        const subDate = new Date(sub.startedAt).toLocaleDateString('vi-VN');
 
-                    const pathD = points.length === 1
-                      ? `M ${points[0].x} ${points[0].y}`
-                      : points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`, '');
+                        // CASE 1: Single skill selected
+                        if (selectedSkillFilter !== 'all') {
+                          const meta = WRITING_SKILLS_META.find(m => m.id === selectedSkillFilter);
+                          const skillData = getSubmissionSkillScore(sub, selectedSkillFilter);
+                          const skillColor = meta ? {
+                            hieu_de: '#10b981',
+                            tim_y: '#f59e0b',
+                            sap_xep_y: '#0284c7',
+                            dien_dat: '#6366f1',
+                            chinh_ta_dau_cau: '#0d9488',
+                            cam_xuc_sang_tao: '#f43f5e',
+                            tu_chinh_sua: '#a855f7'
+                          }[meta.id] || '#10b981' : '#10b981';
 
-                    return (
-                      <g key={meta.id}>
-                        {points.length > 1 && (
-                          <path
-                            d={pathD}
-                            fill="none"
-                            stroke={strokeColor}
-                            strokeWidth={selectedSkillFilter === meta.id ? "3.5" : "2"}
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            opacity={selectedSkillFilter === 'all' ? 0.75 : 1}
-                          />
-                        )}
-                        {points.map((pt, pIdx) => {
-                          const { label } = getLevelFromScore(pt.score);
+                          if (!skillData) {
+                            return (
+                              <g key={sub.id}>
+                                <text x={subCenter} y="190" textAnchor="middle" fontSize="10" fill="#94a3b8" fontStyle="italic">
+                                  Chưa chấm
+                                </text>
+                                <text x={subCenter} y="218" textAnchor="middle" fontSize="11" fill="#1e293b" fontWeight="bold">
+                                  Bài {sIdx + 1}
+                                </text>
+                                <text x={subCenter} y="232" textAnchor="middle" fontSize="9" fill="#64748b">
+                                  {subDate}
+                                </text>
+                              </g>
+                            );
+                          }
+
+                          const score = skillData.score;
+                          const barHeight = Math.max(6, (score / 100) * 175);
+                          const barY = 200 - barHeight;
+                          const barWidth = Math.min(46, slotWidth * 0.45);
+                          const barX = subCenter - barWidth / 2;
+                          const { label } = getLevelFromScore(score);
+
                           return (
-                            <circle
-                              key={pIdx}
-                              cx={pt.x}
-                              cy={pt.y}
-                              r={selectedSkillFilter === meta.id ? "5.5" : "4"}
-                              fill={strokeColor}
-                              stroke="#ffffff"
-                              strokeWidth="2"
-                              className="cursor-pointer hover:scale-125 transition-transform"
-                              onMouseEnter={() => {
-                                setHoveredPoint({
-                                  subId: pt.sub.id,
-                                  subTitle: pt.sub.taskTitle,
-                                  date: new Date(pt.sub.startedAt).toLocaleDateString('vi-VN'),
-                                  skillName: meta.name,
-                                  score: pt.score,
+                            <g 
+                              key={sub.id} 
+                              className="cursor-pointer group"
+                              onClick={() => {
+                                playPop(settings.soundEnabled);
+                                setSelectedBarDetail({
+                                  subId: sub.id,
+                                  subTitle: sub.taskTitle,
+                                  date: subDate,
+                                  skillName: meta?.name || 'Kỹ năng',
+                                  score,
                                   levelLabel: label,
-                                  x: pt.x,
-                                  y: pt.y
+                                  evaluator: skillData.evaluator,
+                                  comment: skillData.comment,
+                                  evidence: skillData.evidence
                                 });
                               }}
-                              onMouseLeave={() => setHoveredPoint(null)}
-                            />
+                            >
+                              <rect
+                                x={barX}
+                                y={barY}
+                                width={barWidth}
+                                height={barHeight}
+                                fill={skillColor}
+                                rx="5"
+                                className="transition-all duration-300 group-hover:opacity-90 group-hover:brightness-110"
+                              />
+                              <text
+                                x={subCenter}
+                                y={barY - 6}
+                                textAnchor="middle"
+                                fontSize="11"
+                                fontWeight="bold"
+                                fill={skillColor}
+                              >
+                                {score}
+                              </text>
+                              <text x={subCenter} y="218" textAnchor="middle" fontSize="11" fill="#1e293b" fontWeight="bold">
+                                Bài {sIdx + 1}
+                              </text>
+                              <text x={subCenter} y="232" textAnchor="middle" fontSize="9" fill="#64748b">
+                                {subDate}
+                              </text>
+                            </g>
                           );
-                        })}
-                      </g>
-                    );
-                  })}
+                        }
 
-                  {/* X-Axis Submission Labels */}
-                  {chartSubmissions.map((sub, sIdx) => {
-                    const totalSteps = Math.max(1, chartSubmissions.length - 1);
-                    const x = chartSubmissions.length === 1 
-                      ? 315 
-                      : 90 + (sIdx / totalSteps) * 450;
-                    return (
-                      <g key={sub.id}>
-                        <text
-                          x={x}
-                          y="220"
-                          textAnchor="middle"
-                          fontSize="10"
-                          fill="#475569"
-                          fontWeight="bold"
-                        >
-                          Bài {sIdx + 1}
-                        </text>
-                      </g>
-                    );
-                  })}
-                </svg>
-              </div>
+                        // CASE 2A: All skills - Composite Bar Mode
+                        if (barChartMode === 'composite') {
+                          const comp = getSubmissionCompositeScore(sub);
+                          if (!comp) {
+                            return (
+                              <g key={sub.id}>
+                                <text x={subCenter} y="190" textAnchor="middle" fontSize="10" fill="#94a3b8" fontStyle="italic">
+                                  Chưa chấm
+                                </text>
+                                <text x={subCenter} y="218" textAnchor="middle" fontSize="11" fill="#1e293b" fontWeight="bold">
+                                  Bài {sIdx + 1}
+                                </text>
+                                <text x={subCenter} y="232" textAnchor="middle" fontSize="9" fill="#64748b">
+                                  {subDate}
+                                </text>
+                              </g>
+                            );
+                          }
+
+                          const score = comp.score;
+                          const barHeight = Math.max(6, (score / 100) * 175);
+                          const barY = 200 - barHeight;
+                          const barWidth = Math.min(46, slotWidth * 0.45);
+                          const barX = subCenter - barWidth / 2;
+                          const { label } = getLevelFromScore(score);
+
+                          // Color by qualitative performance level
+                          const barColor = score >= 90 ? '#059669' : score >= 75 ? '#0284c7' : score >= 60 ? '#d97706' : '#e11d48';
+
+                          return (
+                            <g 
+                              key={sub.id} 
+                              className="cursor-pointer group"
+                              onClick={() => {
+                                playPop(settings.soundEnabled);
+                                setSelectedBarDetail({
+                                  subId: sub.id,
+                                  subTitle: sub.taskTitle,
+                                  date: subDate,
+                                  skillName: 'Tổng hợp 7 kỹ năng viết',
+                                  score,
+                                  levelLabel: label,
+                                  evaluator: comp.evaluator,
+                                  comment: comp.comment || 'Chỉ số trung bình các tiêu chí đánh giá kỹ năng viết.'
+                                });
+                              }}
+                            >
+                              <rect
+                                x={barX}
+                                y={barY}
+                                width={barWidth}
+                                height={barHeight}
+                                fill={barColor}
+                                rx="5"
+                                className="transition-all duration-300 group-hover:opacity-90 group-hover:brightness-110"
+                              />
+                              <text
+                                x={subCenter}
+                                y={barY - 6}
+                                textAnchor="middle"
+                                fontSize="11"
+                                fontWeight="bold"
+                                fill={barColor}
+                              >
+                                {score}
+                              </text>
+                              <text x={subCenter} y="218" textAnchor="middle" fontSize="11" fill="#1e293b" fontWeight="bold">
+                                Bài {sIdx + 1}
+                              </text>
+                              <text x={subCenter} y="232" textAnchor="middle" fontSize="9" fill="#64748b">
+                                {subDate}
+                              </text>
+                            </g>
+                          );
+                        }
+
+                        // CASE 2B: All skills - Grouped Columns Mode (7 Bars Side-by-Side per Submission)
+                        const groupWidth = Math.min(slotWidth * 0.85, 126);
+                        const singleBarWidth = Math.max(6, Math.floor((groupWidth - 6 * 2) / 7));
+                        const groupStartX = subCenter - (7 * singleBarWidth + 6 * 2) / 2;
+
+                        const skillColors: Record<string, string> = {
+                          hieu_de: '#10b981',
+                          tim_y: '#f59e0b',
+                          sap_xep_y: '#0284c7',
+                          dien_dat: '#6366f1',
+                          chinh_ta_dau_cau: '#0d9488',
+                          cam_xuc_sang_tao: '#f43f5e',
+                          tu_chinh_sua: '#a855f7'
+                        };
+
+                        return (
+                          <g key={sub.id}>
+                            {WRITING_SKILLS_META.map((meta, mIdx) => {
+                              const skillData = getSubmissionSkillScore(sub, meta.id);
+                              const subX = groupStartX + mIdx * (singleBarWidth + 2);
+                              const color = skillColors[meta.id] || '#10b981';
+
+                              if (!skillData) {
+                                return (
+                                  <rect
+                                    key={meta.id}
+                                    x={subX}
+                                    y={196}
+                                    width={singleBarWidth}
+                                    height={4}
+                                    fill="#e2e8f0"
+                                    rx="1"
+                                  />
+                                );
+                              }
+
+                              const score = skillData.score;
+                              const barHeight = Math.max(4, (score / 100) * 175);
+                              const barY = 200 - barHeight;
+                              const { label } = getLevelFromScore(score);
+
+                              return (
+                                <rect
+                                  key={meta.id}
+                                  x={subX}
+                                  y={barY}
+                                  width={singleBarWidth}
+                                  height={barHeight}
+                                  fill={color}
+                                  rx="2"
+                                  className="cursor-pointer hover:opacity-80 transition-opacity"
+                                  onClick={() => {
+                                    playPop(settings.soundEnabled);
+                                    setSelectedBarDetail({
+                                      subId: sub.id,
+                                      subTitle: sub.taskTitle,
+                                      date: subDate,
+                                      skillName: meta.name,
+                                      score,
+                                      levelLabel: label,
+                                      evaluator: skillData.evaluator,
+                                      comment: skillData.comment,
+                                      evidence: skillData.evidence
+                                    });
+                                  }}
+                                >
+                                  <title>{`${meta.name}: ${score}đ (${label})`}</title>
+                                </rect>
+                              );
+                            })}
+                            <text x={subCenter} y="218" textAnchor="middle" fontSize="11" fill="#1e293b" fontWeight="bold">
+                              Bài {sIdx + 1}
+                            </text>
+                            <text x={subCenter} y="232" textAnchor="middle" fontSize="9" fill="#64748b">
+                              {subDate}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  </div>
+                );
+              })()}
             </div>
           ) : (
-            <div className="p-8 text-center text-stone-400 italic">
-              Chưa có dữ liệu bài viết trong khoảng thời gian này.
+            <div className="p-8 text-center text-stone-400 italic bg-stone-50 rounded-2xl border border-dashed border-stone-200">
+              Chưa có dữ liệu bài viết được đánh giá trong khoảng thời gian này.
             </div>
           )}
 
-          {/* Interactive Tooltip */}
-          {hoveredPoint && (
-            <div 
-              className="absolute z-20 pointer-events-none bg-stone-900 text-white text-xs p-2.5 rounded-xl shadow-lg border border-stone-700 animate-fade-in"
-              style={{
-                left: `${Math.min(480, Math.max(20, (hoveredPoint.x / 600) * 100))}%`,
-                top: `${hoveredPoint.y - 45}px`
-              }}
-            >
-              <div className="font-extrabold text-amber-300">{hoveredPoint.skillName}: {hoveredPoint.levelLabel} ({hoveredPoint.score}đ)</div>
-              <div className="text-[11px] text-stone-300 font-medium truncate max-w-xs">{hoveredPoint.subTitle}</div>
-              <div className="text-[10px] text-stone-400 mt-0.5">{hoveredPoint.date}</div>
+          {/* Formative note */}
+          <div className="flex flex-wrap items-center justify-between gap-2 text-[11px] text-stone-500 font-medium px-2">
+            <span>* Chỉ số trực quan hóa định tính theo chuẩn năng lực môn Tiếng Việt GDPT 2018 (Xuất sắc: ≥90, Tốt: 75–89, Tiến bộ: 60–74, Rèn thêm: &lt;60), không phải điểm số kiểm tra chính thức.</span>
+            <span className="text-emerald-800 font-bold">💡 Bấm vào cột để xem chi tiết nhận xét & dẫn chứng</span>
+          </div>
+
+          {/* Legend for 7 grouped skills if grouped mode is active */}
+          {selectedSkillFilter === 'all' && barChartMode === 'grouped' && (
+            <div className="flex flex-wrap items-center gap-2.5 p-3 rounded-2xl bg-stone-50 border border-stone-200 text-xs font-bold text-stone-700">
+              <span className="text-stone-500 mr-1">Màu sắc 7 kỹ năng:</span>
+              {WRITING_SKILLS_META.map(m => {
+                const colorMap: Record<string, string> = {
+                  hieu_de: '#10b981',
+                  tim_y: '#f59e0b',
+                  sap_xep_y: '#0284c7',
+                  dien_dat: '#6366f1',
+                  chinh_ta_dau_cau: '#0d9488',
+                  cam_xuc_sang_tao: '#f43f5e',
+                  tu_chinh_sua: '#a855f7'
+                };
+                return (
+                  <span key={m.id} className="flex items-center gap-1.5">
+                    <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: colorMap[m.id] }} />
+                    <span>{m.name}</span>
+                  </span>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Non-blocking Inline Details Card when user clicks or hovers a bar */}
+          {selectedBarDetail && (
+            <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50/90 to-teal-50/90 border-2 border-emerald-300 shadow-sm space-y-2.5 animate-fade-in">
+              <div className="flex items-center justify-between gap-2 border-b border-emerald-200 pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-lg">📝</span>
+                  <div>
+                    <h4 className="text-sm sm:text-base font-extrabold text-stone-900 font-display">
+                      {selectedBarDetail.subTitle}
+                    </h4>
+                    <span className="text-[11px] text-stone-500 font-medium">
+                      Thời gian đánh giá: {selectedBarDetail.date} • {selectedBarDetail.evaluator}
+                    </span>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setSelectedBarDetail(null)}
+                  className="px-2.5 py-1 text-xs font-bold rounded-xl bg-white text-stone-600 hover:text-stone-900 border border-emerald-200 hover:bg-emerald-100 shadow-xs"
+                >
+                  ✕ Đóng chi tiết
+                </button>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-1.5 text-xs font-bold">
+                  <span className="text-stone-600">Kỹ năng:</span>
+                  <span className="text-emerald-900 bg-emerald-100 px-2.5 py-0.5 rounded-full border border-emerald-300">
+                    {selectedBarDetail.skillName}
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 text-xs font-bold">
+                  <span className="text-stone-600">Mức độ đạt được:</span>
+                  <span className="text-emerald-950 font-black bg-white px-2.5 py-0.5 rounded-lg border border-emerald-300 shadow-xs">
+                    {selectedBarDetail.levelLabel} ({selectedBarDetail.score}/100)
+                  </span>
+                </div>
+              </div>
+
+              {selectedBarDetail.evidence && (
+                <div className="text-xs text-stone-700 bg-white p-2.5 rounded-xl border border-emerald-200 leading-relaxed">
+                  <strong className="text-emerald-950 block font-bold mb-0.5">🔍 Dẫn chứng trong bài làm:</strong>
+                  {selectedBarDetail.evidence}
+                </div>
+              )}
+
+              {selectedBarDetail.comment && (
+                <div className="text-xs text-emerald-950 bg-white p-2.5 rounded-xl border border-emerald-200 italic leading-relaxed">
+                  <strong className="text-emerald-900 not-italic block font-bold mb-0.5">💬 Lời nhận xét:</strong>
+                  "{selectedBarDetail.comment}"
+                </div>
+              )}
             </div>
           )}
         </div>
@@ -852,16 +1226,24 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
           </div>
         </div>
 
-        {/* Submissions Cards List */}
-        <div className="space-y-3.5">
+        {/* Submissions Cards List with Independent Collapsed/Expanded States */}
+        <div className="space-y-4">
           {filteredSubmissions.map((sub, idx) => {
             const isInProgress = sub.lifecycleStatus === 'DANG_LAM' || sub.status === 'draft' || sub.lifecycleStatus === 'CAN_CHINH_SUA';
+            const isExpanded = !!expandedSubIds[sub.id];
+            const fullContent = sub.finalContent || sub.firstDraft || '';
+            const previewSnippet = fullContent
+              ? (fullContent.length > 95 ? fullContent.slice(0, 95).trim() + '...' : fullContent)
+              : (isInProgress ? 'Bài đang được thực hiện (bản nháp)...' : 'Chưa có nội dung.');
 
             return (
               <div
                 key={sub.id}
-                className="p-4 sm:p-5 rounded-3xl border-2 border-stone-200 hover:border-emerald-300 transition-all bg-white hover:bg-emerald-50/10 space-y-3 shadow-xs"
+                className={`p-4 sm:p-6 rounded-3xl border-2 transition-all bg-white space-y-4 shadow-xs ${
+                  isExpanded ? 'border-amber-300 ring-2 ring-amber-100' : 'border-stone-200 hover:border-emerald-300'
+                }`}
               >
+                {/* Card Header */}
                 <div className="flex flex-wrap items-center justify-between gap-3">
                   <div className="space-y-1">
                     <div className="flex items-center gap-2 flex-wrap">
@@ -883,7 +1265,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
                   </div>
 
                   {/* Actions for this submission */}
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     {/* Continue Button for In-Progress Submissions */}
                     {isInProgress && onResumeSubmission && (
                       <button
@@ -898,7 +1280,7 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
                       </button>
                     )}
 
-                    {/* View Journey Stepper / Timeline Button */}
+                    {/* View Journey Stepper / Timeline Button (Independent Modal) */}
                     <button
                       onClick={() => {
                         playPop(settings.soundEnabled);
@@ -912,22 +1294,166 @@ export const ProgressJourneyPage: React.FC<ProgressJourneyPageProps> = ({
                   </div>
                 </div>
 
-                {/* Excerpt of the latest draft/content */}
-                <p className="text-xs sm:text-sm text-stone-700 italic bg-stone-50 p-3 rounded-2xl border border-stone-100 line-clamp-2">
-                  "{sub.finalContent || sub.firstDraft || 'Đang phát triển ý tưởng...'}"
-                </p>
+                {/* STATE 1: COLLAPSED (THU GỌN) */}
+                {!isExpanded && (
+                  <div className="space-y-3">
+                    <p className="text-xs sm:text-sm text-stone-700 italic bg-stone-50 p-3.5 rounded-2xl border border-stone-100 leading-relaxed">
+                      "{previewSnippet}"
+                    </p>
 
-                {/* Quick Teacher note if available */}
-                {sub.teacherFeedback && sub.teacherFeedback.status === 'published' && (
-                  <div className="p-3 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-xs text-emerald-950 font-medium flex items-center justify-between gap-2">
-                    <span className="flex items-center gap-1.5">
-                      <span>👩‍🏫</span>
-                      <strong>{sub.teacherFeedback.teacherName || TEACHER_CONFIG.name}:</strong>
-                      <span className="italic truncate max-w-lg">"{sub.teacherFeedback.comment}"</span>
-                    </span>
-                    <span className="text-xs font-bold text-emerald-800 shrink-0">
-                      {sub.teacherFeedback.flowerSticker || '🌸 Bông hoa khen ngợi'}
-                    </span>
+                    <div className="flex flex-wrap items-center justify-between gap-2 pt-1">
+                      <button
+                        onClick={() => toggleExpandSub(sub.id)}
+                        className="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 border-2 border-amber-300 font-extrabold text-xs transition-all shadow-xs hover:scale-101"
+                      >
+                        <BookOpen className="w-4 h-4 text-amber-700" />
+                        <span>📖 Đọc toàn bộ bài</span>
+                      </button>
+
+                      {sub.teacherFeedback && sub.teacherFeedback.status === 'published' && (
+                        <span className="text-xs font-bold text-emerald-800 bg-emerald-50 px-3 py-1 rounded-full border border-emerald-200">
+                          {sub.teacherFeedback.flowerSticker || '🌸 Đã có nhận xét từ cô giáo'}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {/* STATE 2: EXPANDED (MỞ RỘNG - KHÔNG CẮT CHỮ, KHÔNG GIỚI HẠN CHIỀU CAO) */}
+                {isExpanded && (
+                  <div className="space-y-4 pt-1 animate-fade-in">
+                    {/* Header bar of expanded mode */}
+                    <div className="flex items-center justify-between border-b border-amber-200 pb-2">
+                      <span className="text-xs font-extrabold text-amber-950 uppercase tracking-wide flex items-center gap-2">
+                        <BookOpen className="w-4 h-4 text-amber-600" />
+                        <span>Toàn văn bài viết của con ({fullContent.length} ký tự)</span>
+                      </span>
+                      <button
+                        onClick={() => toggleExpandSub(sub.id)}
+                        className="flex items-center gap-1.5 px-3 py-1 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs border border-stone-300 transition-colors"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                        <span>Thu gọn</span>
+                      </button>
+                    </div>
+
+                    {/* Pristine Full Essay Content with Preserved Format & Punctuation */}
+                    <div 
+                      className="p-5 sm:p-6 rounded-2xl bg-amber-50/70 border-2 border-amber-200 leading-relaxed text-stone-900 text-sm sm:text-base font-medium whitespace-pre-wrap break-words select-text shadow-inner"
+                      style={{ height: 'auto', maxHeight: 'none', overflow: 'visible' }}
+                    >
+                      {fullContent || (isInProgress ? 'Bài đang được thực hiện (bản nháp đang triển khai).' : 'Chưa có nội dung bài viết.')}
+                    </div>
+
+                    {/* Teacher Feedback Section (Full & Uncut) */}
+                    {sub.teacherFeedback && sub.teacherFeedback.status === 'published' && (
+                      <div className="p-4 sm:p-5 rounded-2xl bg-gradient-to-r from-emerald-50 to-teal-50 border-2 border-emerald-300 space-y-3">
+                        <div className="flex items-center justify-between gap-2 flex-wrap border-b border-emerald-200 pb-2.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-2xl">👩‍🏫</span>
+                            <div>
+                              <h5 className="font-extrabold text-xs sm:text-sm text-emerald-950">
+                                Nhận xét chính thức từ {sub.teacherFeedback.teacherName || TEACHER_CONFIG.name}
+                              </h5>
+                              <span className="text-[11px] text-emerald-700 font-medium">
+                                Ngày nhận xét: {new Date(sub.teacherFeedback.timestamp).toLocaleDateString('vi-VN')}
+                              </span>
+                            </div>
+                          </div>
+                          <span className="text-xs font-extrabold px-3 py-1 rounded-full bg-emerald-200 text-emerald-900 border border-emerald-300 shadow-xs">
+                            {sub.teacherFeedback.flowerSticker || '🌸 Bông hoa khen ngợi'}
+                          </span>
+                        </div>
+
+                        {/* Full Teacher Comment - No truncation */}
+                        <div className="p-3.5 rounded-xl bg-white border border-emerald-200 shadow-xs">
+                          <p className="text-xs sm:text-sm text-stone-800 font-semibold italic leading-relaxed whitespace-pre-wrap break-words">
+                            "{sub.teacherFeedback.comment}"
+                          </p>
+                        </div>
+
+                        {/* Qualitative Formative Details */}
+                        {(sub.teacherFeedback.praiseIdea || sub.teacherFeedback.wordSentenceSuggestions || sub.teacherFeedback.emotionCreativityEncouragement || sub.teacherFeedback.teacherAdvice) && (
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 pt-1 text-xs">
+                            {sub.teacherFeedback.praiseIdea && (
+                              <div className="bg-rose-50/80 p-3 rounded-xl border border-rose-200">
+                                <strong className="text-rose-900 block font-bold mb-1">🌸 Ý tưởng nổi bật:</strong>
+                                <span className="text-stone-700 leading-relaxed">{sub.teacherFeedback.praiseIdea}</span>
+                              </div>
+                            )}
+                            {sub.teacherFeedback.wordSentenceSuggestions && (
+                              <div className="bg-emerald-100/70 p-3 rounded-xl border border-emerald-200">
+                                <strong className="text-emerald-900 block font-bold mb-1">✏️ Góp ý dùng từ & diễn đạt:</strong>
+                                <span className="text-stone-700 leading-relaxed">{sub.teacherFeedback.wordSentenceSuggestions}</span>
+                              </div>
+                            )}
+                            {sub.teacherFeedback.emotionCreativityEncouragement && (
+                              <div className="bg-amber-50/80 p-3 rounded-xl border border-amber-200">
+                                <strong className="text-amber-900 block font-bold mb-1">💖 Khích lệ cảm xúc & sáng tạo:</strong>
+                                <span className="text-stone-700 leading-relaxed">{sub.teacherFeedback.emotionCreativityEncouragement}</span>
+                              </div>
+                            )}
+                            {sub.teacherFeedback.teacherAdvice && (
+                              <div className="bg-sky-50/80 p-3 rounded-xl border border-sky-200">
+                                <strong className="text-sky-900 block font-bold mb-1">💌 Lời dặn dò phát triển:</strong>
+                                <span className="text-stone-700 leading-relaxed">{sub.teacherFeedback.teacherAdvice}</span>
+                              </div>
+                            )}
+                          </div>
+                        )}
+
+                        {/* 7 Skills Evaluation Grid */}
+                        {sub.teacherSkillEvaluations && sub.teacherSkillEvaluations.length > 0 && (
+                          <div className="bg-white p-3.5 rounded-xl border border-emerald-200 space-y-2">
+                            <span className="text-xs font-bold text-emerald-950 block">
+                              📊 Mức độ đạt chuẩn 7 kỹ năng viết (GDPT 2018):
+                            </span>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
+                              {sub.teacherSkillEvaluations.map(ev => (
+                                <div key={ev.skillId} className="bg-stone-50 p-2 rounded-lg border border-stone-200 text-[11px] space-y-0.5">
+                                  <span className="text-stone-600 font-medium block truncate">{ev.skillName}</span>
+                                  <div className="flex items-center justify-between font-bold text-emerald-800">
+                                    <span>{ev.levelLabel}</span>
+                                    <span>{ev.score}đ</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* AI Feedback Section (if available) */}
+                    {sub.aiFeedback && (
+                      <div className="p-4 rounded-2xl bg-amber-50/60 border border-amber-200 text-xs text-stone-700 space-y-2">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                          <span>🤖</span>
+                          <span>Gợi ý hoàn thiện từ Trợ lý Hoa Nhỏ AI:</span>
+                        </div>
+                        {sub.aiFeedback.flowerPraise && (
+                          <p className="bg-white p-2.5 rounded-xl border border-amber-200">
+                            <strong>🌸 Lời khen:</strong> {sub.aiFeedback.flowerPraise}
+                          </p>
+                        )}
+                        {sub.aiFeedback.leafReminder && (
+                          <p className="bg-white p-2.5 rounded-xl border border-amber-200">
+                            <strong>🍃 Lưu ý:</strong> {sub.aiFeedback.leafReminder}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Bottom Collapse Button */}
+                    <div className="flex justify-end pt-1">
+                      <button
+                        onClick={() => toggleExpandSub(sub.id)}
+                        className="flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs border border-stone-300 transition-colors"
+                      >
+                        <ChevronUp className="w-3.5 h-3.5" />
+                        <span>▲ Thu gọn bài viết</span>
+                      </button>
+                    </div>
                   </div>
                 )}
               </div>

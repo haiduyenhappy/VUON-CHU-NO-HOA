@@ -140,8 +140,11 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
               </div>
 
               {/* The Essay Paragraph */}
-              <div className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 leading-relaxed text-stone-800 text-sm sm:text-base font-medium">
-                "{selectedSub.finalContent}"
+              <div 
+                className="p-4 rounded-2xl bg-amber-50/50 border border-amber-200 leading-relaxed text-stone-800 text-sm sm:text-base font-medium whitespace-pre-wrap break-words select-text"
+                style={{ height: 'auto', maxHeight: 'none', overflow: 'visible' }}
+              >
+                "{selectedSub.finalContent || selectedSub.firstDraft || 'Chưa có nội dung bài viết.'}"
               </div>
 
               {/* Lời cô giáo gửi gia đình (Chỉ hiển thị khi đã công bố) */}
