@@ -229,10 +229,57 @@ export interface AuthUser {
   teacherProfile?: TeacherAccount;
 }
 
+export type SubmissionLifecycleStatus = 
+  | 'DANG_LAM'        // Đang làm (lưu nháp dở dang)
+  | 'DA_NOP'          // Đã nộp bài
+  | 'CHO_NHAN_XET'    // Chờ cô giáo nhận xét
+  | 'CAN_CHINH_SUA'   // Cô yêu cầu chỉnh sửa, hoàn thiện thêm
+  | 'DA_HOAN_THANH';  // Đã hoàn thành và cô đã công bố nhận xét
+
+export type SubmissionStep = 
+  | 'hieu_de'         // Bước 1: Hoa Nhỏ cùng con hiểu đề
+  | 'tim_y'           // Bước 2: Tìm ý & Trả lời câu hỏi gợi mở
+  | 'so_do'           // Bước 3: Sơ đồ tư duy
+  | 'dan_y'           // Bước 4: Lập và sắp xếp dàn ý
+  | 'viet_bai'        // Bước 5: Viết bài nháp
+  | 'gop_y'           // Bước 6: Nhận góp ý AI và trò chuyện
+  | 'chinh_sua'       // Bước 7: Tự chỉnh sửa và hoàn thiện
+  | 'da_nop'          // Đã gửi bài cho cô
+  | 'giao_vien_cham'; // Cô giáo đã nhận xét
+
+export type WritingSkillId = 
+  | 'hieu_de'            // 1. Hiểu đề
+  | 'tim_y'              // 2. Tìm ý
+  | 'sap_xep_y'          // 3. Sắp xếp ý
+  | 'dien_dat'           // 4. Diễn đạt
+  | 'chinh_ta_dau_cau'   // 5. Chính tả và dấu câu
+  | 'cam_xuc_sang_tao'   // 6. Cảm xúc và sáng tạo
+  | 'tu_chinh_sua';      // 7. Tự chỉnh sửa
+
+export type SkillRatingLevel = 
+  | 'chua_du_du_lieu' 
+  | 'can_luyen_tap' 
+  | 'co_tien_bo' 
+  | 'thuc_hien_tot' 
+  | 'xuat_sac';
+
+export interface WritingSkillEvaluation {
+  skillId: WritingSkillId;
+  skillName: string;
+  score: number; // Chỉ số 0–100 phục vụ vẽ biểu đồ tiến bộ
+  level: SkillRatingLevel;
+  levelLabel: string; // "Chưa đủ dữ liệu", "Cần luyện tập", "Có tiến bộ", "Thực hiện tốt", "Xuất sắc"
+  evidence?: string; // Dẫn chứng trích từ bài viết của học sinh
+  comment?: string; // Lời nhận xét khích lệ
+  evaluator: 'AI' | 'TEACHER';
+  evaluatedAt: string;
+}
+
 export interface SubmissionDraft {
   version: number;
   content: string;
   timestamp: string;
+  note?: string;
 }
 
 export interface QualitativeSkillRating {
@@ -250,6 +297,32 @@ export interface FiveContentProgress {
   camXuc: number;
 }
 
+export interface SubmissionStageUnderstanding {
+  promptRequirements: string[];
+  selectedObject?: string;
+  selectedDirectionTitle?: string;
+  studentWishes?: string;
+  advice?: string;
+}
+
+export interface SubmissionStageIdeaFinding {
+  questions: string[];
+  studentAnswers: Record<string, string>;
+  customIdeas: string[];
+}
+
+export interface SubmissionStageMindMap {
+  branches: MindMapBranch[];
+  lastSavedAt?: string;
+}
+
+export interface SubmissionStageOutline {
+  initialOutline?: OutlineItem[];
+  developedOutline?: OutlineItem[];
+  detailedOutline?: DetailedOutlineGroup;
+  lastSavedAt?: string;
+}
+
 export interface Submission {
   id: string;
   studentId: string;
@@ -261,6 +334,7 @@ export interface Submission {
   taskTitle: string;
   gardenType: GardenType;
   volume: 1 | 2;
+  grade?: number;
   isIndependentTest: boolean;
   initialOutline: OutlineItem[];
   detailedOutline?: DetailedOutlineGroup;
@@ -277,6 +351,20 @@ export interface Submission {
   handwrittenImages?: string[];
   studentNotesToTeacher?: string;
   isOffTopic?: boolean;
+
+  // Trường bổ sung cho Hệ thống Hành trình của con (GDPT 2018)
+  lifecycleStatus?: SubmissionLifecycleStatus;
+  currentStep?: SubmissionStep;
+  understandingStage?: SubmissionStageUnderstanding;
+  ideaFindingStage?: SubmissionStageIdeaFinding;
+  mindMapStage?: SubmissionStageMindMap;
+  outlineStage?: SubmissionStageOutline;
+  aiSkillEvaluations?: WritingSkillEvaluation[];
+  teacherSkillEvaluations?: WritingSkillEvaluation[];
+  revisionRequestedByTeacher?: boolean;
+  revisionRequestNote?: string;
+  lastActiveStepLabel?: string;
+  lastSavedAt?: string;
 }
 
 export interface SampleReading {

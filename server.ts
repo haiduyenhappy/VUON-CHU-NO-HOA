@@ -88,7 +88,79 @@ const SEED_SUBMISSIONS = [
     taskTitle: 'Kể lại một hoạt động đã làm cùng người thân',
     gardenType: 'ke_chuyen',
     volume: 1,
+    grade: 3,
     isIndependentTest: false,
+    lifecycleStatus: 'DA_HOAN_THANH',
+    currentStep: 'giao_vien_cham',
+    lastActiveStepLabel: 'Bước 7: Cô giáo đã nhận xét',
+    understandingStage: {
+      promptRequirements: [
+        'Thể loại: Kể lại một sự việc / hoạt động',
+        'Đối tượng: Một hoạt động làm cùng người thân trong gia đình',
+        'Nhiệm vụ: Kể diễn biến việc làm và nêu cảm nghĩ của em'
+      ],
+      selectedDirectionTitle: 'Cùng mẹ nấu bữa cơm chiều ấm áp',
+      studentWishes: 'Có sử dụng từ ngữ gợi cảm xúc, tả cảnh gian bếp đầm ấm',
+      advice: 'Con hãy nhớ lại các hành động cụ thể khi hai mẹ con cùng chuẩn bị đồ ăn nhé!'
+    },
+    ideaFindingStage: {
+      questions: [
+        'Em và người thân cùng làm việc gì, vào thời gian nào?',
+        'Em đã giúp người thân làm những việc gì cụ thể?',
+        'Không khí lúc đó ra sao và em cảm thấy như thế nào?'
+      ],
+      studentAnswers: {
+        '0': 'Chiều chủ nhật vừa qua, em cùng mẹ chuẩn bị bữa cơm chiều cho cả nhà.',
+        '1': 'Em nhặt rau muống, mẹ hướng dẫn em gọt cà rốt và xào thịt bò thơm nức.',
+        '2': 'Gian bếp rộn rã tiếng cười, cả nhà quây quần ăn cơm rất hạnh phúc.'
+      },
+      customIdeas: ['Mùi thơm của món canh rau muống ngọt mát', 'Lời khen của bố làm em rất vui']
+    },
+    mindMapStage: {
+      branches: [
+        {
+          id: 'branch-1',
+          title: 'Khởi đầu ấm áp',
+          icon: '🌅',
+          color: 'from-amber-400 to-orange-500',
+          points: ['Chiều chủ nhật nắng vàng nhẹ', 'Em cùng mẹ vào bếp']
+        },
+        {
+          id: 'branch-2',
+          title: 'Cùng mẹ làm bếp',
+          icon: '🥬',
+          color: 'from-emerald-400 to-teal-500',
+          points: ['Rửa tay sạch sẽ', 'Nhặt từng ngọn rau muống non', 'Nghe mẹ hướng dẫn gọt củ']
+        },
+        {
+          id: 'branch-3',
+          title: 'Hương vị đầm ấm',
+          icon: '🍲',
+          color: 'from-sky-400 to-blue-500',
+          points: ['Thịt bò xào thơm nức gian bếp', 'Mẹ con vừa làm vừa tíu tít trò chuyện']
+        },
+        {
+          id: 'branch-4',
+          title: 'Mâm cơm hạnh phúc',
+          icon: '💖',
+          color: 'from-rose-400 to-pink-500',
+          points: ['Cả nhà quây quần bên mâm cơm', 'Bố khen canh rau ngọt mát', 'Em thấy yêu gia đình nhiều hơn']
+        }
+      ],
+      lastSavedAt: new Date(Date.now() - 86400000 * 2).toISOString()
+    },
+    outlineStage: {
+      initialOutline: [
+        { id: '1', section: 'Mở đoạn', content: 'Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ nấu bữa cơm chiều.' },
+        { id: '2', section: 'Thân đoạn', content: 'Em giúp mẹ nhặt rau muống xanh non, mẹ hướng dẫn em gọt cà rốt và nghe em kể chuyện trường lớp.' },
+        { id: '3', section: 'Kết đoạn', content: 'Cả nhà quây quần bên mâm cơm thơm lừng, em cảm thấy rất vui và hạnh phúc.' }
+      ],
+      developedOutline: [
+        { id: '1', section: 'Mở đoạn', content: 'Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ vào bếp nấu cơm.' },
+        { id: '2', section: 'Thân đoạn', content: 'Em rửa tay sạch sẽ, ngồi nhặt từng cọng rau muống xanh mướt bên cạnh mẹ. Gian bếp rộn rã tiếng cười vui.' },
+        { id: '3', section: 'Kết đoạn', content: 'Bữa cơm đầm ấm làm em thấy yêu gian bếp và gia đình mình tha thiết.' }
+      ]
+    },
     initialOutline: [
       { id: '1', section: 'Mở đoạn', content: 'Giới thiệu buổi chiều chủ nhật ấm áp em cùng mẹ nấu bữa cơm chiều.' },
       { id: '2', section: 'Thân đoạn', content: 'Em giúp mẹ nhặt rau muống xanh non, mẹ hướng dẫn em gọt cà rốt và nghe em kể chuyện trường lớp.' },
@@ -104,7 +176,14 @@ const SEED_SUBMISSIONS = [
       {
         version: 1,
         content: 'Chiều chủ nhật em với mẹ cùng nấu cơm. Em nhặt rau muống và gọt củ cà rốt. Hai mẹ con nói chuyện rất vui. Cơm chín cả nhà cùng ăn thật ngon miệng.',
-        timestamp: new Date(Date.now() - 86400000 * 2).toISOString()
+        timestamp: new Date(Date.now() - 86400000 * 2).toISOString(),
+        note: 'Bản nháp ban đầu'
+      },
+      {
+        version: 2,
+        content: 'Chiều chủ nhật vừa qua, em đã có một trải nghiệm thật ý nghĩa khi cùng mẹ chuẩn bị bữa cơm cho cả nhà. Dưới ánh nắng vàng nhạt xuyên qua khung cửa sổ, em ngoan ngoãn ngồi bên mẹ, cẩn thận nhặt từng ngọn rau muống non mởn. Mẹ vừa xào thịt bò thơm nức, vừa dịu dàng lắng nghe em tíu tít kể những câu chuyện vui ở lớp. Gian bếp nhỏ ngập tràn tiếng cười rộn rã và hương vị ấm cúng. Khi cả gia đình quây quần bên mâm cơm nóng hổi, bố khen món canh rau của em rất ngọt mát. Em cảm thấy vô cùng hạnh phúc và tự nhủ sẽ chăm chỉ giúp đỡ bố mẹ nhiều hơn nữa.',
+        timestamp: new Date(Date.now() - 86400000 * 2 + 1800000).toISOString(),
+        note: 'Bản trau chuốt sau khi nghe gợi ý của Hoa Nhỏ'
       }
     ],
     finalContent: 'Chiều chủ nhật vừa qua, em đã có một trải nghiệm thật ý nghĩa khi cùng mẹ chuẩn bị bữa cơm cho cả nhà. Dưới ánh nắng vàng nhạt xuyên qua khung cửa sổ, em ngoan ngoãn ngồi bên mẹ, cẩn thận nhặt từng ngọn rau muống non mởn. Mẹ vừa xào thịt bò thơm nức, vừa dịu dàng lắng nghe em tíu tít kể những câu chuyện vui ở lớp. Gian bếp nhỏ ngập tràn tiếng cười rộn rã và hương vị ấm cúng. Khi cả gia đình quây quần bên mâm cơm nóng hổi, bố khen món canh rau của em rất ngọt mát. Em cảm thấy vô cùng hạnh phúc và tự nhủ sẽ chăm chỉ giúp đỡ bố mẹ nhiều hơn nữa.',
@@ -127,9 +206,89 @@ const SEED_SUBMISSIONS = [
       emotionCreativityEncouragement: 'Cảm xúc vui sướng khi được bố khen ở đoạn kết làm bài văn bừng sáng.',
       teacherAdvice: 'Con hãy tiếp tục phát huy nét chữ đẹp và tâm hồn giàu cảm xúc này nhé!'
     },
+    teacherSkillEvaluations: [
+      {
+        skillId: 'hieu_de',
+        skillName: 'Hiểu đề',
+        score: 95,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Kể đúng trọng tâm hoạt động nấu cơm cùng mẹ, nêu rõ thời gian và ý nghĩa việc làm.',
+        comment: 'Con xác định đúng đề bài và bám sát chủ đề gia đình.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        skillId: 'tim_y',
+        skillName: 'Tìm ý',
+        score: 92,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Chi tiết "nhặt ngọn rau muống non mởn", "thịt bò xào thơm nức", "bố khen canh ngọt mát".',
+        comment: 'Ý tưởng phong phú, quan sát rất tỉ mỉ.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        skillId: 'sap_xep_y',
+        skillName: 'Sắp xếp ý',
+        score: 90,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Bố cục 3 phần rõ ràng, kể theo trình tự thời gian từ lúc chuẩn bị đến khi ăn cơm.',
+        comment: 'Đoạn văn liền mạch, chuyển ý mượt mà.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        skillId: 'dien_dat',
+        skillName: 'Diễn đạt',
+        score: 88,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Dùng từ láy gợi cảm: "ngoan ngoãn", "tíu tít", "rộn rã".',
+        comment: 'Hành văn lưu loát, câu văn đủ chủ ngữ - vị ngữ.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        skillId: 'chinh_ta_dau_cau',
+        skillName: 'Chính tả & Dấu câu',
+        score: 96,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Viết hoa chuẩn đầu câu, dấu phẩy ngắt các vế câu hợp lý, không sai lỗi chính tả.',
+        comment: 'Chữ viết và dấu câu rất cẩn thận, chuẩn mực.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        skillId: 'cam_xuc_sang_tao',
+        skillName: 'Cảm xúc & Sáng tạo',
+        score: 94,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Cảm xúc hạnh phúc khi cả nhà quây quần bên mâm cơm thơm lừng.',
+        comment: 'Tình cảm gia đình chân thành, ấm áp.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      },
+      {
+        skillId: 'tu_chinh_sua',
+        skillName: 'Tự chỉnh sửa',
+        score: 88,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Đã bổ sung câu văn miêu tả ánh nắng và tiếng cười sau bản nháp 1.',
+        comment: 'Con rất có ý thức tự hoàn thiện bài viết của mình.',
+        evaluator: 'TEACHER',
+        evaluatedAt: new Date(Date.now() - 86400000).toISOString()
+      }
+    ],
     status: 'reviewed',
     startedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
-    completedAt: new Date(Date.now() - 86400000 * 2).toISOString()
+    completedAt: new Date(Date.now() - 86400000 * 2).toISOString(),
+    lastSavedAt: new Date(Date.now() - 86400000 * 2).toISOString()
   },
   {
     id: 'sub-seed-02',
@@ -138,7 +297,68 @@ const SEED_SUBMISSIONS = [
     taskTitle: 'Tả một đồ dùng học tập em yêu quý',
     gardenType: 'sac_mau',
     volume: 1,
+    grade: 3,
     isIndependentTest: false,
+    lifecycleStatus: 'CHO_NHAN_XET',
+    currentStep: 'da_nop',
+    lastActiveStepLabel: 'Bước 6: Chờ cô đọc & nhận xét',
+    understandingStage: {
+      promptRequirements: [
+        'Thể loại: Đoạn văn miêu tả đồ vật',
+        'Đối tượng: Một đồ dùng học tập gần gũi',
+        'Nhiệm vụ: Miêu tả đặc điểm và ích lợi của đồ dùng'
+      ],
+      selectedObject: 'Hộp bút',
+      selectedDirectionTitle: 'Chiếc hộp bút màu hồng pastel',
+      studentWishes: 'Miêu tả cả hình dáng bên ngoài và các ngăn bên trong',
+      advice: 'Con hãy quan sát màu sắc, chất liệu và cách sắp xếp bút thước nhé!'
+    },
+    ideaFindingStage: {
+      questions: [
+        'Đồ dùng học tập đó là gì, do ai tặng hoặc em có từ khi nào?',
+        'Hình dáng, màu sắc, chi tiết bên ngoài và bên trong có gì đặc biệt?',
+        'Đồ vật giúp ích gì cho việc học của em?'
+      ],
+      studentAnswers: {
+        '0': 'Chiếc hộp bút màu hồng pastel bố tặng em nhân dịp đầu năm học mới.',
+        '1': 'Hình chữ nhật thon gọn, vải dù mềm mại, in hình chú thỏ trắng ôm cà rốt.',
+        '2': 'Có hai ngăn đựng bút chì, thước kẻ và tẩy ngay ngắn, giúp em học tập mỗi ngày.'
+      },
+      customIdeas: ['Khóa kéo bằng kim loại sáng bóng, trơn tru']
+    },
+    mindMapStage: {
+      branches: [
+        {
+          id: 'branch-hb-1',
+          title: 'Món quà đầu năm',
+          icon: '🎁',
+          color: 'from-pink-400 to-rose-500',
+          points: ['Bố tặng đầu năm học lớp 3', 'Màu hồng pastel xinh xắn']
+        },
+        {
+          id: 'branch-hb-2',
+          title: 'Đặc điểm bên ngoài',
+          icon: '🐰',
+          color: 'from-amber-400 to-orange-500',
+          points: ['Vải dù mềm mại', 'Hình chú thỏ ôm củ cà rốt', 'Khóa kéo kim loại sáng bóng']
+        },
+        {
+          id: 'branch-hb-3',
+          title: 'Các ngăn bên trong',
+          icon: '✏️',
+          color: 'from-emerald-400 to-teal-500',
+          points: ['Hai ngăn tiện lợi', 'Ngăn để bút chì, bút mực', 'Ngăn để tẩy và thước kẻ']
+        },
+        {
+          id: 'branch-hb-4',
+          title: 'Người bạn đồng hành',
+          icon: '🎒',
+          color: 'from-sky-400 to-blue-500',
+          points: ['Nằm ngoan ngoãn trong cặp sách', 'Nhắc nhở giữ gìn đồ dùng ngăn nắp']
+        }
+      ],
+      lastSavedAt: new Date(Date.now() - 3600000 * 5).toISOString()
+    },
     initialOutline: [
       { id: '1', section: 'Mở đoạn', content: 'Giới thiệu chiếc hộp bút màu hồng pastel bố tặng em nhân dịp năm học mới.' },
       { id: '2', section: 'Thân đoạn', content: 'Hình dáng chữ nhật thon gọn, có in hình chú gấu bông nhỏ xinh. Bên trong chia thành nhiều ngăn đựng bút chì, tẩy và thước kẻ ngay ngắn.' },
@@ -154,20 +374,181 @@ const SEED_SUBMISSIONS = [
       {
         version: 1,
         content: 'Em có một chiếc hộp bút màu hồng. Bố tặng em khi vào lớp 3. Hộp bút đựng được nhiều đồ học tập. Em rất thích chiếc hộp bút này.',
-        timestamp: new Date(Date.now() - 3600000 * 5).toISOString()
+        timestamp: new Date(Date.now() - 3600000 * 5).toISOString(),
+        note: 'Bản viết nhanh ban đầu'
+      },
+      {
+        version: 2,
+        content: 'Nhân dịp bước vào năm học lớp ba, bố đã tặng em một chiếc hộp bút màu hồng pastel vô cùng xinh xắn. Chiếc hộp bút có hình chữ nhật thon gọn, bên ngoài may bằng lớp vải dù mềm mại có in hình chú thỏ trắng đang ôm củ cà rốt. Chiếc khóa kéo bằng kim loại sáng bóng, đóng mở rất nhẹ nhàng và trơn tru. Bên trong hộp bút chia thành hai ngăn tiện lợi: một ngăn em xếp bút mực, bút chì thật ngay ngắn; ngăn còn lại em cất cục tẩy và chiếc thước kẻ kẻ hoa văn đáng yêu. Mỗi ngày đến lớp, người bạn nhỏ này luôn nằm ngoan ngoãn trong cặp sách, nhắc nhở em giữ gìn đồ dùng ngăn nắp. Em rất yêu quý chiếc hộp bút và xem nó như người bạn đồng hành thân thiết trên con đường học tập.',
+        timestamp: new Date(Date.now() - 3600000 * 4).toISOString(),
+        note: 'Bản mở rộng chi tiết theo sơ đồ tư duy'
       }
     ],
     finalContent: 'Nhân dịp bước vào năm học lớp ba, bố đã tặng em một chiếc hộp bút màu hồng pastel vô cùng xinh xắn. Chiếc hộp bút có hình chữ nhật thon gọn, bên ngoài may bằng lớp vải dù mềm mại có in hình chú thỏ trắng đang ôm củ cà rốt. Chiếc khóa kéo bằng kim loại sáng bóng, đóng mở rất nhẹ nhàng và trơn tru. Bên trong hộp bút chia thành hai ngăn tiện lợi: một ngăn em xếp bút mực, bút chì thật ngay ngắn; ngăn còn lại em cất cục tẩy và chiếc thước kẻ kẻ hoa văn đáng yêu. Mỗi ngày đến lớp, người bạn nhỏ này luôn nằm ngoan ngoãn trong cặp sách, nhắc nhở em giữ gìn đồ dùng ngăn nắp. Em rất yêu quý chiếc hộp bút và xem nó như người bạn đồng hành thân thiết trên con đường học tập.',
     aiFeedback: {
       flowerPraise: 'Đoạn văn miêu tả đồ vật rất chi tiết và sinh động! Em đã biết cách dùng từ ngữ gợi hình như "hồng pastel", "khóa kéo sáng bóng", "nằm ngoan ngoãn".',
       leafReminder: 'Đoạn văn đã rất hoàn chỉnh, câu văn gãy gọn và giàu liên tưởng.',
-      smallChallenge: 'Em hãy đọc lại để chuẩn bị trình bày trước lớp nhé!',
+      smallChallenge: 'Em hãy đọc lại một lượt trước khi cô giáo đọc nhé!',
       suggestedStars: 5,
       timestamp: new Date(Date.now() - 3600000 * 4).toISOString()
     },
+    aiSkillEvaluations: [
+      {
+        skillId: 'hieu_de',
+        skillName: 'Hiểu đề',
+        score: 96,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Miêu tả đúng trọng tâm chiếc hộp bút và nêu bật công dụng.',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        skillId: 'tim_y',
+        skillName: 'Tìm ý',
+        score: 90,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Chi tiết màu hồng pastel, chú thỏ ôm củ cà rốt, hai ngăn tiện lợi.',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        skillId: 'sap_xep_y',
+        skillName: 'Sắp xếp ý',
+        score: 88,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Trình tự từ bên ngoài vào bên trong và cảm nghĩ gắn bó.',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        skillId: 'dien_dat',
+        skillName: 'Diễn đạt',
+        score: 87,
+        level: 'thuc_hien_tot',
+        levelLabel: 'Thực hiện tốt',
+        evidence: 'Dùng từ gợi cảm: "êm ái", "thon gọn", "ngay ngắn", "nằm ngoan ngoãn".',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        skillId: 'chinh_ta_dau_cau',
+        skillName: 'Chính tả & Dấu câu',
+        score: 95,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Không có lỗi chính tả, ngắt câu rõ ràng bằng dấu chấm và dấu phẩy.',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        skillId: 'cam_xuc_sang_tao',
+        skillName: 'Cảm xúc & Sáng tạo',
+        score: 91,
+        level: 'xuat_sac',
+        levelLabel: 'Xuất sắc',
+        evidence: 'Nhân hóa hộp bút thành "người bạn nhỏ nằm ngoan ngoãn".',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      },
+      {
+        skillId: 'tu_chinh_sua',
+        skillName: 'Tự chỉnh sửa',
+        score: 85,
+        level: 'thuc_hien_tot',
+        levelLabel: 'Thực hiện tốt',
+        evidence: 'Đã mở rộng bản nháp 1 từ 4 câu ngắn thành đoạn văn miêu tả hoàn chỉnh.',
+        evaluator: 'AI',
+        evaluatedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+      }
+    ],
     status: 'submitted',
     startedAt: new Date(Date.now() - 3600000 * 5).toISOString(),
-    completedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+    completedAt: new Date(Date.now() - 3600000 * 4).toISOString(),
+    lastSavedAt: new Date(Date.now() - 3600000 * 4).toISOString()
+  },
+  {
+    id: 'sub-seed-04',
+    studentId: 'HS001',
+    taskId: 'tap1-03',
+    taskTitle: 'Nêu tình cảm, cảm xúc về một cảnh đẹp quê hương',
+    gardenType: 'yeu_thuong',
+    volume: 1,
+    grade: 3,
+    isIndependentTest: false,
+    lifecycleStatus: 'DANG_LAM',
+    currentStep: 'so_do',
+    lastActiveStepLabel: 'Bước 3: Hoàn thành Sơ đồ tư duy',
+    understandingStage: {
+      promptRequirements: [
+        'Thể loại: Đoạn văn nêu tình cảm, cảm xúc',
+        'Đối tượng: Một cảnh đẹp quê hương em (cánh đồng lúa, bãi biển, dòng sông, công viên...)',
+        'Dung lượng: Đoạn văn từ 4–6 câu'
+      ],
+      selectedDirectionTitle: 'Cánh đồng lúa chín vàng quê ngoại',
+      studentWishes: 'Có hình ảnh so sánh cánh đồng với tấm thảm vàng',
+      advice: 'Con hãy nhớ lại mùi hương của lúa chín và cảm xúc khi đứng ngắm cánh đồng quê nhé!'
+    },
+    ideaFindingStage: {
+      questions: [
+        'Cảnh đẹp quê hương mà em muốn nói đến là cảnh nào?',
+        'Những hình ảnh, âm thanh hoặc mùi hương nào làm em ấn tượng nhất?',
+        'Tình cảm của em đối với cảnh đẹp quê hương đó như thế nào?'
+      ],
+      studentAnswers: {
+        '0': 'Em muốn viết về cánh đồng lúa chín vàng ở quê ngoại vào vụ gặt.',
+        '1': 'Sóng lúa nhấp nhô trong gió sớm, mùi hương lúa mới thơm ngào ngạt.',
+        '2': 'Em thấy quê hương thật thanh bình và yêu tha thiết mảnh đất quê ngoại.'
+      },
+      customIdeas: ['Những cánh cò trắng chao lượn trên nền trời xanh biếc']
+    },
+    mindMapStage: {
+      branches: [
+        {
+          id: 'branch-cd-1',
+          title: 'Về thăm quê ngoại',
+          icon: '🏡',
+          color: 'from-amber-400 to-orange-500',
+          points: ['Kỳ nghỉ hè về quê', 'Cánh đồng lúa trải dài ngút ngàn']
+        },
+        {
+          id: 'branch-cd-2',
+          title: 'Bức tranh sắc màu',
+          icon: '🌾',
+          color: 'from-yellow-400 to-amber-500',
+          points: ['Màu vàng óng ả như tấm thảm lụa', 'Từng làn sóng lúa nhấp nhô theo làn gió']
+        },
+        {
+          id: 'branch-cd-3',
+          title: 'Hương thơm đồng nội',
+          icon: '🍃',
+          color: 'from-emerald-400 to-teal-500',
+          points: ['Hương lúa ngọt dịu thoang thoảng', 'Cánh cò trắng chao liệng trong sương mai']
+        }
+      ],
+      lastSavedAt: new Date(Date.now() - 3600000 * 2).toISOString()
+    },
+    initialOutline: [
+      { id: '1', section: 'Mở đoạn', content: 'Giới thiệu cánh đồng lúa chín vàng ở quê ngoại mà em vô cùng yêu mến.' },
+      { id: '2', section: 'Thân đoạn', content: 'Tả vẻ đẹp của sóng lúa vàng óng và hương thơm của lúa chín trong gió mai.' },
+      { id: '3', section: 'Kết đoạn', content: 'Nêu tình cảm tự hào và gắn bó tha thiết với cảnh đẹp quê hương.' }
+    ],
+    developedOutline: [],
+    firstDraft: 'Mỗi lần về quê ngoại, em lại được ngắm cánh đồng lúa chín vàng rực rỡ.',
+    drafts: [
+      {
+        version: 1,
+        content: 'Mỗi lần về quê ngoại, em lại được ngắm cánh đồng lúa chín vàng rực rỡ.',
+        timestamp: new Date(Date.now() - 3600000 * 2).toISOString(),
+        note: 'Câu mở đoạn đang viết dở'
+      }
+    ],
+    finalContent: 'Mỗi lần về quê ngoại, em lại được ngắm cánh đồng lúa chín vàng rực rỡ.',
+    status: 'draft',
+    startedAt: new Date(Date.now() - 3600000 * 2).toISOString(),
+    lastSavedAt: new Date(Date.now() - 3600000 * 2).toISOString()
   },
   {
     id: 'sub-seed-03',
@@ -176,7 +557,11 @@ const SEED_SUBMISSIONS = [
     taskTitle: 'Kể lại một hoạt động đã làm cùng người thân',
     gardenType: 'ke_chuyen',
     volume: 1,
+    grade: 3,
     isIndependentTest: true,
+    lifecycleStatus: 'CHO_NHAN_XET',
+    currentStep: 'da_nop',
+    lastActiveStepLabel: 'Bước 6: Đã nộp bài cho cô',
     initialOutline: [],
     developedOutline: [],
     firstDraft: 'Sáng chủ nhật em cùng bố tưới cây ngoài ban công. Hai bố con cùng bắt sâu và nhổ cỏ. Em thấy cây hoa hồng nở rất đẹp.',
@@ -331,6 +716,27 @@ function loadDatabase(): DatabaseStructure {
     const parsed = JSON.parse(raw);
     if (!parsed.submissions || parsed.submissions.length === 0) {
       parsed.submissions = SEED_SUBMISSIONS;
+    } else {
+      // Ensure seed submissions have full 7 stages and evaluations
+      for (const seedSub of SEED_SUBMISSIONS) {
+        const foundIdx = parsed.submissions.findIndex((s: any) => s.id === seedSub.id);
+        if (foundIdx >= 0) {
+          parsed.submissions[foundIdx] = {
+            ...seedSub,
+            ...parsed.submissions[foundIdx],
+            understandingStage: parsed.submissions[foundIdx].understandingStage || seedSub.understandingStage,
+            ideaFindingStage: parsed.submissions[foundIdx].ideaFindingStage || seedSub.ideaFindingStage,
+            mindMapStage: parsed.submissions[foundIdx].mindMapStage || seedSub.mindMapStage,
+            outlineStage: parsed.submissions[foundIdx].outlineStage || seedSub.outlineStage,
+            lifecycleStatus: parsed.submissions[foundIdx].lifecycleStatus || seedSub.lifecycleStatus,
+            currentStep: parsed.submissions[foundIdx].currentStep || seedSub.currentStep,
+            teacherSkillEvaluations: parsed.submissions[foundIdx].teacherSkillEvaluations || seedSub.teacherSkillEvaluations,
+            aiSkillEvaluations: parsed.submissions[foundIdx].aiSkillEvaluations || seedSub.aiSkillEvaluations
+          };
+        } else {
+          parsed.submissions.push(seedSub);
+        }
+      }
     }
 
     // Ensure teachers exist with Cô Nguyễn Thị Hải Duyên as SUPER_ADMIN
@@ -681,49 +1087,80 @@ app.get('/api/submissions', (req, res) => {
   res.json({ submissions: list });
 });
 
-// 5. Save or update submission
+// 5. Save or update submission (supports auto-save, draft versions, and 7-stage lifecycle)
 app.post('/api/submissions', (req, res) => {
   const submissionData = req.body;
   const db = loadDatabase();
 
   let existingIndex = db.submissions.findIndex(s => s.id === submissionData.id);
+  const now = new Date().toISOString();
+
+  // Determine lifecycle status
+  let lifecycleStatus = submissionData.lifecycleStatus;
+  if (!lifecycleStatus) {
+    if (submissionData.status === 'submitted') {
+      lifecycleStatus = 'DA_NOP';
+    } else if (submissionData.status === 'reviewed') {
+      lifecycleStatus = 'DA_HOAN_THANH';
+    } else {
+      lifecycleStatus = 'DANG_LAM';
+    }
+  }
+
+  // Determine current step
+  let currentStep = submissionData.currentStep;
+  if (!currentStep) {
+    if (submissionData.status === 'reviewed') currentStep = 'giao_vien_cham';
+    else if (submissionData.status === 'submitted') currentStep = 'da_nop';
+    else if (submissionData.finalContent || submissionData.firstDraft) currentStep = 'viet_bai';
+    else if (submissionData.developedOutline?.length || submissionData.initialOutline?.length) currentStep = 'dan_y';
+    else currentStep = 'hieu_de';
+  }
   
   if (existingIndex >= 0) {
     const existing = db.submissions[existingIndex];
-    const drafts = existing.drafts || [];
+    const drafts = existing.drafts ? [...existing.drafts] : [];
 
     if (submissionData.finalContent && submissionData.finalContent !== existing.finalContent) {
       drafts.push({
         version: drafts.length + 1,
         content: submissionData.finalContent,
-        timestamp: new Date().toISOString()
+        timestamp: now,
+        note: submissionData.note || `Bản nháp số ${drafts.length + 1}`
       });
     }
 
     db.submissions[existingIndex] = {
       ...existing,
       ...submissionData,
+      lifecycleStatus,
+      currentStep,
       drafts,
-      completedAt: submissionData.status === 'submitted' ? new Date().toISOString() : existing.completedAt
+      lastSavedAt: now,
+      completedAt: (submissionData.status === 'submitted' || lifecycleStatus === 'DA_NOP') ? (existing.completedAt || now) : existing.completedAt
     };
   } else {
     const newSubmission = {
       ...submissionData,
       id: submissionData.id || `sub-${Date.now()}`,
+      lifecycleStatus,
+      currentStep,
       drafts: submissionData.finalContent ? [
         {
           version: 1,
           content: submissionData.finalContent,
-          timestamp: new Date().toISOString()
+          timestamp: now,
+          note: 'Bản nháp ban đầu'
         }
       ] : [],
-      startedAt: new Date().toISOString(),
-      completedAt: submissionData.status === 'submitted' ? new Date().toISOString() : undefined
+      startedAt: now,
+      lastSavedAt: now,
+      completedAt: (submissionData.status === 'submitted' || lifecycleStatus === 'DA_NOP') ? now : undefined
     };
     db.submissions.unshift(newSubmission);
   }
 
-  if (submissionData.status === 'submitted' && submissionData.studentId) {
+  if ((submissionData.status === 'submitted' || lifecycleStatus === 'DA_NOP') && submissionData.studentId) {
     const sIndex = db.students.findIndex(s => s.id === submissionData.studentId);
     if (sIndex >= 0) {
       db.students[sIndex].flowersEarned += 1;
@@ -744,7 +1181,7 @@ app.post('/api/submissions', (req, res) => {
   res.json({ success: true, submission: existingIndex >= 0 ? db.submissions[existingIndex] : db.submissions[0] });
 });
 
-// 6. Teacher review (Formative evaluation aligned with GDPT 2018 - Không chấm điểm số)
+// 6. Teacher review (Formative evaluation aligned with GDPT 2018 - 7 Năng lực viết)
 app.post('/api/teacher/review', (req, res) => {
   const { 
     submissionId, 
@@ -757,7 +1194,10 @@ app.post('/api/teacher/review', (req, res) => {
     wordSentenceSuggestions,
     emotionCreativityEncouragement,
     teacherAdvice,
-    editedAiNotes
+    editedAiNotes,
+    teacherSkillEvaluations,
+    revisionRequestedByTeacher,
+    revisionRequestNote
   } = req.body;
 
   const db = loadDatabase();
@@ -767,12 +1207,14 @@ app.post('/api/teacher/review', (req, res) => {
     return res.status(404).json({ success: false, message: 'Không tìm thấy bài viết.' });
   }
 
+  const now = new Date().toISOString();
+
   sub.teacherFeedback = {
     teacherName: teacherName || 'Cô Nguyễn Thị Hải Duyên',
     comment: comment || praiseIdea || 'Bài viết của em rất đáng khen ngợi!',
     confirmedStars: Number(confirmedStars) || 5,
     flowerSticker: flowerSticker || '🌸 Bông hoa chăm ngoan',
-    timestamp: new Date().toISOString(),
+    timestamp: now,
     status: status === 'draft' ? 'draft' : 'published',
     praiseIdea: praiseIdea || '',
     wordSentenceSuggestions: wordSentenceSuggestions || '',
@@ -783,15 +1225,32 @@ app.post('/api/teacher/review', (req, res) => {
     isExamGraded: req.body.score !== undefined && req.body.score !== null
   };
 
+  if (teacherSkillEvaluations && Array.isArray(teacherSkillEvaluations) && teacherSkillEvaluations.length > 0) {
+    sub.teacherSkillEvaluations = teacherSkillEvaluations;
+  }
+
+  if (revisionRequestedByTeacher) {
+    sub.revisionRequestedByTeacher = true;
+    sub.revisionRequestNote = revisionRequestNote || 'Con xem lại góp ý của cô để hoàn thiện bài văn nhé.';
+    sub.lifecycleStatus = 'CAN_CHINH_SUA';
+    sub.currentStep = 'chinh_sua';
+    sub.lastActiveStepLabel = 'Bước 7: Cần chỉnh sửa thêm';
+  } else {
+    sub.revisionRequestedByTeacher = false;
+    sub.revisionRequestNote = undefined;
+    sub.status = 'reviewed';
+    sub.lifecycleStatus = status === 'published' ? 'DA_HOAN_THANH' : 'CHO_NHAN_XET';
+    sub.currentStep = 'giao_vien_cham';
+    sub.lastActiveStepLabel = 'Bước 7: Cô giáo đã nhận xét';
+  }
+
   if (req.body.score !== undefined && req.body.score !== null) {
     sub.score = Math.round(Number(req.body.score));
     sub.isExam = true;
   }
 
-  sub.status = 'reviewed';
-
   const student = db.students.find(s => s.id === sub.studentId);
-  if (student && status === 'published') {
+  if (student && status === 'published' && !revisionRequestedByTeacher) {
     student.starsEarned += Number(confirmedStars) || 5;
   }
 

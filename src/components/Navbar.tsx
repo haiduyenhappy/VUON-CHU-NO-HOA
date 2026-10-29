@@ -50,6 +50,133 @@ export const Navbar: React.FC<NavbarProps> = ({
     onLogout();
   };
 
+  // HEADER RIÊNG CHO TRANG QUẢN TRỊ (SUPER_ADMIN)
+  // Tinh gọn: bên trái chỉ logo + tên, bên phải chỉ 3 thành phần: Quản trị, Trang chủ, Đăng xuất
+  const isAdminHeader = currentRole === 'admin_system';
+
+  if (isAdminHeader) {
+    return (
+      <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-purple-200/90 shadow-xs">
+        <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2.5 flex items-center justify-between gap-3">
+          {/* Bên trái: Giữ logo hiện tại, hiển thị tên: Trợ Lý Tập Làm Văn AI (không hiển thị khẩu hiệu dài) */}
+          <div 
+            onClick={() => handleMobileNav('home')} 
+            className="flex items-center gap-2.5 cursor-pointer group shrink-0"
+            title="Về Trang chủ sau đăng nhập"
+          >
+            <div className="w-10 h-10 rounded-2xl bg-gradient-to-tr from-pink-400 via-purple-400 to-sky-400 p-0.5 shadow-sm group-hover:rotate-6 transition-transform shrink-0">
+              <div className="w-full h-full bg-white rounded-[14px] flex items-center justify-center text-xl">
+                🌸
+              </div>
+            </div>
+            <span className="font-extrabold text-base sm:text-lg text-purple-950 tracking-tight font-display whitespace-nowrap">
+              Trợ Lý Tập Làm Văn AI
+            </span>
+          </div>
+
+          {/* Desktop Bên phải: Chỉ 3 thành phần, cùng 1 hàng, cân đối, cùng chiều cao h-9 (36px) */}
+          <div className="hidden md:flex items-center gap-2.5">
+            {/* 1. QUẢN TRỊ: Hiển thị tên quản trị viên và vai trò hiện tại */}
+            <div className="flex items-center gap-2 px-3 py-1.5 h-9 rounded-full bg-purple-50 text-purple-950 border border-purple-200 text-xs font-bold shadow-2xs whitespace-nowrap">
+              <span className="flex items-center justify-center w-5 h-5 rounded-full bg-amber-100 text-amber-900 text-xs shrink-0">
+                👑
+              </span>
+              <span className="text-stone-600 font-semibold">Quản trị viên:</span>
+              <span className="font-extrabold text-purple-950">
+                {currentUser?.teacherName || TEACHER_CONFIG.name}
+              </span>
+              <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 font-black text-[10px] border border-amber-300">
+                SUPER_ADMIN
+              </span>
+            </div>
+
+            {/* 2. TRANG CHỦ: Quay về đúng trang chủ sau đăng nhập, không chuyển đến màn hình đăng nhập */}
+            <button
+              onClick={() => onNavigate('home')}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 h-9 rounded-full text-xs font-bold bg-purple-100 hover:bg-purple-200 text-purple-900 border border-purple-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Quay về trang chủ sau đăng nhập"
+            >
+              <Home className="w-4 h-4 text-purple-700 shrink-0" />
+              <span>Trang chủ</span>
+            </button>
+
+            {/* 3. ĐĂNG XUẤT: Đăng xuất theo cơ chế xác thực hiện có */}
+            <button
+              onClick={onLogout}
+              className="flex items-center gap-1.5 px-3.5 py-1.5 h-9 rounded-full text-xs font-bold bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-300 shadow-2xs transition-colors cursor-pointer whitespace-nowrap"
+              title="Đăng xuất khỏi phiên làm việc"
+            >
+              <LogOut className="w-4 h-4 text-rose-600 shrink-0" />
+              <span>Đăng xuất</span>
+            </button>
+          </div>
+
+          {/* Mobile Bên phải: Thu gọn thông tin quản trị vào menu tài khoản, kèm nút Trang chủ nhanh */}
+          <div className="flex md:hidden items-center gap-1.5">
+            <button
+              onClick={() => handleMobileNav('home')}
+              className="flex items-center gap-1 px-2.5 py-1.5 h-9 rounded-xl text-xs font-bold bg-purple-100 text-purple-900 border border-purple-300 whitespace-nowrap"
+              title="Quay về trang chủ sau đăng nhập"
+            >
+              <Home className="w-3.5 h-3.5 text-purple-700" />
+              <span>Trang chủ</span>
+            </button>
+
+            <button
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="min-h-[36px] h-9 px-2.5 flex items-center justify-center rounded-xl border border-purple-300 bg-purple-50 text-purple-950 font-bold text-xs gap-1.5 shadow-2xs"
+              aria-label="Menu tài khoản quản trị viên"
+            >
+              <span>👑</span>
+              <span className="max-w-[85px] truncate font-extrabold">{currentUser?.teacherName || 'Admin'}</span>
+            </button>
+          </div>
+        </div>
+
+        {/* Mobile Drawer Navigation cho Quản trị viên */}
+        {isMobileMenuOpen && (
+          <div className="md:hidden border-t border-purple-200 bg-white/98 backdrop-blur-md px-4 py-4 space-y-3 shadow-lg animate-fade-in">
+            {/* Card thông tin Quản trị viên */}
+            <div className="p-3.5 bg-gradient-to-r from-purple-50 via-indigo-50 to-amber-50 rounded-2xl border border-purple-200 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 text-[10px] font-black border border-amber-300 flex items-center gap-1">
+                  <span>👑</span>
+                  <span>QUẢN TRỊ VIÊN CHÍNH</span>
+                </span>
+                <span className="text-[11px] font-bold text-purple-800">SUPER_ADMIN</span>
+              </div>
+              <div className="font-extrabold text-sm text-stone-900">
+                {currentUser?.teacherName || TEACHER_CONFIG.fullName}
+              </div>
+              <div className="text-xs text-stone-600 font-medium">
+                {currentUser?.teacherProfile?.school || TEACHER_CONFIG.school}
+              </div>
+            </div>
+
+            {/* Menu hành động trên Mobile */}
+            <div className="space-y-2 pt-1">
+              <button
+                onClick={() => handleMobileNav('home')}
+                className="w-full min-h-[42px] px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2.5 bg-purple-50 text-purple-900 border border-purple-200 hover:bg-purple-100 transition-colors"
+              >
+                <Home className="w-4 h-4 text-purple-700" />
+                <span>Trang chủ (Sau đăng nhập)</span>
+              </button>
+
+              <button
+                onClick={handleMobileLogout}
+                className="w-full min-h-[42px] px-4 py-2 rounded-xl font-bold text-xs flex items-center gap-2.5 bg-rose-50 text-rose-700 border border-rose-300 hover:bg-rose-100 transition-colors"
+              >
+                <LogOut className="w-4 h-4 text-rose-600" />
+                <span>Đăng xuất tài khoản</span>
+              </button>
+            </div>
+          </div>
+        )}
+      </header>
+    );
+  }
+
   return (
     <header className="sticky top-0 z-40 bg-white/95 backdrop-blur-md border-b border-pink-200/80 shadow-xs">
       <div className="max-w-7xl mx-auto px-3 sm:px-6 py-2 flex items-center justify-between gap-2">
@@ -195,11 +322,11 @@ export const Navbar: React.FC<NavbarProps> = ({
               </div>
               {currentUser.teacherRole === 'SUPER_ADMIN' && (
                 <button
-                  onClick={() => onNavigate(currentRole === 'admin_system' ? 'teacher' : 'admin_system')}
+                  onClick={() => onNavigate('admin_system')}
                   className="flex items-center gap-1 px-2.5 py-1 rounded-full text-xs font-black bg-amber-100 text-amber-900 border border-amber-300 hover:bg-amber-200 transition-colors cursor-pointer shadow-xs"
-                  title="Chuyển đổi giữa Trang Quản trị hệ thống và Lớp học của tôi"
+                  title="Đến Trang Quản trị hệ thống"
                 >
-                  {currentRole === 'admin_system' ? '👩‍🏫 Về lớp tôi' : '👑 Quản trị HT'}
+                  <span>👑 Quản trị HT</span>
                 </button>
               )}
               <button
@@ -366,11 +493,11 @@ export const Navbar: React.FC<NavbarProps> = ({
 
             {currentUser?.teacherRole === 'SUPER_ADMIN' && (
               <button
-                onClick={() => handleMobileNav(currentRole === 'admin_system' ? 'teacher' : 'admin_system')}
+                onClick={() => handleMobileNav('admin_system')}
                 className="w-full min-h-[46px] px-4 py-2.5 rounded-2xl font-black text-sm flex items-center gap-3 bg-amber-100 text-amber-900 border border-amber-300"
               >
                 <Shield className="w-5 h-5 text-amber-700" />
-                <span>{currentRole === 'admin_system' ? '👩‍🏫 Về góc lớp học của tôi' : '👑 Trang Quản trị hệ thống'}</span>
+                <span>👑 Trang Quản trị hệ thống</span>
               </button>
             )}
           </div>

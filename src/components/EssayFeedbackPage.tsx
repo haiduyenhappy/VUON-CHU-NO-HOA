@@ -241,9 +241,10 @@ export const EssayFeedbackPage: React.FC<EssayFeedbackPageProps> = ({
     const submissionData: Partial<Submission> = {
       studentId: student.id,
       taskId: `custom-${Date.now()}`,
-      taskTitle: initialPrompt.slice(0, 50),
+      taskTitle: initialPrompt.slice(0, 60),
       gardenType: 'ke_chuyen',
       volume: 1,
+      grade: initialGrade,
       isIndependentTest: false,
       initialOutline,
       developedOutline: initialOutline,
@@ -251,25 +252,14 @@ export const EssayFeedbackPage: React.FC<EssayFeedbackPageProps> = ({
       finalContent: essayText,
       comprehensiveFeedback: feedback || undefined,
       status: 'submitted',
+      lifecycleStatus: 'CHO_NHAN_XET',
+      currentStep: 'da_nop',
+      lastActiveStepLabel: 'Bước 6: Đã nộp bài cho cô',
       handwrittenImages: uploadedPhotos,
       studentNotesToTeacher: studentNoteToTeacher
     };
 
     onSaveSubmission(submissionData);
-
-    try {
-      await fetch('/api/submissions', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: `sub-${Date.now()}`,
-          ...submissionData
-        })
-      });
-    } catch (e) {
-      console.error(e);
-    }
-
     setIsCompletedSuccessModal(true);
   };
 

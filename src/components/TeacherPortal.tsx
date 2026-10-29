@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData } from '../types';
+import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { TEACHER_CONFIG } from '../constants/teacherConfig';
+import { WRITING_SKILLS_META, getLevelFromScore } from '../utils/writingSkillsRubric';
 import { playPop, playChime } from '../utils/audio';
 import { getTeacherGreeting } from '../utils/timeGreeting';
 import { HoaNhoMascot } from './HoaNhoMascot';
@@ -126,6 +127,20 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // Dual Assessment Mode: Regular practice vs Periodic test with 1-10 integer score
   const [isPeriodicExamReview, setIsPeriodicExamReview] = useState(false);
   const [examScore, setExamScore] = useState<number | ''>('');
+
+  // 7 Writing Skills Rubric State (GDPT 2018)
+  const [skillScores, setSkillScores] = useState<Record<string, number>>({
+    hieu_de: 90,
+    tim_y: 85,
+    sap_xep_y: 85,
+    dien_dat: 85,
+    chinh_ta_dau_cau: 90,
+    cam_xuc_sang_tao: 90,
+    tu_chinh_sua: 80
+  });
+  const [requestRevision, setRequestRevision] = useState(false);
+  const [revisionNote, setRevisionNote] = useState('');
+  const [viewJourneySub, setViewJourneySub] = useState<Submission | null>(null);
 
   // ---------------- Account Management Section State ----------------
   const [localStudents, setLocalStudents] = useState<Student[]>(students);
@@ -417,6 +432,28 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setFeedbackStatus(sub.teacherFeedback?.status || 'published');
     setExamScore(sub.score !== undefined ? sub.score : (sub.teacherFeedback?.score !== undefined ? sub.teacherFeedback.score : ''));
     setIsPeriodicExamReview(Boolean(sub.isExam || sub.teacherFeedback?.isExamGraded));
+    
+    // Load existing skill evaluations
+    if (sub.teacherSkillEvaluations && sub.teacherSkillEvaluations.length > 0) {
+      const map: Record<string, number> = {};
+      sub.teacherSkillEvaluations.forEach(ev => {
+        map[ev.skillId] = ev.score;
+      });
+      setSkillScores(prev => ({ ...prev, ...map }));
+    } else {
+      setSkillScores({
+        hieu_de: 90,
+        tim_y: 85,
+        sap_xep_y: 85,
+        dien_dat: 85,
+        chinh_ta_dau_cau: 90,
+        cam_xuc_sang_tao: 90,
+        tu_chinh_sua: 80
+      });
+    }
+
+    setRequestRevision(sub.lifecycleStatus === 'CAN_CHINH_SUA' || !!sub.revisionRequestedByTeacher);
+    setRevisionNote(sub.revisionRequestNote || '');
     setSuccessMsg('');
   };
 
@@ -425,6 +462,22 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
     setIsSavingFeedback(true);
     playChime(settings.soundEnabled);
+
+    // Build the 7 skills evaluation array according to GDPT 2018
+    const teacherSkillEvaluations = WRITING_SKILLS_META.map(meta => {
+      const score = skillScores[meta.id] ?? 85;
+      const { level, label } = getLevelFromScore(score);
+      return {
+        skillId: meta.id,
+        skillName: meta.name,
+        score,
+        level,
+        levelLabel: label,
+        evidence: `Được ${currentUser?.teacherName || TEACHER_CONFIG.name} đánh giá trong bài viết "${selectedSubmission.taskTitle}"`,
+        evaluator: 'TEACHER' as const,
+        evaluatedAt: new Date().toISOString()
+      };
+    });
 
     try {
       const res = await fetch('/api/teacher/review', {
@@ -442,16 +495,21 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           editedAiNotes,
           score: isPeriodicExamReview && examScore !== '' ? Math.round(Number(examScore)) : undefined,
           status: targetStatus,
-          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name
+          teacherName: currentUser?.teacherName || TEACHER_CONFIG.name,
+          teacherSkillEvaluations,
+          revisionRequestedByTeacher: requestRevision,
+          revisionRequestNote: revisionNote
         })
       });
 
       const data = await res.json();
       if (data.success) {
         setSuccessMsg(
-          targetStatus === 'published' 
-            ? '✓ Đã công bố nhận xét và trao hoa cho em thành công! Học sinh và gia đình đã có thể xem được.'
-            : '✓ Đã lưu bản nháp nhận xét. Chỉ cô mới thấy nội dung này.'
+          requestRevision
+            ? '✓ Đã gửi yêu cầu chỉnh sửa và dặn dò cho học sinh hoàn thiện!'
+            : targetStatus === 'published' 
+              ? '✓ Đã công bố nhận xét và đánh giá 7 năng lực viết cho em thành công!'
+              : '✓ Đã lưu bản nháp nhận xét. Chỉ cô mới thấy nội dung này.'
         );
         fetchSubmissions();
         setSelectedSubmission(data.submission);
@@ -1305,23 +1363,34 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                     </div>
 
                     {/* Dual Mode Switcher Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        const next = !isPeriodicExamReview;
-                        setIsPeriodicExamReview(next);
-                        if (!next) setExamScore('');
-                        else if (examScore === '') setExamScore(9);
-                      }}
-                      className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
-                        isPeriodicExamReview
-                          ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-200'
-                          : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
-                      }`}
-                      title="Chuyển đổi giữa nhận xét thường xuyên (không chấm điểm) và đánh giá định kỳ (thang điểm 10)"
-                    >
-                      {isPeriodicExamReview ? '📝 Chế độ: Kiểm tra định kỳ (Có điểm 1-10)' : '🌸 Chế độ: Luyện tập thường xuyên'}
-                    </button>
+                    <div className="flex items-center gap-2">
+                      <button
+                        type="button"
+                        onClick={() => setViewJourneySub(selectedSubmission)}
+                        className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-black bg-emerald-50 hover:bg-emerald-100 text-emerald-900 border border-emerald-300 transition-all cursor-pointer shadow-xs"
+                      >
+                        <Eye className="w-3.5 h-3.5 text-emerald-700" />
+                        <span>Xem hành trình 7 bước</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const next = !isPeriodicExamReview;
+                          setIsPeriodicExamReview(next);
+                          if (!next) setExamScore('');
+                          else if (examScore === '') setExamScore(9);
+                        }}
+                        className={`px-3 py-1.5 rounded-xl text-xs font-black border transition-all cursor-pointer ${
+                          isPeriodicExamReview
+                            ? 'bg-amber-100 text-amber-900 border-amber-300 ring-2 ring-amber-200'
+                            : 'bg-stone-100 text-stone-700 border-stone-200 hover:bg-stone-200'
+                        }`}
+                        title="Chuyển đổi giữa nhận xét thường xuyên (không chấm điểm) và đánh giá định kỳ (thang điểm 10)"
+                      >
+                        {isPeriodicExamReview ? '📝 Chế độ: Kiểm tra định kỳ (Có điểm 1-10)' : '🌸 Chế độ: Luyện tập thường xuyên'}
+                      </button>
+                    </div>
                   </div>
 
                   {/* Integer Score Field (1-10) for Periodic Exam */}
@@ -1357,6 +1426,80 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                       </p>
                     </div>
                   )}
+
+                  {/* 7 Writing Skills Rubric (GDPT 2018) */}
+                  <div className="p-4 bg-emerald-50/60 rounded-2xl border border-emerald-200 space-y-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                        <span>📊</span>
+                        <span>Đánh giá 7 Năng lực viết (GDPT 2018):</span>
+                      </span>
+                      <span className="text-[11px] text-stone-500 font-semibold">Bấm chọn mức độ</span>
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+                      {WRITING_SKILLS_META.map(meta => {
+                        const currentScore = skillScores[meta.id] ?? 85;
+                        return (
+                          <div key={meta.id} className="p-2.5 bg-white rounded-xl border border-stone-200 space-y-1.5">
+                            <div className="flex justify-between items-center text-xs font-bold text-stone-800">
+                              <span className="flex items-center gap-1">
+                                <span>{meta.icon}</span>
+                                <span>{meta.name}</span>
+                              </span>
+                              <span className="text-[10px] text-emerald-800 font-extrabold">
+                                {getLevelFromScore(currentScore).label} ({currentScore}đ)
+                              </span>
+                            </div>
+                            <div className="grid grid-cols-4 gap-1 text-[10px] font-bold">
+                              {[
+                                { label: 'Rèn thêm', score: 50 },
+                                { label: 'Tiến bộ', score: 70 },
+                                { label: 'Tốt', score: 85 },
+                                { label: 'Xuất sắc', score: 95 }
+                              ].map(lvl => (
+                                <button
+                                  key={lvl.score}
+                                  type="button"
+                                  onClick={() => setSkillScores(prev => ({ ...prev, [meta.id]: lvl.score }))}
+                                  className={`py-1 rounded-lg border text-center transition-all ${
+                                    currentScore === lvl.score
+                                      ? 'bg-emerald-600 text-white border-emerald-700 font-extrabold shadow-xs'
+                                      : 'bg-stone-50 text-stone-700 border-stone-200 hover:bg-stone-100'
+                                  }`}
+                                >
+                                  {lvl.label}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Revision Request Checkbox */}
+                  <div className="p-3 bg-amber-50 rounded-2xl border border-amber-300 space-y-2">
+                    <label className="flex items-center gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={requestRevision}
+                        onChange={e => setRequestRevision(e.target.checked)}
+                        className="w-4 h-4 text-amber-600 rounded-md focus:ring-amber-400"
+                      />
+                      <span className="text-xs font-black text-amber-950">
+                        ⚠️ Yêu cầu con chỉnh sửa và hoàn thiện thêm (Chuyển trạng thái: Cần chỉnh sửa)
+                      </span>
+                    </label>
+                    {requestRevision && (
+                      <input
+                        type="text"
+                        value={revisionNote}
+                        onChange={e => setRevisionNote(e.target.value)}
+                        placeholder="Ghi chú điểm con cần chỉnh sửa (ví dụ: Bổ sung câu kết đoạn và sửa 2 lỗi chính tả)..."
+                        className="w-full p-2 text-xs rounded-xl border border-amber-300 bg-white"
+                      />
+                    )}
+                  </div>
 
                   {successMsg && (
                     <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-pulse">
@@ -3488,6 +3631,205 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs shadow-xs"
               >
                 Tạo tài khoản
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Xem Hành Trình 7 Bước Cho Giáo Viên */}
+      {viewJourneySub && (
+        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-fade-in">
+          <div className="bg-white rounded-3xl max-w-3xl w-full max-h-[90vh] flex flex-col shadow-2xl border-2 border-emerald-400 overflow-hidden">
+            {/* Header */}
+            <div className="p-4 sm:p-5 bg-gradient-to-r from-emerald-100 to-teal-50 border-b border-emerald-200 flex items-center justify-between gap-3">
+              <div>
+                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white">
+                  Quá trình thực hiện 7 bước của học sinh
+                </span>
+                <h3 className="text-lg sm:text-xl font-black text-emerald-950 font-display mt-1">
+                  {viewJourneySub.taskTitle}
+                </h3>
+              </div>
+              <button
+                onClick={() => setViewJourneySub(null)}
+                className="w-9 h-9 rounded-2xl bg-white/80 hover:bg-white text-stone-600 hover:text-stone-900 flex items-center justify-center border border-emerald-200 shadow-xs"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Content: 7 Steps */}
+            <div className="p-4 sm:p-6 overflow-y-auto space-y-5">
+              {/* Step 1: Hiểu đề */}
+              <div className="relative pl-7 border-l-2 border-emerald-300 space-y-1">
+                <span className="absolute -left-3 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+                  1
+                </span>
+                <h4 className="font-extrabold text-sm text-stone-900">
+                  Bước 1: Hiểu đề & Định hướng
+                </h4>
+                <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs space-y-1">
+                  {viewJourneySub.understandingStage?.selectedDirectionTitle && (
+                    <p className="font-bold text-emerald-800">
+                      Hướng viết: {viewJourneySub.understandingStage.selectedDirectionTitle}
+                    </p>
+                  )}
+                  {viewJourneySub.understandingStage?.selectedObject && (
+                    <p className="font-bold text-emerald-800">
+                      Đối tượng đã chọn: {viewJourneySub.understandingStage.selectedObject}
+                    </p>
+                  )}
+                  {viewJourneySub.understandingStage?.promptRequirements?.map((req, rIdx) => (
+                    <p key={rIdx} className="text-stone-700">• {req}</p>
+                  ))}
+                  {viewJourneySub.understandingStage?.studentWishes && (
+                    <p className="text-purple-800 font-semibold">
+                      Mong muốn của con: {viewJourneySub.understandingStage.studentWishes}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 2: Tìm ý */}
+              <div className="relative pl-7 border-l-2 border-emerald-300 space-y-1">
+                <span className="absolute -left-3 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+                  2
+                </span>
+                <h4 className="font-extrabold text-sm text-stone-900">
+                  Bước 2: Tìm ý & Trả lời câu hỏi gợi mở
+                </h4>
+                <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs space-y-1.5">
+                  {viewJourneySub.ideaFindingStage?.studentAnswers ? (
+                    Object.entries(viewJourneySub.ideaFindingStage.studentAnswers).map(([k, ans], aIdx) => (
+                      <div key={k} className="space-y-0.5">
+                        <span className="font-bold text-stone-600 block">
+                          Câu {aIdx + 1}: {viewJourneySub.ideaFindingStage?.questions?.[Number(k)] || 'Câu hỏi gợi mở'}
+                        </span>
+                        <p className="text-stone-800 font-semibold bg-white p-2 rounded-xl border border-stone-200">
+                          {ans}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <p className="text-stone-500 italic">Dữ liệu trả lời câu hỏi trực tiếp.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 3: Sơ đồ tư duy */}
+              <div className="relative pl-7 border-l-2 border-emerald-300 space-y-1">
+                <span className="absolute -left-3 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+                  3
+                </span>
+                <h4 className="font-extrabold text-sm text-stone-900">
+                  Bước 3: Sơ đồ tư duy các nhánh ý
+                </h4>
+                <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs space-y-2">
+                  {viewJourneySub.mindMapStage?.branches ? (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {viewJourneySub.mindMapStage.branches.map(b => (
+                        <div key={b.id} className="p-2.5 bg-white rounded-xl border border-stone-200 space-y-1">
+                          <span className="font-bold text-emerald-900 flex items-center gap-1">
+                            <span>{b.icon}</span>
+                            <span>{b.title}</span>
+                          </span>
+                          <ul className="text-[11px] text-stone-700 space-y-0.5 list-disc pl-3.5">
+                            {(b.points || b.items || []).map((pt, pIdx) => (
+                              <li key={pIdx}>{pt}</li>
+                            ))}
+                          </ul>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-stone-500 italic">Sơ đồ tư duy đã lưu.</p>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 4: Dàn ý chi tiết */}
+              <div className="relative pl-7 border-l-2 border-emerald-300 space-y-1">
+                <span className="absolute -left-3 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+                  4
+                </span>
+                <h4 className="font-extrabold text-sm text-stone-900">
+                  Bước 4: Dàn ý chi tiết
+                </h4>
+                <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 text-xs space-y-1.5">
+                  {(viewJourneySub.developedOutline || viewJourneySub.initialOutline || []).map(item => (
+                    <div key={item.id} className="flex gap-2">
+                      <span className="font-bold text-emerald-800 shrink-0">{item.section}:</span>
+                      <span className="text-stone-800 font-medium">{item.content}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Step 5: Bài viết & Các bản nháp */}
+              <div className="relative pl-7 border-l-2 border-emerald-300 space-y-1">
+                <span className="absolute -left-3 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+                  5
+                </span>
+                <h4 className="font-extrabold text-sm text-stone-900">
+                  Bước 5: Lịch sử bản nháp ({viewJourneySub.drafts?.length || 1} bản)
+                </h4>
+                <div className="space-y-2">
+                  {viewJourneySub.drafts && viewJourneySub.drafts.length > 0 ? (
+                    viewJourneySub.drafts.map(d => (
+                      <div key={d.version} className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200 text-xs space-y-1">
+                        <div className="flex justify-between font-bold text-amber-900">
+                          <span>Bản nháp số {d.version} {d.note ? `• ${d.note}` : ''}</span>
+                          <span className="text-[10px] text-stone-500 font-normal">
+                            {new Date(d.timestamp).toLocaleTimeString('vi-VN')} {new Date(d.timestamp).toLocaleDateString('vi-VN')}
+                          </span>
+                        </div>
+                        <p className="text-stone-800 whitespace-pre-wrap leading-relaxed font-medium">
+                          {d.content}
+                        </p>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="p-3 bg-amber-50/60 rounded-2xl border border-amber-200 text-xs">
+                      <p className="text-stone-800 whitespace-pre-wrap leading-relaxed font-medium">
+                        {viewJourneySub.finalContent || viewJourneySub.firstDraft}
+                      </p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Step 6: AI Feedback */}
+              {viewJourneySub.aiFeedback && (
+                <div className="relative pl-7 border-l-2 border-emerald-300 space-y-1">
+                  <span className="absolute -left-3 top-0 w-6 h-6 rounded-full bg-emerald-600 text-white font-extrabold text-xs flex items-center justify-center shadow-xs">
+                    6
+                  </span>
+                  <h4 className="font-extrabold text-sm text-stone-900">
+                    Bước 6: Gợi ý từ trợ lý AI Hoa Nhỏ
+                  </h4>
+                  <div className="p-3 bg-pink-50/60 rounded-2xl border border-pink-200 text-xs space-y-1">
+                    <p className="text-rose-900">
+                      <strong>🌸 Bông hoa khen ngợi:</strong> {viewJourneySub.aiFeedback.flowerPraise}
+                    </p>
+                    <p className="text-emerald-900">
+                      <strong>🍃 Chiếc lá nhắc em:</strong> {viewJourneySub.aiFeedback.leafReminder}
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="p-4 bg-stone-50 border-t border-stone-200 flex justify-between items-center">
+              <span className="text-xs text-stone-500 font-medium">
+                Mã bài viết: {viewJourneySub.id}
+              </span>
+              <button
+                onClick={() => setViewJourneySub(null)}
+                className="px-4 py-2 rounded-2xl bg-stone-800 hover:bg-stone-900 text-white text-xs font-bold shadow-xs"
+              >
+                Đóng
               </button>
             </div>
           </div>

@@ -182,6 +182,19 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
                           <span className="text-stone-700">{selectedSub.teacherFeedback.emotionCreativityEncouragement}</span>
                         </div>
                       )}
+                      {selectedSub.teacherSkillEvaluations && selectedSub.teacherSkillEvaluations.length > 0 && (
+                        <div className="bg-white p-3 rounded-xl border border-emerald-200 space-y-1.5">
+                          <strong className="text-emerald-900 block font-bold text-xs">📊 Đánh giá 7 năng lực viết (GDPT 2018):</strong>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            {selectedSub.teacherSkillEvaluations.map(ev => (
+                              <div key={ev.skillId} className="flex justify-between items-center bg-stone-50 p-1.5 rounded-lg border border-stone-200 text-[11px]">
+                                <span className="font-semibold text-stone-700">{ev.skillName}</span>
+                                <span className="font-extrabold text-emerald-800">{ev.levelLabel}</span>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

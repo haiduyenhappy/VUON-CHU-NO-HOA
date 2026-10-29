@@ -67,6 +67,7 @@ export default function App() {
     { id: '3', section: 'Kết đoạn', content: 'Nêu cảm nghĩ hoặc điều con mong muốn mọi người hiểu và nhớ về mình.' }
   ]);
   const [sharedEssayText, setSharedEssayText] = useState<string>('');
+  const [activeSubmissionId, setActiveSubmissionId] = useState<string | null>(null);
 
   const [settings, setSettings] = useState<AppSettings>(() => {
     try {
@@ -229,13 +230,44 @@ export default function App() {
     setCurrentView('essay_feedback');
   };
 
+  // Resume an in-progress or revision submission
+  const handleResumeSubmission = (sub: Submission) => {
+    setActiveSubmissionId(sub.id);
+    if (sub.taskTitle) setSharedPrompt(sub.taskTitle);
+    if (sub.grade) setSharedGrade(sub.grade);
+    if (sub.developedOutline?.length) {
+      setSharedOutline(sub.developedOutline);
+    } else if (sub.initialOutline?.length) {
+      setSharedOutline(sub.initialOutline);
+    }
+    if (sub.understandingStage?.studentWishes) {
+      setSharedSpecialWishes(sub.understandingStage.studentWishes);
+    }
+    if (sub.finalContent || sub.firstDraft) {
+      setSharedEssayText(sub.finalContent || sub.firstDraft);
+    }
+
+    const step = sub.currentStep || 'viet_bai';
+    if (['hieu_de', 'tim_y', 'so_do', 'dan_y'].includes(step)) {
+      setReturnToView('progress_journey');
+      setCurrentView('idea_map');
+    } else {
+      setReturnToView('progress_journey');
+      setCurrentView('essay_feedback');
+    }
+  };
+
   // Save submission callback from EssayFeedbackPage
   const handleSaveSubmission = async (newSub: Partial<Submission>) => {
     try {
+      const payload = {
+        ...newSub,
+        id: activeSubmissionId || newSub.id
+      };
       const res = await fetch('/api/submissions', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(newSub)
+        body: JSON.stringify(payload)
       });
       const data = await res.json();
       if (data.success && activeStudent) {
@@ -360,6 +392,7 @@ export default function App() {
             student={activeStudent}
             settings={settings}
             returnViewName={returnToView === 'family' ? 'Góc gia đình' : returnToView === 'teacher' ? 'Góc cô giáo' : 'Góc của em'}
+            onResumeSubmission={handleResumeSubmission}
             onBack={() => {
               playPop(settings.soundEnabled);
               setCurrentView(returnToView || (currentUser?.role || 'home'));
