@@ -688,7 +688,7 @@ export function analyzePromptSemantics(
       id: 'tinh_cam_ong',
       title: 'Nói lên tình cảm yêu mến, kính trọng đối với ông',
       mainObject: 'Ông kính yêu',
-      scope: 'Bày tỏ lòng kính trọng, cử chỉ ấm áp của ông và lời hứa chăm ngoan (3–5 câu)',
+      scope: 'Bày tỏ tình cảm với ông qua một đặc điểm, việc làm hoặc kỷ niệm có thật (3–5 câu)',
       recipient: 'Người đọc',
       purpose: 'Bày tỏ tình cảm yêu mến, kính trọng đối với ông',
       pointOfView: 'Cháu – ông',
@@ -700,7 +700,7 @@ export function analyzePromptSemantics(
       id: 'tinh_cam_ba',
       title: 'Nói lên tình cảm yêu mến, kính trọng đối với bà',
       mainObject: 'Bà kính yêu',
-      scope: 'Bày tỏ lòng kính yêu, sự chăm sóc hiền từ của bà và lời hứa chăm ngoan (3–5 câu)',
+      scope: 'Bày tỏ tình cảm với bà qua một đặc điểm, việc làm hoặc kỷ niệm có thật (3–5 câu)',
       recipient: 'Người đọc',
       purpose: 'Bày tỏ tình cảm yêu mến, kính trọng đối với bà',
       pointOfView: 'Cháu – bà',
@@ -2253,71 +2253,65 @@ export function buildGenreStructure(
   if (isGrandparentLoveGrade2Prompt(pLower, grade)) {
     const isGrandma = semantics.selectedDirectionId === 'tinh_cam_ba' || semantics.mainObject.toLowerCase().includes('bà');
     const relName = isGrandma ? 'bà' : 'ông';
-    const relTitle = isGrandma ? 'bà kính yêu' : 'ông kính yêu';
-    hoaNhoUnderstand = `Con hãy viết một đoạn văn ngắn từ 3 đến 5 câu để bày tỏ tình cảm yêu mến, kính trọng sâu sắc đối với ${relTitle} nhé!`;
+    const relTitle = isGrandma ? 'bà' : 'ông';
+    const specificActivity = isGrandma ? 'bà cùng em chăm sóc cây' : 'ông cùng em tưới cây';
+    hoaNhoUnderstand = `Con hãy viết 3–5 câu về tình cảm yêu mến, kính trọng của mình đối với ${relName}. Con có thể kể một việc làm, kỷ niệm thật hoặc điều con yêu quý ở ${relName}; không cần viết theo một khuôn mẫu cố định nhé!`;
     specificRequirements = [
-      'Nhiệm vụ: Viết đoạn văn ngắn từ 3 đến 5 câu',
-      `Đối tượng: ${isGrandma ? 'Bà kính yêu' : 'Ông kính yêu'}`,
-      'Trọng tâm: Bày tỏ tình cảm yêu mến, kính trọng; cử chỉ yêu thương và lời hứa chăm ngoan',
-      'Dung lượng: Đúng 3 đến 5 câu hoàn chỉnh (không viết thành 7–9 câu hay bài văn)'
+      'Nhiệm vụ: Viết một đoạn văn ngắn gồm 3–5 câu',
+      `Đối tượng: ${isGrandma ? 'Bà' : 'Ông'} (chọn một người thân để viết)`,
+      'Trọng tâm: Bày tỏ tình cảm yêu mến, kính trọng bằng suy nghĩ và chi tiết thật của em',
+      'Nội dung có thể chọn: Đặc điểm, lời nói, việc làm, kỷ niệm hoặc mong ước; không bắt buộc có lời hứa',
+      'Dung lượng: 3–5 câu hoàn chỉnh, diễn đạt tự nhiên, đúng yêu cầu đề'
     ];
     socraticQuestions = [
-      `Trong gia đình, con muốn nói lên tình cảm yêu mến đối với ${relName} như thế nào?`,
-      `${relName} có nụ cười, ánh mắt hay cử chỉ chăm sóc nào làm con xúc động nhất?`,
-      'Mỗi ngày hoặc mỗi dịp về thăm, kỷ niệm nào bên ${relName} làm con nhớ mãi?',
-      `Con muốn kính chúc ${relName} điều gì và hứa điều ngoan ngoãn nào?`
+      `Điều gì ở ${relName} khiến con yêu quý hoặc kính trọng nhất?`,
+      `Con nhớ lời nói, việc làm hay đặc điểm nào của ${relName}?`,
+      `Con từng làm việc gì cùng ${relName} khiến con vui hoặc xúc động?`,
+      `Con muốn nói điều gì thật lòng với ${relName}?`
     ];
     branches = [
-      { id: 'br-1', title: '🌱 Giới thiệu người thân', icon: '🌱', color: 'emerald', points: [`Giới thiệu ${relName} kính yêu`, 'Bộc lộ tình cảm yêu mến, kính trọng', 'Vị trí đặc biệt của người thân trong lòng em'] },
-      { id: 'br-2', title: '☀️ Nụ cười và ánh mắt hiền từ', icon: '☀️', color: 'purple', points: ['Nụ cười ấm áp, bao dung', 'Ánh mắt đong đầy yêu thương', 'Mái tóc bạc phơ hiền từ'] },
-      { id: 'br-3', title: '💖 Cử chỉ chăm sóc ân cần', icon: '💖', color: 'amber', points: ['Chăm lo từng bữa ăn, giấc ngủ', 'Kể chuyện cổ tích mỗi tối', 'Ân cần dặn dò những điều hay'] },
-      { id: 'br-4', title: '🌸 Tình cảm kính mến của em', icon: '🌸', color: 'sky', points: ['Em luôn kính yêu và gắn bó', 'Cảm giác bình yên bên người thân', 'Lòng biết ơn công lao sinh thành'] },
-      { id: 'br-5', title: '⭐ Lời kính chúc & Lời hứa ngoan', icon: '⭐', color: 'rose', points: ['Kính chúc sống lâu trăm tuổi, luôn mạnh khỏe', 'Hứa chăm ngoan, học giỏi để người thân tự hào'] }
+      { id: 'br-1', title: '🌱 Người thân em chọn', icon: '🌱', color: 'emerald', points: [`Em muốn viết về ${relName}`, `Điều em yêu quý ở ${relName}`] },
+      { id: 'br-2', title: '☀️ Đặc điểm em nhớ', icon: '☀️', color: 'purple', points: ['Nụ cười hoặc ánh mắt', 'Giọng nói hoặc dáng đi', 'Đặc điểm thật con quan sát được'] },
+      { id: 'br-3', title: '💖 Việc làm yêu thương', icon: '💖', color: 'amber', points: [`Một việc ${relName} làm cho con`, `Một việc con làm cùng ${relName}`, 'Lời nói khiến con nhớ'] },
+      { id: 'br-4', title: '🌸 Kỷ niệm của con', icon: '🌸', color: 'sky', points: ['Một lần con thấy vui', 'Một lần được giúp đỡ', 'Điều con thật sự nhớ'] },
+      { id: 'br-5', title: '⭐ Tình cảm và mong ước', icon: '⭐', color: 'rose', points: [`Con yêu quý, kính trọng ${relName} ra sao?`, `Điều con mong cho ${relName}`, 'Lời cảm ơn hoặc lời chúc (nếu con muốn)'] }
     ];
 
-    const sec1 = [`Câu 1 (Mở đoạn): Viết một câu giới thiệu về ${relName} kính yêu và bộc lộ ngay tình cảm yêu mến, kính trọng của em. (Ví dụ: "Trong gia đình, em luôn dành tình cảm yêu mến và kính trọng nhất đối với ${relName} của em.")`];
+    const sec1 = [`Câu 1: Giới thiệu ${relName} hoặc nói ngay điều con yêu quý ở ${relName}. Con hãy dùng lời của mình.`];
     const sec2 = [
-      `Câu 2 (Cử chỉ yêu thương): Viết một câu kể về nụ cười hiền hậu hoặc sự chăm sóc ân cần của ${relName} dành cho em. (Ví dụ: "${relName} luôn dành cho em nụ cười hiền hậu và đôi bàn tay ấm áp xoa đầu mỗi khi em chăm ngoan.")`,
-      `Câu 3 (Kỷ niệm ấm áp): Viết thêm một câu kể lại kỷ niệm ấm áp bên ${relName}. (Ví dụ: "Mỗi buổi tối, ${relName} lại ân cần chỉ bảo em học bài và kể cho em nghe những câu chuyện cổ tích xúc động.")`
+      `Câu 2–3: Chọn một đặc điểm, việc làm hoặc kỷ niệm thật về ${relName}; chỉ viết những điều con biết hoặc đã trải qua.`,
+      `Nếu cần câu thứ tư, con có thể nói thêm cảm xúc của mình khi ở bên ${relName}.`
     ];
-    const sec3 = [
-      `Câu 4–5 (Kết đoạn): Viết 1–2 câu bày tỏ lòng biết ơn sâu sắc và lời hứa chăm ngoan, học giỏi. (Ví dụ: "Em kính chúc ${relName} luôn mạnh khỏe, sống lâu trăm tuổi. Em hứa sẽ luôn chăm chỉ học tập để ${relName} luôn vui lòng.")`
-    ];
-
+    const sec3 = [`Câu cuối (câu 3, 4 hoặc 5): Bày tỏ tình cảm, lời chúc hoặc mong ước dành cho ${relName}; không bắt buộc phải hứa chăm ngoan.`];
     outline = {
       moDoan: sec1,
       phatTrienDoan: sec2,
       ketDoan: sec3,
       genre: 'tinh_cam_cam_xuc',
       sections: [
-        { id: 'sec-1', title: 'Câu 1. Mở đoạn - Giới thiệu người thân', icon: '🌱', guideNote: 'Giới thiệu về người thân và bộc lộ tình cảm', bulletPoints: sec1 },
-        { id: 'sec-2', title: 'Câu 2–3. Phát triển đoạn - Cử chỉ ấm áp & Kỷ niệm', icon: '💖', guideNote: 'Nêu cử chỉ chăm sóc hoặc kỷ niệm xúc động', bulletPoints: sec2 },
-        { id: 'sec-3', title: 'Câu 4–5. Kết đoạn - Lòng biết ơn & Lời hứa ngoan', icon: '⭐', guideNote: 'Bày tỏ lòng biết ơn và lời hứa ngoan ngoãn', bulletPoints: sec3 }
+        { id: 'sec-1', title: 'Mở đoạn – Nói về người thân', icon: '🌱', guideNote: 'Giới thiệu hoặc bày tỏ tình cảm ngay từ đầu', bulletPoints: sec1 },
+        { id: 'sec-2', title: 'Phát triển đoạn – Điều con nhớ', icon: '💖', guideNote: 'Chọn một chi tiết hoặc kỷ niệm thật, không cần kể tất cả', bulletPoints: sec2 },
+        { id: 'sec-3', title: 'Kết đoạn – Tình cảm của con', icon: '⭐', guideNote: 'Khép lại tự nhiên bằng cảm xúc hoặc mong ước', bulletPoints: sec3 }
       ]
     };
-
     return {
-      branches,
-      outline,
-      socraticQuestions,
-      hoaNhoUnderstand,
-      specificRequirements,
+      branches, outline, socraticQuestions, hoaNhoUnderstand, specificRequirements,
       vocabularySuggestions: {
         goodWords: [
-          { word: 'kính trọng', meaningAndUsage: 'Tôn kính và biết ơn người bề trên' },
-          { word: 'yêu mến', meaningAndUsage: 'Tình cảm mến thương tha thiết' },
-          { word: 'hiền hậu', meaningAndUsage: 'Nụ cười dịu dàng, đôn hậu' },
-          { word: 'ân cần', meaningAndUsage: 'Chăm sóc chu đáo, tận tâm' }
+          { word: 'kính trọng', meaningAndUsage: 'Yêu quý và lễ phép với người lớn' },
+          { word: 'yêu mến', meaningAndUsage: 'Có tình cảm yêu quý, gần gũi' },
+          { word: 'hiền hậu', meaningAndUsage: 'Dịu dàng, tốt bụng (chỉ dùng nếu đúng với người thân)' },
+          { word: 'ân cần', meaningAndUsage: 'Quan tâm, chăm sóc chu đáo' }
         ],
         imageries: [
-          { type: 'Hình ảnh đẹp', example: 'Mái tóc bạc phơ như mây trắng và đôi mắt hiền từ', explanation: 'Gợi vẻ đẹp phúc hậu của ông bà' }
+          { type: 'Quan sát thật', example: `Nụ cười của ${relName} khiến em thấy ấm áp.`, explanation: 'Gợi cảm xúc bằng một chi tiết gần gũi; chỉ dùng nếu đúng trải nghiệm của em.' }
         ],
         sampleSentences: [
-          { type: 'mo_bai', label: 'Mở đoạn', sentence: 'Em luôn dành tình cảm yêu mến và kính trọng sâu sắc nhất đối với người bà kính yêu của em.', whyItIsGood: 'Trang trọng, dạt dào tình cảm.' },
-          { type: 'mieu_ta', label: 'Phát triển đoạn', sentence: 'Bà luôn ân cần chăm sóc em từng bữa cơm và dạy bảo em những điều hay lẽ phải.', whyItIsGood: 'Chi tiết cụ thể, xúc động.' },
-          { type: 'ket_bai', label: 'Kết đoạn', sentence: 'Em kính chúc bà luôn mạnh khỏe và hứa sẽ chăm ngoan để bà luôn vui lòng.', whyItIsGood: 'Khép lại trọn vẹn, đúng chuẩn lớp 2.' }
+          { type: 'mo_bai', label: 'Cách bắt đầu', sentence: `Em rất yêu quý và kính trọng ${relName} của em.`, whyItIsGood: 'Ngắn gọn, rõ đối tượng và tình cảm.' },
+          { type: 'mieu_ta', label: 'Kể việc thật', sentence: `Em nhớ lần ${specificActivity}.`, whyItIsGood: 'Gợi cách kể một kỷ niệm; học sinh thay bằng việc mình thật sự trải qua.' },
+          { type: 'ket_bai', label: 'Bày tỏ cảm xúc', sentence: `Em mong ${relName} luôn vui và mạnh khỏe.`, whyItIsGood: 'Kết đoạn bằng tình cảm tự nhiên, không ép lời hứa.' }
         ],
-        creativeIdeas: ['Con hãy nhớ lại món ăn bà hay nấu hoặc trò chơi ông hay chỉ dạy để đưa vào câu văn nhé!']
+        creativeIdeas: [`Con có thể nhớ một lần ở bên ${relName} khiến con vui; nếu không có kỷ niệm ấy, hãy chọn một điều khác thật với mình.`]
       }
     };
   }
