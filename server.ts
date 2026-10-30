@@ -1029,7 +1029,7 @@ app.post('/api/auth', (req, res) => {
     }
 
     if (!matchedTeacher) {
-      return res.status(401).json({ success: false, message: 'Tên đăng nhập giáo viên không tồn tại trong hệ thống.' });
+      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
     }
 
     // 2. Check account status
@@ -1045,7 +1045,7 @@ app.post('/api/auth', (req, res) => {
     const isPassOk = rawPass === validPass || rawPass === '2026' || rawPass === 'cogaovietvan' || rawPass === 'leductho' || (matchedTeacher.temporaryPassword && rawPass === matchedTeacher.temporaryPassword);
 
     if (!isPassOk) {
-      return res.status(401).json({ success: false, message: 'Mật khẩu giáo viên chưa chính xác. (Gợi ý: 2026)' });
+      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
     }
 
     // 4. Update last login
@@ -1158,9 +1158,9 @@ app.post('/api/auth', (req, res) => {
           }
         });
       }
-      return res.status(401).json({ success: false, message: 'Mật khẩu bảo mật gia đình chưa đúng. (Gợi ý: 2016)' });
+      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
     }
-    return res.status(401).json({ success: false, message: 'Không tìm thấy mã kết nối gia đình hoặc số điện thoại. (Ví dụ: PH001, PH002 hoặc mã mời KN-HS001-XXXX...)' });
+    return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
   }
 
   if (role === 'student') {
@@ -1168,40 +1168,50 @@ app.post('/api/auth', (req, res) => {
     const numMatch = cleanInput.replace(/[^0-9]/g, '');
     const paddedId = numMatch ? `HS${numMatch.padStart(3, '0')}` : '';
 
-    // First try exact matches (username, ID, padded ID, exact full name)
+    // First try exact matches (username, ID, padded ID)
     let student = db.students.find(s => 
       s.id.toLowerCase() === cleanInput ||
       (s.username && s.username.toLowerCase() === cleanInput) ||
-      (paddedId && s.id.toLowerCase() === paddedId.toLowerCase()) ||
-      s.name.toLowerCase() === cleanInput
+      (paddedId && s.id.toLowerCase() === paddedId.toLowerCase())
     );
 
-    // If still not found and input has at least 3 letters, try substring name search
-    if (!student && cleanInput.length >= 3) {
-      student = db.students.find(s => 
+    // If still not found and input has at least 2 letters, check name search
+    if (!student && cleanInput.length >= 2) {
+      const matchedByName = db.students.filter(s => 
+        s.name.toLowerCase() === cleanInput ||
         s.name.toLowerCase().includes(cleanInput) ||
+        s.demoName.toLowerCase() === cleanInput ||
         s.demoName.toLowerCase().includes(cleanInput)
       );
+
+      if (matchedByName.length > 1) {
+        return res.status(400).json({ 
+          success: false, 
+          message: 'Có nhiều học sinh trùng tên này. Em hãy nhập chính xác Mã học sinh (ví dụ: HS001) nhé!' 
+        });
+      } else if (matchedByName.length === 1) {
+        student = matchedByName[0];
+      }
     }
 
     if (!student) {
-      return res.status(404).json({ success: false, message: 'Không tìm thấy tên hoặc mã số học sinh này. Em hãy thử nhập HS001 nhé!' });
+      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
     }
 
     if (student.accountStatus === 'deleted') {
-      return res.status(403).json({ success: false, message: 'Tài khoản này đã bị xóa khỏi danh sách lớp. Em hãy liên hệ Cô Nguyễn Thị Hải Duyên nhé!' });
+      return res.status(403).json({ success: false, message: 'Tài khoản này đã bị xóa khỏi danh sách lớp. Em hãy liên hệ giáo viên để được hỗ trợ nhé!' });
     }
 
     if (student.accountStatus === 'locked') {
-      return res.status(403).json({ success: false, message: 'Tài khoản của em hiện đang tạm khóa. Em hãy liên hệ Cô Nguyễn Thị Hải Duyên để được hỗ trợ nhé!' });
+      return res.status(403).json({ success: false, message: 'Tài khoản của em hiện đang tạm khóa. Em hãy liên hệ giáo viên để được mở khóa nhé!' });
     }
 
-    if (!rawPass || rawPass === student.temporaryPassword || rawPass === student.pin || rawPass === '2016' || rawPass === '123456') {
+    if (rawPass && (rawPass === student.temporaryPassword || rawPass === student.pin || rawPass === '2016' || rawPass === '123456')) {
       student.lastLogin = new Date().toLocaleString('vi-VN');
       saveDatabase(db);
       return res.json({ success: true, role: 'student', student });
     }
-    return res.status(401).json({ success: false, message: 'Mật khẩu của em chưa đúng. (Gợi ý mật khẩu của lớp: 2016)' });
+    return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
   }
 
   res.status(400).json({ success: false, message: 'Yêu cầu không hợp lệ.' });
