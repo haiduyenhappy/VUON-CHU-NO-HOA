@@ -58,7 +58,7 @@ import {
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
-import { isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
+import { isFamilyLoveGrade1Prompt, isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
 
 interface DirectionDraft {
   mindMapBranches: MindMapBranch[];
@@ -761,6 +761,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 ? `Chào con! Lời nhắn của con gửi tới ${deepData.coreSubject || 'người nhận'} cần ngắn gọn và rõ ràng. Con có muốn Hoa Nhỏ gợi ý thêm cách dặn dò hay hẹn giờ không?`
                 : (detectedWType === 'neu_y_kien')
                 ? `Chào con! Nêu ý kiến về "${deepData.coreSubject || promptText}" cần lý lẽ và dẫn chứng thuyết phục. Con hãy chia sẻ lý do của mình để Hoa Nhỏ cùng con rèn giũa nhé!`
+                : isFamilyLoveGrade1Prompt(promptText, grade)
+                ? `Hoa Nhỏ đã chuẩn bị ý tưởng cho ${deepData.selectedObjectName || 'người thân con chọn'}. Con có thể viết một câu thật lòng, hoặc kể thêm một việc làm hay kỷ niệm trong câu thứ hai. Con muốn kể điều gì?`
                 : deepData.choiceType === 'object_selection'
                 ? deepData.selectedObjectId
                   ? `Hoa Nhỏ đã chuẩn bị xong các nhánh ý tưởng và từ ngữ hay để con miêu tả "${deepData.selectedObjectName || 'đồ vật'}". Con hãy quan sát kỹ từng chi tiết để viết bài thật sinh động nhé!`
