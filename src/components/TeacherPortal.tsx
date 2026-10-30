@@ -1,3 +1,4 @@
+import { firebaseAuth } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
@@ -216,6 +217,16 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [deletingStudent, setDeletingStudent] = useState<Student | null>(null);
   const [isDeletingStudent, setIsDeletingStudent] = useState(false);
 
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (!url.startsWith('/api/admin/') && !url.startsWith('/api/teacher/')) return globalThis.fetch(input, init);
+    const token = await firebaseAuth.currentUser?.getIdToken();
+    if (!token) throw new Error('Phiên Google đã hết hạn. Vui lòng đăng nhập lại.');
+    const headers = new Headers(init?.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    headers.delete('x-teacher-id');
+    return globalThis.fetch(input, { ...init, headers });
+  };
   // Fetch classes assigned to this teacher
   const fetchClasses = async () => {
     try {

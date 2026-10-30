@@ -1,3 +1,4 @@
+import { firebaseAuth } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { 
   TeacherAccount, 
@@ -55,6 +56,16 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
   onBackToHome,
   onGoToTeacherClass
 }) => {
+  const fetch: typeof globalThis.fetch = async (input, init) => {
+    const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+    if (!url.startsWith('/api/admin/') && !url.startsWith('/api/teacher/')) return globalThis.fetch(input, init);
+    const token = await firebaseAuth.currentUser?.getIdToken();
+    if (!token) throw new Error('Phiên Google đã hết hạn. Vui lòng đăng nhập lại.');
+    const headers = new Headers(init?.headers);
+    headers.set('Authorization', `Bearer ${token}`);
+    headers.delete('x-teacher-id');
+    return globalThis.fetch(input, { ...init, headers });
+  };
   const adminProfile: TeacherAccount = propAdminProfile || (currentUser?.teacherProfile as unknown as TeacherAccount) || {
     id: currentUser?.teacherId || 'GV001',
     fullName: currentUser?.teacherName || TEACHER_CONFIG.name,

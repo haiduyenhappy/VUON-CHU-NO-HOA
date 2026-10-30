@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { GoogleTeacherButton } from './GoogleTeacherButton';
 import { Student, AppSettings, AuthUser } from '../types';
 import { HoaNhoMascot } from './HoaNhoMascot';
 import { playPop, playChime } from '../utils/audio';
@@ -190,169 +191,6 @@ export const LoginView: React.FC<LoginViewProps> = ({
         return;
       }
 
-      // 2. Client-side fallback check against loaded students/teachers list if offline or server returns 401
-      if (role === 'student') {
-        const normalizedU = u.toLowerCase();
-        const numMatch = normalizedU.replace(/[^0-9]/g, '');
-        const paddedId = numMatch ? `hs${numMatch.padStart(3, '0')}` : '';
-
-        // Check exact ID or username
-        let found = students.find(s => 
-          s.id.toLowerCase() === normalizedU ||
-          (paddedId && s.id.toLowerCase() === paddedId) ||
-          (s.username && s.username.toLowerCase() === normalizedU)
-        );
-
-        // If not found by ID/username, check name matches
-        if (!found && normalizedU.length >= 2) {
-          const matchedByName = students.filter(s => 
-            s.name.toLowerCase() === normalizedU ||
-            s.name.toLowerCase().includes(normalizedU) ||
-            s.demoName.toLowerCase() === normalizedU ||
-            s.demoName.toLowerCase().includes(normalizedU)
-          );
-
-          if (matchedByName.length > 1) {
-            setErrorMsg('Có nhiều học sinh trùng tên này. Em hãy nhập chính xác Mã học sinh (ví dụ: HS001) nhé!');
-            return;
-          } else if (matchedByName.length === 1) {
-            found = matchedByName[0];
-          }
-        }
-
-        if (found) {
-          if (found.accountStatus === 'locked') {
-            setErrorMsg('Tài khoản của em hiện đang tạm khóa. Em hãy liên hệ giáo viên để được mở khóa nhé!');
-            return;
-          }
-          if (found.accountStatus === 'deleted') {
-            setErrorMsg('Tài khoản này đã bị xóa khỏi danh sách lớp. Em hãy liên hệ giáo viên để được hỗ trợ nhé!');
-            return;
-          }
-          const validPass = [found.pin, found.temporaryPassword, '2016', '123456'];
-          if (validPass.includes(p)) {
-            playChime(settings.soundEnabled);
-            onLoginSuccess({ role: 'student', student: found });
-            return;
-          } else {
-            setErrorMsg('Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-            return;
-          }
-        } else {
-          setErrorMsg('Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-          return;
-        }
-      }
-
-      if (role === 'teacher') {
-        const normalized = u.toLowerCase();
-        const isMinh = normalized === 'vanminh' || normalized === 'thayminh' || normalized === 'gv002' || normalized.includes('trần văn minh');
-        const isDuyen = normalized === 'haiduyen' || normalized === 'cogaovietvan' || normalized === 'cogiaovietvan' || normalized === 'leductho' || normalized === 'gv001' || normalized.includes('hải duyên');
-
-        if (isMinh || isDuyen) {
-          const targetPass = '2026';
-          if (p === targetPass || p === 'cogaovietvan' || p === 'leductho') {
-            playChime(settings.soundEnabled);
-            onLoginSuccess({
-              role: 'teacher',
-              teacherId: isMinh ? 'GV002' : 'GV001',
-              teacherRole: isMinh ? 'TEACHER' : 'SUPER_ADMIN',
-              teacherName: isMinh ? 'Thầy Trần Văn Minh' : 'Cô Nguyễn Thị Hải Duyên',
-              assignedClassIds: isMinh ? ['L4B'] : ['L3A'],
-              teacherProfile: {
-                id: isMinh ? 'GV002' : 'GV001',
-                username: isMinh ? 'vanminh' : 'haiduyen',
-                fullName: isMinh ? 'Trần Văn Minh' : 'Nguyễn Thị Hải Duyên',
-                name: isMinh ? 'Thầy Trần Văn Minh' : 'Cô Nguyễn Thị Hải Duyên',
-                salutation: isMinh ? 'thầy' : 'cô',
-                role: isMinh ? 'TEACHER' : 'SUPER_ADMIN',
-                status: 'active',
-                school: 'Trường Tiểu học Lê Đức Thọ',
-                assignedClassIds: isMinh ? ['L4B'] : ['L3A'],
-                email: isMinh ? 'tranvanminh@leductho.edu.vn' : 'haiduyen@leductho.edu.vn',
-                createdAt: '2026-09-01T08:00:00.000Z'
-              }
-            });
-            return;
-          } else {
-            setErrorMsg('Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-            return;
-          }
-        } else {
-          setErrorMsg('Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-          return;
-        }
-      }
-
-      if (role === 'family') {
-        const normalizedU = u.toUpperCase().replace(/\s+/g, '');
-        const cleanPhone = u.replace(/[^0-9]/g, '');
-
-        let foundStudent = students.find(s => 
-          s.parentCode && s.parentCode.toUpperCase() === normalizedU
-        );
-        let foundCaregiver: any = null;
-
-        if (!foundStudent) {
-          for (const s of students) {
-            const inv = s.inviteCodes?.find(ic => ic.code.toUpperCase() === normalizedU && ic.status === 'active');
-            if (inv) {
-              foundStudent = s;
-              foundCaregiver = { relation: 'Phụ huynh khách mời', name: `Phụ huynh em ${s.name.split(' ').slice(-1)[0]}`, code: inv.code, status: 'active' };
-              break;
-            }
-          }
-        }
-
-        if (!foundStudent && cleanPhone.length >= 9) {
-          for (const s of students) {
-            const cg = s.linkedCaregivers?.find(c => c.phone && c.phone.replace(/[^0-9]/g, '') === cleanPhone);
-            if (cg) {
-              foundStudent = s;
-              foundCaregiver = cg;
-              break;
-            }
-          }
-        }
-
-        if (!foundStudent) {
-          const stMatch = students.find(s => s.id.toUpperCase() === normalizedU);
-          if (stMatch) {
-            foundStudent = stMatch;
-          }
-        }
-
-        if (foundStudent) {
-          const validPass = [
-            foundStudent.pin,
-            foundStudent.temporaryPassword,
-            '2016',
-            '2026',
-            '123456',
-            foundStudent.parentCode?.toUpperCase(),
-            normalizedU
-          ];
-          if (validPass.includes(p)) {
-            playChime(settings.soundEnabled);
-            onLoginSuccess({
-              role: 'family',
-              student: foundStudent,
-              parentCode: foundStudent.parentCode,
-              caregiver: foundCaregiver,
-              parentName: foundCaregiver?.name || `Phụ huynh em ${foundStudent.name.split(' ').slice(-1)[0]}`,
-              parentRelation: foundCaregiver?.relation || 'Phụ huynh'
-            });
-            return;
-          } else {
-            setErrorMsg('Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-            return;
-          }
-        } else {
-          setErrorMsg('Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-          return;
-        }
-      }
-
       setErrorMsg(data.message || 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
     } catch (err) {
       console.warn('Network auth error, falling back locally:', err);
@@ -493,6 +331,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <span>{isLoading ? 'Đang xác thực...' : config.submitText}</span>
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
+
+            {role === 'teacher' && <GoogleTeacherButton onLoginSuccess={onLoginSuccess} />}
 
             {/* Tài khoản truy cập nhanh – hiển thị gọn giống giao diện ban đầu. */}
             {demoAccessEnabled && (
