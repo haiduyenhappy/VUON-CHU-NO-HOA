@@ -1707,85 +1707,66 @@ export function buildGenreStructure(
   // Đề: "Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bố, mẹ, ông hoặc bà."
   // -------------------------------------------------------------
   if (isFamilyLoveGrade1Prompt(pLower, grade)) {
-    const chosenPerson = semantics.selectedObjectName || 'người thân (Bố, Mẹ, Ông hoặc Bà)';
-    const relKey = semantics.selectedObjectId;
-    let relPoints = ['Bố kính yêu', 'Mẹ yêu quý', 'Ông kính mến', 'Bà hiền từ'];
-    let sampleC1 = `Em yêu ${chosenPerson} nhất trên đời.`;
-    let sampleC2 = `Con hứa sẽ luôn chăm ngoan để ${chosenPerson} luôn vui lòng.`;
-    if (relKey === 'bo') {
-      relPoints = ['Bố kính yêu', 'Bố của em', 'Người bố tuyệt vời', 'Bố thân thương'];
-      sampleC1 = 'Con yêu bố nhiều lắm vì bố luôn chăm sóc và dạy bảo con.';
-      sampleC2 = 'Con hứa sẽ luôn chăm ngoan, học giỏi để bố luôn vui lòng.';
-    } else if (relKey === 'me') {
-      relPoints = ['Mẹ yêu quý', 'Mẹ dịu hiền', 'Người mẹ tuyệt vời', 'Mẹ thân thương'];
-      sampleC1 = 'Em yêu mẹ của em nhất trên đời vì mẹ luôn chăm sóc em từng bữa ăn giấc ngủ.';
-      sampleC2 = 'Con hứa sẽ luôn chăm ngoan, vâng lời để mẹ luôn vui lòng.';
-    } else if (relKey === 'ong') {
-      relPoints = ['Ông kính yêu', 'Ông nội kính mến', 'Ông ngoại kính mến', 'Người ông hiền từ'];
-      sampleC1 = 'Cháu kính yêu ông rất nhiều vì ông luôn dạy bảo cháu những điều hay.';
-      sampleC2 = 'Cháu chúc ông luôn mạnh khỏe và hứa sẽ chăm ngoan để ông vui lòng.';
-    } else if (relKey === 'ba') {
-      relPoints = ['Bà kính yêu', 'Bà nội hiền từ', 'Bà ngoại hiền từ', 'Người bà ấm áp'];
-      sampleC1 = 'Cháu yêu bà nhiều lắm vì bà luôn kể chuyện cổ tích cho cháu nghe.';
-      sampleC2 = 'Cháu kính chúc bà luôn mạnh khỏe và hứa sẽ vâng lời bà dạy bảo.';
-    }
+    // Chỉ áp dụng cho bài tình cảm gia đình lớp 1; không ép câu thứ hai thành lời hứa.
+    const people: Record<string, { name: string; address: string; details: string[]; actions: string[]; sample: string; second: string }> = {
+      bo: { name: 'Bố', address: 'bố', details: ['Bố của em', 'Bố thân yêu'], actions: ['Bố chơi cùng em', 'Bố đưa em đến trường', 'Bố dạy em điều hay'], sample: 'Em rất yêu bố.', second: 'Bố thường chơi cùng em sau giờ học.' },
+      me: { name: 'Mẹ', address: 'mẹ', details: ['Mẹ của em', 'Mẹ thân yêu'], actions: ['Mẹ đọc sách cùng em', 'Mẹ ôm em', 'Mẹ chăm sóc em'], sample: 'Em rất yêu mẹ.', second: 'Mẹ thường đọc truyện cho em nghe.' },
+      ong: { name: 'Ông', address: 'ông', details: ['Ông của em', 'Ông kính yêu'], actions: ['Ông kể chuyện cho em', 'Ông dắt em đi dạo', 'Ông hỏi han em'], sample: 'Em rất yêu quý ông.', second: 'Ông thường kể chuyện cho em nghe.' },
+      ba: { name: 'Bà', address: 'bà', details: ['Bà của em', 'Bà kính yêu'], actions: ['Bà kể chuyện cho em', 'Bà nắm tay em', 'Bà hỏi han em'], sample: 'Em rất yêu quý bà.', second: 'Bà thường kể chuyện cổ tích cho em nghe.' }
+    };
+    const person = people[semantics.selectedObjectId || ''] || null;
+    const name = person?.name || 'người thân con chọn';
+    const address = person?.address || 'người thân ấy';
+    const sample1 = person?.sample || 'Em rất yêu quý người thân của em.';
+    const sample2 = person?.second || 'Người thân ấy luôn quan tâm đến em.';
 
-    hoaNhoUnderstand = `Con hãy chọn một người thân trong gia đình (${chosenPerson}) mà con yêu quý nhất, rồi viết 1–2 câu thật tình cảm để gửi tới người ấy nhé!`;
+    hoaNhoUnderstand = `Con hãy nghĩ về ${name.toLowerCase()} và tự viết 1 hoặc 2 câu nói lên tình yêu thương thật của mình nhé. Con không cần viết lời hứa nếu không muốn.`;
     specificRequirements = [
       'Nhiệm vụ: Viết 1–2 câu thể hiện tình cảm yêu thương',
-      `Người nhận: ${chosenPerson}`,
-      'Dung lượng: Đúng 1–2 câu hoàn chỉnh (không viết thành đoạn văn dài hay bài văn)',
-      'Quy tắc câu: Đầu câu viết hoa, cuối câu có dấu chấm kết thúc (.)'
+      `Người thân được chọn: ${name}`,
+      'Dung lượng: 1 hoặc 2 câu hoàn chỉnh; không bắt buộc viết đủ 2 câu',
+      'Nội dung: Tình cảm thật của con; có thể kể một việc làm hoặc kỷ niệm nhỏ',
+      'Quy tắc: Viết hoa đầu câu và dùng dấu kết thúc câu phù hợp'
     ];
     socraticQuestions = [
-      `Con muốn bày tỏ tình cảm yêu thương với ai trong gia đình (${chosenPerson})?`,
-      'Người thân ấy có nụ cười, cử chỉ chăm sóc hay điều gì làm con thấy ấm áp nhất?',
-      'Con muốn nói lời yêu thương hoặc lời cảm ơn chân thành nào?',
-      'Con có muốn hứa điều gì ngoan ngoãn để người thân luôn vui lòng không?'
+      `Con yêu quý ${address} ở điều gì nhất?`,
+      `Có việc làm hay kỷ niệm nào với ${address} mà con nhớ không?`,
+      `Con muốn nói điều gì thật lòng với ${address}?`
     ];
     branches = [
-      { id: 'br-1', title: '❤️ Người thân em yêu', icon: '❤️', color: 'rose', points: relPoints },
-      { id: 'br-2', title: '☀️ Cử chỉ yêu thương ấm áp', icon: '☀️', color: 'amber', points: ['Nụ cười hiền hậu', 'Ánh mắt dịu dàng', 'Đôi bàn tay ân cần chăm sóc', 'Lời vỗ về ngọt ngào'] },
-      { id: 'br-3', title: '💬 Lời nói yêu thương', icon: '💬', color: 'purple', points: ['Em yêu ... nhất trên đời', 'Con thương ... rất nhiều', 'Ở bên ... con thấy thật hạnh phúc'] },
-      { id: 'br-4', title: '🌱 Lời hứa chăm ngoan', icon: '🌱', color: 'emerald', points: ['Chăm chỉ học tập', 'Vâng lời dạy bảo', 'Luôn là con ngoan trò giỏi'] },
-      { id: 'br-5', title: '✍️ Quy tắc viết câu lớp 1', icon: '✍️', color: 'sky', points: ['Đầu câu viết hoa', 'Cuối câu có dấu chấm', 'Câu văn đủ ý trọn vẹn'] }
+      { id: 'br-1', title: '❤️ Người thân con chọn', icon: '❤️', color: 'rose', points: person?.details || ['Bố', 'Mẹ', 'Ông', 'Bà'] },
+      { id: 'br-2', title: '🌼 Điều con yêu quý', icon: '🌼', color: 'amber', points: [`Con yêu quý ${address}`, `Con cảm thấy vui khi ở bên ${address}`] },
+      { id: 'br-3', title: '🤲 Việc làm con nhớ', icon: '🤲', color: 'purple', points: person?.actions || ['Cùng con trò chuyện', 'Quan tâm chăm sóc con'] },
+      { id: 'br-4', title: '💬 Lời con muốn nói', icon: '💬', color: 'emerald', points: [`Con yêu ${address} nhiều lắm`, `Con cảm ơn ${address}`] },
+      { id: 'br-5', title: '✨ Kỷ niệm của riêng con', icon: '✨', color: 'sky', points: ['Một lần con được giúp đỡ', 'Một lúc con thấy vui', 'Một điều con nhớ mãi'] }
     ];
 
-    const c1 = [`Câu 1 (Bày tỏ tình cảm): Viết một câu thể hiện tình cảm chân thành với ${chosenPerson}. (Ví dụ: "${sampleC1}")`];
-    const c2 = [`Câu 2 (Cảm ơn hoặc Lời hứa ngoan): Viết câu thứ hai nói lời cảm ơn cử chỉ chăm sóc hoặc lời hứa ngoan. (Ví dụ: "${sampleC2}")`];
-
+    const c1 = [`Câu 1 (Tình cảm): Con tự nói tình cảm thật của mình với ${address}. Gợi ý tham khảo: “${sample1}”`];
+    const c2 = [`Câu 2 (Không bắt buộc): Nếu muốn viết thêm, con có thể kể một việc làm, kỷ niệm, lời cảm ơn hoặc lời chúc. Gợi ý tham khảo: “${sample2}”`];
     outline = {
       moDoan: c1,
       phatTrienDoan: [],
       ketDoan: c2,
       genre: 'viet_cau',
       sections: [
-        { id: 'sec-1', title: 'Câu 1. Bày tỏ tình cảm yêu thương', icon: '❤️', guideNote: 'Nói trực tiếp tình yêu thương ấm áp của con dành cho người thân', bulletPoints: c1 },
-        { id: 'sec-2', title: 'Câu 2. Lời cảm ơn hoặc Lời hứa chăm ngoan', icon: '🌱', guideNote: 'Gửi gắm lời cảm ơn hoặc lời hứa ngoan ngoãn', bulletPoints: c2 }
+        { id: 'sec-1', title: 'Câu 1. Nói tình cảm của con', icon: '❤️', guideNote: 'Một câu trọn ý đã đáp ứng yêu cầu của đề', bulletPoints: c1 },
+        { id: 'sec-2', title: 'Câu 2. Kể thêm điều con nhớ (tùy chọn)', icon: '🌼', guideNote: 'Không bắt buộc; không cần viết lời hứa chăm ngoan', bulletPoints: c2 }
       ]
     };
-
     return {
-      branches,
-      outline,
-      socraticQuestions,
-      hoaNhoUnderstand,
-      specificRequirements,
+      branches, outline, socraticQuestions, hoaNhoUnderstand, specificRequirements,
       vocabularySuggestions: {
         goodWords: [
-          { word: 'yêu quý', meaningAndUsage: 'Tình cảm thân thiết, gắn bó sâu sắc' },
-          { word: 'kính trọng', meaningAndUsage: 'Tôn kính và biết ơn người bề trên' },
-          { word: 'hiền hậu', meaningAndUsage: 'Dịu dàng, nụ cười bao dung ấm áp' },
-          { word: 'chăm ngoan', meaningAndUsage: 'Vâng lời người lớn và chăm học' }
+          { word: 'yêu quý', meaningAndUsage: 'Nói về tình cảm thân thiết của con' },
+          { word: 'ấm áp', meaningAndUsage: 'Nói về cảm giác vui và được quan tâm' },
+          { word: 'dịu dàng', meaningAndUsage: 'Tả lời nói hoặc cử chỉ nhẹ nhàng' }
         ],
-        imageries: [
-          { type: 'Hình ảnh ấm áp', example: 'Đôi bàn tay ấm áp xoa đầu em', explanation: 'Gợi cảm giác bình yên được chở che' }
-        ],
+        imageries: [{ type: 'Kỷ niệm gần gũi', example: `Một lần ${address} giúp đỡ con`, explanation: 'Con chỉ kể nếu đó là điều con đã trải qua' }],
         sampleSentences: [
-          { type: 'mo_bai', label: 'Bày tỏ tình cảm', sentence: 'Em yêu mẹ của em nhất trên đời.', whyItIsGood: 'Câu văn ngắn gọn, đúng 1 câu, chan chứa tình yêu thương.' },
-          { type: 'ket_bai', label: 'Lời hứa ngoan', sentence: 'Con hứa sẽ luôn chăm ngoan để bố mẹ vui lòng.', whyItIsGood: 'Câu thứ hai trọn vẹn, thể hiện sự hiếu thảo.' }
+          { type: 'mo_bai', label: 'Nói tình cảm', sentence: sample1, whyItIsGood: 'Một câu ngắn, rõ ý và đúng đề' },
+          { type: 'ket_bai', label: 'Kể thêm (tùy chọn)', sentence: sample2, whyItIsGood: 'Ví dụ về một việc làm; con hãy thay bằng trải nghiệm thật của mình' }
         ],
-        creativeIdeas: ['Con có thể tự tay vẽ một trái tim nhỏ tặng người thân sau khi viết xong bài nhé!']
+        creativeIdeas: [`Con nhớ điều gì nhất khi ở bên ${address}? Hãy kể bằng lời của con.`]
       }
     };
   }
