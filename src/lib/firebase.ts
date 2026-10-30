@@ -10,12 +10,6 @@ const config = {
   messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
   appId: import.meta.env.VITE_FIREBASE_APP_ID,
 };
-
-const missing = Object.entries(config).filter(([, value]) => !value).map(([key]) => key);
-if (missing.length) {
-  console.warn(`Firebase chưa đủ cấu hình: ${missing.join(', ')}. Chức năng hiện có chưa bị thay thế.`);
-}
-
 export const firebaseApp = getApps().length ? getApp() : initializeApp(config);
 export const firebaseAuth = getAuth(firebaseApp);
 export const firestore = getFirestore(firebaseApp);
