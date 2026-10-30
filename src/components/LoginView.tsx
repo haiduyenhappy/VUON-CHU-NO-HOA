@@ -36,6 +36,32 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [errorMsg, setErrorMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  // Chỉ bật tài khoản mẫu khi trình diễn/chấm điểm. Đặt VITE_ENABLE_DEMO_LOGIN=false để ẩn.
+  const demoAccessEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN !== 'false';
+  const demoAccounts = {
+    student: [
+      { label: 'HS001 · Tuệ An', username: 'HS001', password: '2026' },
+      { label: 'HS002 · Bảo An', username: 'HS002', password: '2016' },
+      { label: 'HS020 · Tuệ Lâm', username: 'HS020', password: '2016' },
+    ],
+    teacher: [
+      { label: '👑 Cô Duyên · Quản trị & GV', username: 'haiduyen', password: '2026' },
+      { label: '👨‍🏫 Thầy Minh · Giáo viên', username: 'vanminh', password: '2026' },
+    ],
+    family: [
+      { label: 'PH001 · Phụ huynh Tuệ An', username: 'PH001', password: '2016' },
+      { label: 'PH002 · Phụ huynh Bảo An', username: 'PH002', password: '2016' },
+      { label: 'PH020 · Phụ huynh Tuệ Lâm', username: 'PH020', password: '2016' },
+    ],
+  };
+
+  const selectDemoAccount = (account: { username: string; password: string }) => {
+    setUsername(account.username);
+    setPassword(account.password);
+    setErrorMsg('');
+    playPop(settings.soundEnabled);
+  };
+
   const timePeriod = getVietnamTimePeriod();
 
   // Role-specific config and color theme
@@ -466,7 +492,31 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            {/* Forgot Credentials Guidance */}
+            {/* Lối truy cập mẫu cho hội đồng chấm điểm; chỉ điền form, vẫn xác thực bình thường. */}
+          {demoAccessEnabled && (
+            <section className="mt-5 pt-4 border-t border-stone-200" aria-label="Tài khoản trải nghiệm nhanh">
+              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
+                <h3 className="text-sm font-extrabold text-stone-800">✨ TÀI KHOẢN TRẢI NGHIỆM NHANH</h3>
+                <span className="text-[11px] rounded-full bg-amber-100 text-amber-900 px-2 py-1 font-bold">Dành cho chấm điểm / demo</span>
+              </div>
+              <p className="text-xs text-stone-600 mb-3">Chọn một tài khoản để tự điền thông tin, sau đó bấm nút đăng nhập phía trên. Học sinh và phụ huynh cùng tên được liên kết với nhau.</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {demoAccounts[role].map((account) => (
+                  <button
+                    key={account.username}
+                    type="button"
+                    onClick={() => selectDemoAccount(account)}
+                    className={`text-left px-3 py-2.5 rounded-xl border-2 font-bold text-xs sm:text-sm transition-colors cursor-pointer ${username === account.username ? 'border-violet-500 bg-violet-50 text-violet-900' : 'border-stone-200 bg-white hover:border-violet-300 hover:bg-violet-50 text-stone-700'}`}
+                  >
+                    {account.label}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-amber-800 mt-3">⚠ Đây là tài khoản mẫu phục vụ trải nghiệm. Tắt chức năng này trước khi sử dụng với dữ liệu thật.</p>
+            </section>
+          )}
+
+          {/* Forgot Credentials Guidance */}
             <div className="pt-2 text-center text-xs text-stone-500 font-medium flex items-center justify-center gap-1.5">
               <HelpCircle className="w-3.5 h-3.5 text-stone-400 shrink-0" />
               <span>Quên thông tin đăng nhập? Liên hệ giáo viên hoặc người quản lý tài khoản.</span>
