@@ -45,13 +45,13 @@ export const LoginView: React.FC<LoginViewProps> = ({
       { label: 'HS020 · Tuệ Lâm', username: 'HS020', password: '2016' },
     ],
     teacher: [
-      { label: '👑 Cô Duyên · Quản trị & GV', username: 'haiduyen', password: '2026' },
-      { label: '👨‍🏫 Thầy Minh · Giáo viên', username: 'vanminh', password: '2026' },
+      { label: '👑 Cô Duyên – Quản trị & Giáo viên', username: 'haiduyen', password: '2026' },
+      { label: '👨‍🏫 Thầy Minh – Giáo viên', username: 'vanminh', password: '2026' },
     ],
     family: [
-      { label: 'PH001 · Phụ huynh Tuệ An', username: 'PH001', password: '2016' },
-      { label: 'PH002 · Phụ huynh Bảo An', username: 'PH002', password: '2016' },
-      { label: 'PH020 · Phụ huynh Tuệ Lâm', username: 'PH020', password: '2016' },
+      { label: 'PH bé Tuệ An (PH001)', username: 'PH001', password: '2016' },
+      { label: 'PH bé Bảo An (PH002)', username: 'PH002', password: '2016' },
+      { label: 'PH bé Tuệ Lâm (PH020)', username: 'PH020', password: '2016' },
     ],
   };
 
@@ -492,29 +492,28 @@ export const LoginView: React.FC<LoginViewProps> = ({
               <ArrowRight className="w-4 h-4 sm:w-5 sm:h-5" />
             </button>
 
-            {/* Lối truy cập mẫu cho hội đồng chấm điểm; chỉ điền form, vẫn xác thực bình thường. */}
-          {demoAccessEnabled && (
-            <section className="mt-5 pt-4 border-t border-stone-200" aria-label="Tài khoản trải nghiệm nhanh">
-              <div className="flex items-center justify-between gap-2 flex-wrap mb-2">
-                <h3 className="text-sm font-extrabold text-stone-800">✨ TÀI KHOẢN TRẢI NGHIỆM NHANH</h3>
-                <span className="text-[11px] rounded-full bg-amber-100 text-amber-900 px-2 py-1 font-bold">Dành cho chấm điểm / demo</span>
-              </div>
-              <p className="text-xs text-stone-600 mb-3">Chọn một tài khoản để tự điền thông tin, sau đó bấm nút đăng nhập phía trên. Học sinh và phụ huynh cùng tên được liên kết với nhau.</p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {demoAccounts[role].map((account) => (
-                  <button
-                    key={account.username}
-                    type="button"
-                    onClick={() => selectDemoAccount(account)}
-                    className={`text-left px-3 py-2.5 rounded-xl border-2 font-bold text-xs sm:text-sm transition-colors cursor-pointer ${username === account.username ? 'border-violet-500 bg-violet-50 text-violet-900' : 'border-stone-200 bg-white hover:border-violet-300 hover:bg-violet-50 text-stone-700'}`}
-                  >
-                    {account.label}
-                  </button>
-                ))}
-              </div>
-              <p className="text-[11px] text-amber-800 mt-3">⚠ Đây là tài khoản mẫu phục vụ trải nghiệm. Tắt chức năng này trước khi sử dụng với dữ liệu thật.</p>
-            </section>
-          )}
+            {/* Tài khoản truy cập nhanh – hiển thị gọn giống giao diện ban đầu. */}
+            {demoAccessEnabled && (
+              <section className="mt-5 pt-4 border-t border-stone-200" aria-label="Tài khoản truy cập nhanh">
+                <h3 className="text-xs sm:text-sm font-extrabold text-stone-500 tracking-wide mb-3">
+                  ✨ TÀI KHOẢN TRUY CẬP NHANH:
+                </h3>
+                <div className="flex flex-wrap items-center gap-2">
+                  {demoAccounts[role].map((account) => (
+                    <button
+                      key={account.username}
+                      type="button"
+                      onClick={() => selectDemoAccount(account)}
+                      title={`Điền tài khoản ${account.label}`}
+                      aria-label={`Chọn tài khoản ${account.label}`}
+                      className={`inline-flex items-center max-w-full min-h-[32px] px-3 py-1.5 rounded-xl border text-[11px] sm:text-xs font-extrabold leading-snug transition-colors cursor-pointer ${username === account.username ? 'border-violet-500 bg-violet-100 text-violet-900' : 'border-stone-200 bg-stone-100 text-stone-800 hover:border-violet-300 hover:bg-violet-50'}`}
+                    >
+                      {account.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+            )}
 
           {/* Forgot Credentials Guidance */}
             <div className="pt-2 text-center text-xs text-stone-500 font-medium flex items-center justify-center gap-1.5">
