@@ -78,6 +78,7 @@ interface DatabaseStructure {
   classes: Classroom[];
   assignments: ClassAssignment[];
   auditLogs: AuditLogItem[];
+  demoLoginConfig?: { enabled: boolean; student: string[]; teacher: string[]; family: string[] };
 }
 
 const SEED_SUBMISSIONS = [
@@ -1485,6 +1486,26 @@ function createAuditLog(
 // -------------------------------------------------------------------------
 // 1. CÁC API DÀNH RIÊNG CHO QUẢN TRỊ VIÊN CHÍNH (SUPER_ADMIN)
 // -------------------------------------------------------------------------
+
+const defaultDemoLoginConfig = { enabled: true, student: ['HS001','HS002','HS020'], teacher: ['haiduyen','vanminh'], family: ['PH001','PH002','PH020'] };
+app.get('/api/demo-login-config', (_req, res) => {
+  const db = loadDatabase();
+  res.json({ success: true, config: db.demoLoginConfig || defaultDemoLoginConfig });
+});
+app.post('/api/admin/demo-login-config', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+  if (!teacher || teacher.role !== 'SUPER_ADMIN') return res.status(403).json({ success: false, message: 'Chỉ quản trị viên được thay đổi.' });
+  const input = req.body?.config;
+  if (!input || typeof input.enabled !== 'boolean' || !['student','teacher','family'].every(role => Array.isArray(input[role]) && input[role].length <= 10 && input[role].every((v: unknown) => typeof v === 'string' && v.length <= 50))) {
+    return res.status(400).json({ success: false, message: 'Cấu hình không hợp lệ.' });
+  }
+  const allowed: Record<string,string[]> = { student: ['HS001','HS002','HS020'], teacher: ['haiduyen','vanminh'], family: ['PH001','PH002','PH020'] };
+  const config = { enabled: input.enabled, student: input.student.filter((v:string) => allowed.student.includes(v)), teacher: input.teacher.filter((v:string) => allowed.teacher.includes(v)), family: input.family.filter((v:string) => allowed.family.includes(v)) };
+  db.demoLoginConfig = config;
+  saveDatabase(db);
+  res.json({ success: true, config });
+});
 
 // Tổng quan toàn hệ thống
 app.get('/api/admin/overview', (req, res) => {
