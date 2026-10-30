@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Student, AppSettings, AuthUser } from '../types';
 import { HoaNhoMascot } from './HoaNhoMascot';
 import { playPop, playChime } from '../utils/audio';
@@ -37,7 +37,9 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const [isLoading, setIsLoading] = useState(false);
 
   // Chỉ bật tài khoản mẫu khi trình diễn/chấm điểm. Đặt VITE_ENABLE_DEMO_LOGIN=false để ẩn.
-  const demoAccessEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN !== 'false';
+  const [demoConfig, setDemoConfig] = useState<{enabled:boolean;student:string[];teacher:string[];family:string[]}>({enabled:true,student:['HS001','HS002','HS020'],teacher:['haiduyen','vanminh'],family:['PH001','PH002','PH020']});
+  useEffect(() => { let mounted = true; fetch('/api/demo-login-config').then(r => r.json()).then(data => { if(mounted && data.success) setDemoConfig(data.config); }).catch(() => {}); return () => { mounted = false; }; }, []);
+  const demoAccessEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN !== 'false' && demoConfig.enabled;
   const demoAccounts = {
     student: [
       { label: 'HS001 · Tuệ An', username: 'HS001', password: '2026' },
@@ -499,7 +501,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
                   ✨ TÀI KHOẢN TRUY CẬP NHANH:
                 </h3>
                 <div className="flex flex-wrap items-center gap-2">
-                  {demoAccounts[role].map((account) => (
+                  {demoAccounts[role].filter(account => demoConfig[role].includes(account.username)).map((account) => (
                     <button
                       key={account.username}
                       type="button"

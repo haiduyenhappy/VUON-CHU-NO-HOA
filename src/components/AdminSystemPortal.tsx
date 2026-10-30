@@ -66,7 +66,20 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
     assignedClassIds: ['L3A'],
     createdAt: new Date().toISOString()
   };
-  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'classes' | 'reports' | 'audit'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'classes' | 'reports' | 'audit' | 'demoLogin'>('overview');
+  const [demoConfig, setDemoConfig] = useState({enabled:true,student:['HS001','HS002','HS020'],teacher:['haiduyen','vanminh'],family:['PH001','PH002','PH020']});
+  const [demoSaving, setDemoSaving] = useState(false);
+  useEffect(() => { fetch('/api/demo-login-config').then(r=>r.json()).then(d=>{if(d.success)setDemoConfig(d.config)}).catch(()=>{}); }, []);
+  const saveDemoConfig = async () => {
+    setDemoSaving(true);
+    try {
+      const res = await fetch('/api/admin/demo-login-config',{method:'POST',headers:{'Content-Type':'application/json','Authorization':`Bearer tok_${adminProfile.id}`,'x-teacher-id':adminProfile.id},body:JSON.stringify({config:demoConfig})});
+      const data = await res.json();
+      if(!res.ok || !data.success) throw new Error(data.message || 'Không thể lưu');
+      setDemoConfig(data.config); setMessage({text:'Đã lưu cấu hình đăng nhập nhanh.',type:'success'});
+    } catch(e:any) { setMessage({text:e.message || 'Không thể lưu cấu hình.',type:'error'}); }
+    finally {setDemoSaving(false)}
+  };
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState<{ text: string; type: 'success' | 'error' } | null>(null);
 
@@ -708,7 +721,18 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
           <FileText className="w-4 h-4" />
           <span>5. Nhật ký quản trị ({auditLogs.length})</span>
         </button>
+        <button onClick={() => setActiveTab('demoLogin')} className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl text-xs sm:text-sm font-extrabold ${activeTab === 'demoLogin' ? 'bg-purple-700 text-white' : 'text-stone-700 hover:bg-purple-50'}`}><KeyRound className="w-4 h-4"/>6. Đăng nhập nhanh</button>
       </div>
+
+      {activeTab === 'demoLogin' && (
+        <section className="bg-white border-2 border-purple-200 rounded-3xl p-5 sm:p-7 space-y-5">
+          <h2 className="text-xl font-black text-purple-950">Quản lý tài khoản đăng nhập nhanh</h2>
+          <p className="text-sm text-stone-600">Chỉ dùng cho tài khoản trình diễn khi chấm điểm. Tắt để ẩn toàn bộ gợi ý tại ba trang đăng nhập.</p>
+          <label className="flex items-center gap-3 font-bold"><input type="checkbox" className="w-5 h-5" checked={demoConfig.enabled} onChange={e=>setDemoConfig(v=>({...v,enabled:e.target.checked}))}/> Bật gợi ý đăng nhập nhanh</label>
+          {(['student','teacher','family'] as const).map(role => <div key={role} className="rounded-2xl border border-purple-100 p-4 space-y-3"><h3 className="font-bold text-purple-900">{{student:'Học sinh',teacher:'Giáo viên',family:'Phụ huynh'}[role]}</h3><div className="flex flex-wrap gap-4">{({student:[['HS001','Tuệ An'],['HS002','Bảo An'],['HS020','Tuệ Lâm']],teacher:[['haiduyen','Cô Duyên – Quản trị & Giáo viên'],['vanminh','Thầy Minh – Giáo viên']],family:[['PH001','PH bé Tuệ An'],['PH002','PH bé Bảo An'],['PH020','PH bé Tuệ Lâm']]} as Record<string,string[][]>)[role].map(([id,name])=><label key={id} className="flex gap-2 items-center text-sm"><input type="checkbox" checked={demoConfig[role].includes(id)} onChange={e=>setDemoConfig(v=>({...v,[role]:e.target.checked?[...v[role],id]:v[role].filter(x=>x!==id)}))}/>{name} ({id})</label>)}</div></div>)}
+          <div className="flex flex-wrap gap-3"><button disabled={demoSaving} onClick={saveDemoConfig} className="px-5 py-3 rounded-xl bg-purple-700 text-white font-bold disabled:opacity-50">{demoSaving?'Đang lưu...':'Lưu thay đổi'}</button><button onClick={()=>setDemoConfig({enabled:true,student:['HS001','HS002','HS020'],teacher:['haiduyen','vanminh'],family:['PH001','PH002','PH020']})} className="px-5 py-3 rounded-xl bg-stone-100 font-bold">Khôi phục mặc định (sau đó bấm Lưu)</button></div>
+        </section>
+      )}
 
       {/* ================= TAB 1: TỔNG QUAN HỆ THỐNG ================= */}
       {activeTab === 'overview' && (
