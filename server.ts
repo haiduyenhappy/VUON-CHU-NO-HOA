@@ -1,4 +1,5 @@
 import express from 'express';
+import { getFirebaseAdminAuth } from './src/lib/firebaseAdmin.ts';
 import path from 'path';
 import fs from 'fs';
 import dotenv from 'dotenv';
@@ -994,6 +995,41 @@ app.get('/api/students', (req, res) => {
   res.json({ students: db.students });
 });
 
+// Verify Firebase ID tokens before any teacher or admin API is reached.
+app.use(['/api/teacher', '/api/admin'], async (req, res, next) => {
+  try {
+    const token = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
+    if (!token) return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập Google.' });
+    const decoded = await getFirebaseAdminAuth().verifyIdToken(token, true);
+    if (!decoded.email_verified || !decoded.email) return res.status(403).json({ success: false, message: 'Email chưa được xác minh.' });
+    const db = loadDatabase();
+    const teacher = db.teachers.find(t => t.email?.toLowerCase() === decoded.email!.toLowerCase() && t.status === 'active');
+    if (!teacher) return res.status(403).json({ success: false, message: 'Chưa được cấp quyền giáo viên.' });
+    (res.locals as any).verifiedTeacherId = teacher.id;
+    next();
+  } catch {
+    return res.status(401).json({ success: false, message: 'Phiên đăng nhập Google không hợp lệ.' });
+  }
+});
+
+app.post('/api/auth/google', async (req, res) => {
+  try {
+    const idToken = typeof req.body?.idToken === 'string' ? req.body.idToken : '';
+    if (!idToken) return res.status(400).json({ success: false, message: 'Thiếu mã xác thực Google.' });
+    const decoded = await getFirebaseAdminAuth().verifyIdToken(idToken, true);
+    if (!decoded.email_verified || !decoded.email) return res.status(403).json({ success: false, message: 'Email chưa được xác minh.' });
+    const db = loadDatabase();
+    const teacher = db.teachers.find(t => t.email?.toLowerCase() === decoded.email!.toLowerCase() && t.status === 'active');
+    if (!teacher) return res.status(403).json({ success: false, message: 'Tài khoản chưa được cấp quyền giáo viên.' });
+    return res.json({ success: true, role: 'teacher', teacherId: teacher.id, teacherRole: teacher.role,
+      teacherName: teacher.name, assignedClassIds: teacher.assignedClassIds || [],
+      teacherProfile: { id: teacher.id, username: teacher.username, fullName: teacher.fullName,
+        name: teacher.name, role: teacher.role, assignedClassIds: teacher.assignedClassIds || [] } });
+  } catch {
+    return res.status(401).json({ success: false, message: 'Không xác thực được tài khoản Google.' });
+  }
+});
+
 // 3. Authenticate with flexible username/password/code support
 app.post('/api/auth', (req, res) => {
   const { role, code, studentId, username, identifier, password } = req.body;
@@ -1006,64 +1042,7 @@ app.post('/api/auth', (req, res) => {
   }
 
   if (role === 'teacher') {
-    const lowerInput = rawInput.toLowerCase();
-    const lowerPass = rawPass.toLowerCase();
-
-    // 1. Find teacher by ID, username, email, phone, or fullName
-    let matchedTeacher = db.teachers?.find((t: any) => 
-      t.id.toLowerCase() === lowerInput ||
-      t.username.toLowerCase() === lowerInput ||
-      (lowerInput === 'thayminh' && t.id === 'GV002') ||
-      (lowerInput === 'vanminh' && t.id === 'GV002') ||
-      (t.email && t.email.toLowerCase() === lowerInput) ||
-      (t.phone && t.phone === rawInput) ||
-      t.fullName.toLowerCase() === lowerInput ||
-      (t.name && t.name.toLowerCase() === lowerInput)
-    );
-
-    // If no specific username entered or default login shortcut (cô Duyên)
-    if (!matchedTeacher && (
-      !rawInput ||
-      ['cogaovietvan', 'cogiaovietvan', '2026', 'leductho', 'coha', 'coduyen', 'nguyenthihaiduyen', 'haiduyen', 'cô duyên', 'cô hải duyên'].includes(lowerInput)
-    )) {
-      matchedTeacher = db.teachers?.find((t: any) => t.id === 'GV001' || t.fullName === 'Nguyễn Thị Hải Duyên');
-    }
-
-    if (!matchedTeacher) {
-      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
-    }
-
-    // 2. Check account status
-    if (matchedTeacher.status === 'locked') {
-      return res.status(403).json({ success: false, message: 'Tài khoản giáo viên đang bị tạm khóa. Vui lòng liên hệ Quản trị viên chính để được mở khóa.' });
-    }
-    if (matchedTeacher.status === 'inactive') {
-      return res.status(403).json({ success: false, message: 'Tài khoản giáo viên đã ngừng kích hoạt trên hệ thống.' });
-    }
-
-    // 3. Verify password
-    const validPass = matchedTeacher.temporaryPassword || '2026';
-    const isPassOk = rawPass === validPass || rawPass === '2026' || rawPass === 'cogaovietvan' || rawPass === 'leductho' || (matchedTeacher.temporaryPassword && rawPass === matchedTeacher.temporaryPassword);
-
-    if (!isPassOk) {
-      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
-    }
-
-    // 4. Update last login
-    matchedTeacher.lastLogin = new Date().toLocaleString('vi-VN');
-    saveDatabase(db);
-
-    const token = `tok_${matchedTeacher.id}_${Date.now()}`;
-    return res.json({
-      success: true,
-      role: 'teacher',
-      teacherRole: matchedTeacher.role, // "SUPER_ADMIN" hoặc "TEACHER"
-      teacherId: matchedTeacher.id,
-      teacherName: matchedTeacher.name,
-      teacherProfile: matchedTeacher,
-      assignedClassIds: matchedTeacher.assignedClassIds || [],
-      token
-    });
+    return res.status(403).json({ success: false, message: 'Giáo viên vui lòng đăng nhập bằng Google.' });
   }
 
   if (role === 'family') {
@@ -1433,28 +1412,8 @@ app.post('/api/teacher/review', (req, res) => {
 // =========================================================================
 
 function getAuthTeacher(req: express.Request, db: DatabaseStructure): TeacherAccount | null {
-  const authHeader = req.headers.authorization || '';
-  const token = authHeader.replace(/^Bearer\s+/i, '').trim();
-  const headerId = (req.headers['x-teacher-id'] as string) || '';
-  const queryId = (req.query.teacherId as string) || '';
-
-  if (token && (token.startsWith('tok_') || token.startsWith('mock-jwt-'))) {
-    const tid = token.split(/[-_]/)[1];
-    const found = db.teachers?.find(t => (t.id === tid || token.includes(t.id)) && t.status === 'active');
-    if (found) return found;
-  }
-
-  const lookupId = headerId || queryId;
-  if (lookupId) {
-    const found = db.teachers?.find(t => (t.id === lookupId || t.username === lookupId) && t.status === 'active');
-    if (found) return found;
-  }
-
-  if (token === 'admin') {
-    return db.teachers?.find(t => t.role === 'SUPER_ADMIN' && t.status === 'active') || null;
-  }
-
-  return null;
+  const teacherId = (req.res?.locals as any)?.verifiedTeacherId;
+  return teacherId ? db.teachers.find(t => t.id === teacherId && t.status === 'active') || null : null;
 }
 
 function createAuditLog(
