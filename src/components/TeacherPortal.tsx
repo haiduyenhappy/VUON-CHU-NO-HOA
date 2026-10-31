@@ -45,8 +45,10 @@ import {
   Layers,
   Calendar,
   User,
-  Shield
+  Shield,
+  TrendingUp
 } from 'lucide-react';
+import { StudentSkillProgressTab } from './StudentSkillProgressTab';
 
 interface TeacherPortalProps {
   currentUser?: AuthUser | null;
@@ -125,6 +127,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // Review section state
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null);
+  const [studentRightTab, setStudentRightTab] = useState<'submissions' | 'progress'>('submissions');
   const [submissions, setSubmissions] = useState<Submission[]>([]);
   const [selectedSubmission, setSelectedSubmission] = useState<Submission | null>(null);
   const [filterStatus, setFilterStatus] = useState<'all' | 'submitted' | 'reviewed' | 'draft'>('all');
@@ -1351,9 +1354,84 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
             {/* Right Column: Submission List & Formative Assessment Card (8 cols) */}
             <div className="lg:col-span-8 space-y-4">
-              {/* Filter bar */}
-              <div className="bg-white p-3 rounded-2xl border border-stone-200 flex flex-wrap items-center justify-between gap-2 shadow-xs">
-                <div className="flex items-center gap-1.5">
+              {/* Header chuyển đổi 2 Tab khi giáo viên chọn 1 học sinh cụ thể */}
+              {selectedStudent && (
+                <div className="bg-white p-3 sm:p-4 rounded-3xl border-2 border-emerald-300 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl shrink-0">
+                      {selectedStudent.avatar || '🌸'}
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-extrabold text-sm sm:text-base text-stone-900 font-display">
+                          {settings.demoPrivacyMode ? selectedStudent.demoName : selectedStudent.name}
+                        </span>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          {selectedStudent.id}
+                        </span>
+                        <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200">
+                          Khối {selectedStudent.grade || 3}
+                        </span>
+                      </div>
+                      <span className="text-[11px] text-stone-500 font-medium block mt-0.5">
+                        {assignedClasses.find(c => c.id === selectedStudent.classId)?.name || 'Lớp học'} • Hồ sơ kỹ năng cá nhân
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* 2 Tab: Bài viết của em & Tiến bộ kỹ năng */}
+                  <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-2xl border border-stone-200">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playPop(settings.soundEnabled);
+                        setStudentRightTab('submissions');
+                      }}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        studentRightTab === 'submissions'
+                          ? 'bg-emerald-600 text-white shadow-xs'
+                          : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
+                      }`}
+                    >
+                      <BookOpen className="w-3.5 h-3.5" />
+                      <span>Bài viết của em ({submissions.filter(s => s.studentId === selectedStudent.id).length})</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => {
+                        playPop(settings.soundEnabled);
+                        setStudentRightTab('progress');
+                      }}
+                      className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-xl text-xs font-black transition-all cursor-pointer ${
+                        studentRightTab === 'progress'
+                          ? 'bg-gradient-to-r from-amber-500 to-amber-600 text-white shadow-xs'
+                          : 'text-stone-600 hover:text-stone-900 hover:bg-stone-200/60'
+                      }`}
+                    >
+                      <TrendingUp className="w-3.5 h-3.5" />
+                      <span>Tiến bộ kỹ năng</span>
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {/* Nội dung Tab: Nếu chọn "Tiến bộ kỹ năng" thì render hồ sơ 3 biểu đồ */}
+              {selectedStudent && studentRightTab === 'progress' ? (
+                <StudentSkillProgressTab
+                  student={selectedStudent}
+                  submissions={submissions.filter(s => s.studentId === selectedStudent.id)}
+                  settings={settings}
+                  onOpenSubmissionReview={(sub) => {
+                    setStudentRightTab('submissions');
+                    handleSelectSubmission(sub);
+                  }}
+                />
+              ) : (
+                <>
+                  {/* Filter bar */}
+                  <div className="bg-white p-3 rounded-2xl border border-stone-200 flex flex-wrap items-center justify-between gap-2 shadow-xs">
+                    <div className="flex items-center gap-1.5">
                   <span className="text-xs font-bold text-stone-500 flex items-center gap-1">
                     <Filter className="w-3.5 h-3.5" />
                     <span>Lọc:</span>
@@ -1844,10 +1922,12 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   </div>
                 )}
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
-      )}
+      </div>
+    </div>
+  )}
 
       {/* ================= TAB 2: TÀI KHOẢN LỚP EM ================= */}
       {activeTab === 'accounts' && (

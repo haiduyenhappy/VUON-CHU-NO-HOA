@@ -34,6 +34,7 @@ export interface Student {
   consecutiveDays?: number; // Số ngày liên tiếp luyện viết
   className?: string; // Mặc định: Lớp 3 – Trường TH Lê Đức Thọ
   classId?: string; // ID lớp học (ví dụ: L3A)
+  grade?: number; // Khối 1-5 theo chuẩn GDPT 2018
   username?: string; // Tên đăng nhập tiện lợi (vd: hs001 hoặc phamtuean)
   accountStatus?: 'active' | 'locked' | 'deleted'; // Tình trạng tài khoản: đang hoạt động, tạm khóa, hoặc đã xóa
   lastLogin?: string; // Lần đăng nhập gần nhất
