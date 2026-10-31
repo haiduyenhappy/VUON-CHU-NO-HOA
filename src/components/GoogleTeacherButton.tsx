@@ -9,6 +9,10 @@ export function GoogleTeacherButton({ onLoginSuccess }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const login = async () => {
+    if (!firebaseAuth) {
+      setError('Chưa cấu hình Firebase API key cho ứng dụng. Thầy cô vui lòng sử dụng tài khoản truy cập nhanh bên dưới.');
+      return;
+    }
     setBusy(true);
     setError('');
     try {
@@ -31,12 +35,14 @@ export function GoogleTeacherButton({ onLoginSuccess }: Props) {
         token: idToken,
       });
     } catch (e) {
-      await signOut(firebaseAuth).catch(() => {});
+      if (firebaseAuth) {
+        await signOut(firebaseAuth).catch(() => {});
+      }
       setError(e instanceof Error ? e.message : 'Đăng nhập Google thất bại.');
     } finally { setBusy(false); }
   };
   return <div className="mt-3">
-    <button type="button" disabled={busy} onClick={login} className="w-full rounded-2xl border-2 border-stone-300 bg-white px-5 py-3 text-sm font-bold text-stone-800 hover:bg-stone-50 disabled:opacity-60">
+    <button type="button" disabled={busy} onClick={login} className="w-full rounded-2xl border-2 border-stone-300 bg-white px-5 py-3 text-sm font-bold text-stone-800 hover:bg-stone-50 disabled:opacity-60 cursor-pointer">
       {busy ? 'Đang xác thực Google…' : 'Tiếp tục với Google'}
     </button>
     {error && <p role="alert" className="mt-2 text-sm text-red-700">{error}</p>}

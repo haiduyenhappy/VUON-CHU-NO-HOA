@@ -13,8 +13,9 @@ import {
   ArrowUpRight,
   ArrowDownRight,
   Minus,
-  HelpCircle,
-  FileText
+  FileText,
+  Heart,
+  CheckCircle
 } from 'lucide-react';
 import { Student, Submission, AppSettings } from '../types';
 import { 
@@ -40,30 +41,29 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
   settings,
   onOpenSubmissionReview
 }) => {
-  // 1. Trích xuất danh sách bài viết hợp lệ của học sinh này
+  // 1. Trích xuất danh sách bài viết thực tế của học sinh này
   const studentSubs = useMemo(() => {
     return submissions
       .filter(s => s.studentId === student.id)
       .sort((a, b) => {
         const dateA = new Date(a.completedAt || a.startedAt || 0).getTime();
         const dateB = new Date(b.completedAt || b.startedAt || 0).getTime();
-        return dateA - dateB; // Sắp xếp theo thứ tự thời gian tăng dần
+        return dateA - dateB;
       });
   }, [submissions, student.id]);
 
-  // Bộ lọc cho Biểu đồ 1: Tần suất lỗi sai (Lọc theo bài viết cụ thể hoặc Tất cả)
+  // Bộ lọc cho Mục 1: Con cần luyện thêm (Lọc theo bài viết cụ thể hoặc Tất cả)
   const [errorFilterSubId, setErrorFilterSubId] = useState<string>('all');
   const [selectedErrorCategory, setSelectedErrorCategory] = useState<'all' | 'chinh_ta' | 'dung_tu' | 'dat_cau' | 'bo_cuc'>('chinh_ta');
 
-  // Bộ lọc cho Biểu đồ 2: Năng lực thành phần (chọn bài viết để xem năng lực và so sánh với bài liền trước)
+  // Bộ lọc cho Mục 2: Điểm mạnh của con (chọn bài viết để xem năng lực và so sánh)
   const [competencySubId, setCompetencySubId] = useState<string>(() => {
     return studentSubs.length > 0 ? studentSubs[studentSubs.length - 1].id : '';
   });
 
-  // Cập nhật khi danh sách bài hoặc học sinh thay đổi
+  // Tự động đồng bộ bài viết khi danh sách thay đổi
   React.useEffect(() => {
     if (studentSubs.length > 0) {
-      // Nếu bài đang chọn không thuộc học sinh này thì chọn bài mới nhất
       if (!studentSubs.some(s => s.id === competencySubId)) {
         setCompetencySubId(studentSubs[studentSubs.length - 1].id);
       }
@@ -72,8 +72,12 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
     }
   }, [studentSubs, competencySubId]);
 
+  // Khối lớp học sinh (1 đến 5 theo CTGDPT 2018)
+  const studentGradeNumber = student.grade || (student.classId?.startsWith('L4') ? 4 : student.classId?.startsWith('L5') ? 5 : 3);
+  const gradeExpectations = GRADE_COMPETENCY_EXPECTATIONS[studentGradeNumber] || GRADE_COMPETENCY_EXPECTATIONS[3];
+
   // -------------------------------------------------------------
-  // DỮ LIỆU BIỂU ĐỒ 1: TẦN SUẤT LỖI SAI (Càng thấp càng tốt)
+  // MỤC 1: DỮ LIỆU "CON CẦN LUYỆN THÊM" (Càng thấp càng tốt)
   // -------------------------------------------------------------
   const relevantSubsForErrors = useMemo(() => {
     if (errorFilterSubId === 'all') return studentSubs;
@@ -99,7 +103,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
     return counts;
   }, [allDetectedErrors]);
 
-  // Nhóm lỗi đang được chọn để hiển thị chi tiết bên dưới biểu đồ
   const activeCategoryErrors = useMemo(() => {
     if (selectedErrorCategory === 'all') return allDetectedErrors;
     return allDetectedErrors.filter(err => err.category === selectedErrorCategory);
@@ -110,11 +113,11 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
     errorCountsByCategory.dung_tu,
     errorCountsByCategory.dat_cau,
     errorCountsByCategory.bo_cuc,
-    5 // Mốc tối thiểu của trục Y để biểu đồ luôn cân đối
+    5
   );
 
   // -------------------------------------------------------------
-  // DỮ LIỆU BIỂU ĐỒ 2: NĂNG LỰC THÀNH PHẦN (Thang 1-5, càng cao càng tốt)
+  // MỤC 2: DỮ LIỆU "ĐIỂM MẠNH CỦA CON" (Thang 1-5, Càng cao càng tốt)
   // -------------------------------------------------------------
   const { currentSub, prevSub, competencies } = useMemo(() => {
     if (!competencySubId || studentSubs.length === 0) {
@@ -124,25 +127,23 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
     const curr = currIndex >= 0 ? studentSubs[currIndex] : studentSubs[studentSubs.length - 1];
     const prev = currIndex > 0 ? studentSubs[currIndex - 1] : null;
 
-    const studentGrade = student.grade || 3;
-    const comps = calculateCompetenciesForSubmission(curr, prev, studentGrade);
+    const comps = calculateCompetenciesForSubmission(curr, prev, studentGradeNumber);
     return { currentSub: curr, prevSub: prev, competencies: comps };
-  }, [competencySubId, studentSubs, student.grade]);
+  }, [competencySubId, studentSubs, studentGradeNumber]);
 
   // -------------------------------------------------------------
-  // DỮ LIỆU BIỂU ĐỒ 3: LỊCH SỬ ĐIỂM SỐ (Thang 0-10, chỉ bài định kỳ đã công bố)
+  // MỤC 3: DỮ LIỆU "CON TIẾN BỘ MỖI NGÀY" (Điểm kiểm tra định kỳ thang 0-10)
   // -------------------------------------------------------------
   const periodicExamScores = useMemo(() => {
     return getPublishedPeriodicExamScores(studentSubs);
   }, [studentSubs]);
 
-  // Khối lớp học sinh (1 đến 5)
-  const studentGradeNumber = student.grade || 3;
-  const gradeExpectations = GRADE_COMPETENCY_EXPECTATIONS[studentGradeNumber] || GRADE_COMPETENCY_EXPECTATIONS[3];
+  // Đếm các năng lực nổi bật (mức 4 hoặc 5 sao)
+  const strongCompetencies = competencies.filter(c => c.score >= 4);
 
   return (
     <div className="space-y-6">
-      {/* 1. Header hồ sơ học sinh */}
+      {/* 1. Header: Hành trình tiến bộ của con */}
       <div className="bg-gradient-to-r from-emerald-800 via-teal-800 to-emerald-950 text-white rounded-3xl p-5 shadow-sm border border-emerald-700/50">
         <div className="flex flex-wrap items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
@@ -161,17 +162,19 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                   Khối {studentGradeNumber} (GDPT 2018)
                 </span>
               </div>
-              <p className="text-xs sm:text-sm text-emerald-100/90 mt-1 flex items-center gap-2">
-                <span>📚 Tổng số bài viết: <strong>{studentSubs.length} bài</strong></span>
+              <p className="text-xs sm:text-sm text-emerald-100/90 mt-1 flex items-center gap-2 flex-wrap">
+                <span>📚 Đã viết: <strong>{studentSubs.length} bài</strong></span>
                 <span>•</span>
-                <span>🌸 Bông hoa tích lũy: <strong>{student.flowersEarned} hoa</strong></span>
+                <span>🌸 Hoa tích lũy: <strong>{student.flowersEarned} bông hoa</strong></span>
+                <span>•</span>
+                <span>⭐ Năng lực nổi bật: <strong>{strongCompetencies.length}/4 tiêu chí</strong></span>
               </p>
             </div>
           </div>
 
           <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 text-right shrink-0">
             <span className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider block">
-              Chuẩn đánh giá
+              Hành trình tiến bộ
             </span>
             <span className="text-xs font-extrabold text-white">
               Thông tư 27/2020/BGDĐT
@@ -184,17 +187,17 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
         <div className="p-12 text-center bg-white rounded-3xl border-2 border-dashed border-stone-200 space-y-3">
           <BookOpen className="w-12 h-12 text-stone-300 mx-auto" />
           <h4 className="text-base font-bold text-stone-700">Chưa có bài viết nào của học sinh này</h4>
-          <p className="text-xs text-stone-500 max-w-md mx-auto">
-            Học sinh {settings?.demoPrivacyMode ? student.demoName : student.name} chưa nộp bài viết nào trong hệ thống. Hãy giao đề bài hoặc nhắc học sinh làm bài để kích hoạt hồ sơ năng lực.
+          <p className="text-xs text-stone-500 max-w-md mx-auto leading-relaxed">
+            Học sinh {settings?.demoPrivacyMode ? student.demoName : student.name} chưa nộp bài viết nào trong hệ thống. Hãy giao bài tập hoặc nhắc học sinh làm bài để kích hoạt hồ sơ năng lực.
           </p>
         </div>
       ) : (
         <>
           {/* ========================================================================= */}
-          {/* BIỂU ĐỒ 1: TẦN SUẤT LỖI SAI (CỘT CÀNG THẤP CÀNG TỐT)                      */}
+          {/* MỤC 1: CON CẦN LUYỆN THÊM (CỘT CÀNG THẤP CÀNG TỐT)                       */}
           {/* ========================================================================= */}
           <div className="bg-white rounded-3xl border-2 border-stone-200 p-5 sm:p-6 shadow-xs space-y-5">
-            {/* Header Biểu đồ 1 */}
+            {/* Header Mục 1 */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
               <div>
                 <div className="flex items-center gap-2">
@@ -202,17 +205,17 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                     <AlertCircle className="w-4 h-4" />
                   </span>
                   <h3 className="font-display font-black text-base sm:text-lg text-stone-900">
-                    Biểu đồ 1: Tần suất lỗi sai theo 4 nhóm kỹ năng
+                    1. Con cần luyện thêm
                   </h3>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  Thống kê các lỗi phát hiện qua bài viết. Bấm vào cột để xem chi tiết vị trí và gợi ý sửa.
+                  Ghi nhận các điểm con cần rèn thêm theo 4 nhóm kỹ năng (Chính tả, Dùng từ, Đặt câu, Bố cục). Bấm vào cột để xem trích đoạn và lời dặn của cô.
                 </p>
               </div>
 
               {/* Bộ lọc bài viết */}
               <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs font-bold text-stone-500">Xem theo:</span>
+                <span className="text-xs font-bold text-stone-500">Xem theo bài:</span>
                 <select
                   value={errorFilterSubId}
                   onChange={(e) => setErrorFilterSubId(e.target.value)}
@@ -232,30 +235,29 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
             <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs">
               <div className="flex items-center gap-2 font-bold">
                 <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Quy chuẩn sư phạm: <strong>Cột càng thấp càng tốt</strong> (Số lỗi giảm dần phản ánh kỹ năng viết tiến bộ vững chắc).</span>
+                <span>Quy chuẩn sư phạm: <strong>Cột càng thấp càng tốt</strong> (Số điểm cần sửa giảm dần thể hiện con viết ngày càng vững vàng).</span>
               </div>
               <span className="text-[11px] font-semibold text-emerald-700 hidden md:inline">
-                Tổng lỗi: {allDetectedErrors.length}
+                Tổng điểm cần rèn: {allDetectedErrors.length}
               </span>
             </div>
 
-            {/* Biểu đồ cột Tần suất lỗi sai */}
+            {/* Biểu đồ cột Tần suất điểm cần rèn */}
             <div className="pt-2">
               <div className="grid grid-cols-4 gap-3 sm:gap-6 items-end h-52 pb-4 border-b border-stone-200 relative">
                 {/* Đường gióng trục Y */}
                 <div className="absolute inset-0 pointer-events-none flex flex-col justify-between text-[10px] text-stone-300 font-mono">
                   <div className="border-b border-dashed border-stone-200 w-full pt-1">
-                    <span>{maxErrorCount} lỗi</span>
+                    <span>{maxErrorCount} điểm</span>
                   </div>
                   <div className="border-b border-dashed border-stone-200 w-full">
-                    <span>{Math.round(maxErrorCount / 2)} lỗi</span>
+                    <span>{Math.round(maxErrorCount / 2)} điểm</span>
                   </div>
                   <div className="border-b border-stone-300 w-full">
-                    <span>0 lỗi (Mục tiêu chuẩn)</span>
+                    <span>0 điểm (Chuẩn mực hoàn thiện)</span>
                   </div>
                 </div>
 
-                {/* 4 Cột đại diện cho 4 nhóm */}
                 {[
                   {
                     key: 'chinh_ta',
@@ -269,7 +271,7 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                   {
                     key: 'dung_tu',
                     label: 'Dùng từ',
-                    subLabel: 'Từ ngữ & biểu đạt',
+                    subLabel: 'Vốn từ & lặp từ',
                     count: errorCountsByCategory.dung_tu,
                     barColor: 'from-indigo-500 to-purple-600',
                     activeRing: 'ring-purple-400 bg-purple-50/50',
@@ -295,7 +297,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                   }
                 ].map((col) => {
                   const isSelected = selectedErrorCategory === col.key;
-                  // Tính chiều cao phần trăm (tối thiểu 6% để có chân đế bấm được nếu là 0)
                   const heightPercent = col.count === 0 
                     ? 8 
                     : Math.max(12, Math.round((col.count / maxErrorCount) * 88));
@@ -307,30 +308,27 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                       className={`relative flex flex-col items-center justify-end h-full z-10 cursor-pointer group p-1.5 rounded-2xl transition-all ${
                         isSelected ? `ring-2 ${col.activeRing}` : 'hover:bg-stone-50'
                       }`}
-                      title={`Bấm để xem ${col.count} lỗi nhóm ${col.label}`}
+                      title={`Bấm xem chi tiết nhóm ${col.label}`}
                     >
-                      {/* Huy hiệu số đếm trên đầu cột */}
                       <div className={`mb-1.5 text-xs font-black px-2 py-0.5 rounded-full transition-transform group-hover:scale-110 ${
                         col.count === 0 
                           ? 'bg-emerald-100 text-emerald-800 border border-emerald-300' 
                           : 'bg-stone-900 text-white shadow-xs'
                       }`}>
-                        {col.count === 0 ? '✓ 0' : `${col.count} lỗi`}
+                        {col.count === 0 ? '✓ 0' : `${col.count} điểm`}
                       </div>
 
-                      {/* Cột biểu đồ */}
                       <div
                         style={{ height: `${heightPercent}%` }}
-                        className={`w-full max-w-[56px] rounded-t-xl bg-gradient-to-t ${col.barColor} transition-all duration-300 shadow-xs relative overflow-hidden group-hover:brightness-105`}
+                        className={`w-full max-w-[56px] rounded-t-xl bg-gradient-to-t ${col.barColor} transition-all duration-300 shadow-xs relative overflow-hidden group-hover:brightness-105 flex items-center justify-center`}
                       >
                         {col.count === 0 && (
-                          <div className="absolute inset-0 flex items-center justify-center text-[10px] font-black text-white/90">
+                          <span className="text-[10px] font-black text-white/90">
                             TỐT
-                          </div>
+                          </span>
                         )}
                       </div>
 
-                      {/* Nhãn nhóm bên dưới */}
                       <div className="mt-2 text-center w-full">
                         <span className={`block font-extrabold text-xs leading-tight ${col.textColor}`}>
                           {col.label}
@@ -344,10 +342,10 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                 })}
               </div>
 
-              {/* Nút lọc tất cả hoặc theo từng nhóm */}
+              {/* Nút bấm chọn lọc theo nhóm */}
               <div className="flex flex-wrap items-center justify-between gap-2 mt-3 pt-2">
                 <div className="flex items-center gap-1.5 flex-wrap">
-                  <span className="text-[11px] font-bold text-stone-500 mr-1">Lọc danh sách lỗi:</span>
+                  <span className="text-[11px] font-bold text-stone-500 mr-1">Xem nhóm:</span>
                   <button
                     onClick={() => setSelectedErrorCategory('all')}
                     className={`px-2.5 py-1 rounded-xl text-xs font-bold transition-all ${
@@ -401,18 +399,18 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                 </div>
 
                 <span className="text-[11px] text-stone-400 italic">
-                  * Nhấp chuột vào cột bất kỳ để lọc nhanh
+                  * Nhấp chuột vào cột để lọc chi tiết
                 </span>
               </div>
             </div>
 
-            {/* Chi tiết lỗi và gợi ý sửa */}
+            {/* Chi tiết điểm con cần rèn thêm và lời hướng dẫn */}
             <div className="bg-stone-50 rounded-2xl p-4 border border-stone-200 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-stone-200">
                 <span className="text-xs font-extrabold uppercase tracking-wider text-stone-700 flex items-center gap-1.5">
                   <Sparkles className="w-3.5 h-3.5 text-amber-500" />
                   <span>
-                    Chi tiết các lỗi {selectedErrorCategory === 'all' ? 'tổng hợp' : `nhóm "${selectedErrorCategory === 'chinh_ta' ? 'Chính tả' : selectedErrorCategory === 'dung_tu' ? 'Dùng từ' : selectedErrorCategory === 'dat_cau' ? 'Đặt câu' : 'Bố cục'}"`} ({activeCategoryErrors.length} lỗi)
+                    Chi tiết các điểm cần rèn {selectedErrorCategory === 'all' ? 'tổng hợp' : `nhóm "${selectedErrorCategory === 'chinh_ta' ? 'Chính tả' : selectedErrorCategory === 'dung_tu' ? 'Dùng từ' : selectedErrorCategory === 'dat_cau' ? 'Đặt câu' : 'Bố cục'}"`} ({activeCategoryErrors.length} điểm)
                   </span>
                 </span>
               </div>
@@ -421,10 +419,10 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                 <div className="py-6 text-center text-emerald-800 bg-emerald-50/60 rounded-xl border border-emerald-200/80">
                   <CheckCircle2 className="w-8 h-8 text-emerald-600 mx-auto mb-1.5" />
                   <p className="text-xs font-bold">
-                    Rất tuyệt vời! Không ghi nhận lỗi nào trong nhóm này.
+                    Con đã làm rất tốt! Không có điểm nào cần sửa lại trong phần này.
                   </p>
                   <p className="text-[11px] text-emerald-700 mt-0.5">
-                    Học sinh nắm vững kỹ năng tương ứng với yêu cầu cần đạt.
+                    Học sinh nắm vững kỹ năng tương ứng với yêu cầu cần đạt Khối {studentGradeNumber}.
                   </p>
                 </div>
               ) : (
@@ -451,15 +449,15 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                         </span>
                       </div>
 
-                      {/* Trích đoạn vị trí sai trong bài */}
+                      {/* Trích đoạn bài văn */}
                       <div className="text-xs text-stone-600 bg-rose-50/60 p-2 rounded-lg border border-rose-100 font-mono">
-                        <span className="font-sans font-bold text-rose-800 mr-1.5">Vị trí bài viết:</span>
+                        <span className="font-sans font-bold text-rose-800 mr-1.5">Vị trí bài văn:</span>
                         <span className="text-rose-900 font-medium">"{err.contextText}"</span>
                       </div>
 
-                      {/* Gợi ý sửa cụ thể */}
+                      {/* Hướng dẫn gợi ý sửa */}
                       <div className="text-xs text-stone-700 bg-emerald-50/70 p-2 rounded-lg border border-emerald-100">
-                        <span className="font-bold text-emerald-800 mr-1.5">💡 Gợi ý sửa:</span>
+                        <span className="font-bold text-emerald-800 mr-1.5">💡 Lời dặn của cô:</span>
                         <span className="text-emerald-950 font-medium">{err.suggestion}</span>
                         {err.explanation && (
                           <p className="text-[11px] text-stone-500 mt-1 italic">
@@ -475,26 +473,26 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
           </div>
 
           {/* ========================================================================= */}
-          {/* BIỂU ĐỒ 2: NĂNG LỰC THÀNH PHẦN (THANG 1-5, CÀNG CAO CÀNG TỐT)              */}
+          {/* MỤC 2: ĐIỂM MẠNH CỦA CON (THANG 1-5, CÀNG CAO CÀNG TỐT)                   */}
           {/* ========================================================================= */}
           <div className="bg-white rounded-3xl border-2 border-stone-200 p-5 sm:p-6 shadow-xs space-y-5">
-            {/* Header Biểu đồ 2 */}
+            {/* Header Mục 2 */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 rounded-xl bg-amber-50 text-amber-600 border border-amber-200">
-                    <TrendingUp className="w-4 h-4" />
+                    <Award className="w-4 h-4" />
                   </span>
                   <h3 className="font-display font-black text-base sm:text-lg text-stone-900">
-                    Biểu đồ 2: Năng lực thành phần (Thang 1–5 theo CTGDPT 2018)
+                    2. Điểm mạnh của con
                   </h3>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  Đánh giá 4 tiêu chí cốt lõi của từng bài viết và so sánh mức độ tiến bộ với bài trước đó.
+                  Đánh giá 4 năng lực thành phần cốt lõi theo thang 1–5 sao của CTGDPT 2018 và ghi nhận những điểm sáng nổi bật của học sinh.
                 </p>
               </div>
 
-              {/* Bộ chọn bài viết để xem năng lực */}
+              {/* Bộ chọn bài viết */}
               <div className="flex items-center gap-2 shrink-0">
                 <span className="text-xs font-bold text-stone-500">Bài đánh giá:</span>
                 <select
@@ -514,13 +512,13 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
             {/* Quy chuẩn sư phạm: Cột càng cao càng tốt */}
             <div className="flex flex-wrap items-center justify-between px-3.5 py-2.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 text-xs gap-2">
               <div className="flex items-center gap-2 font-bold">
-                <Award className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Quy chuẩn sư phạm: <strong>Cột càng cao càng tốt</strong> (Thang 1 đến 5 sao theo mức độ đạt chuẩn lứa tuổi Khối {studentGradeNumber}).</span>
+                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>Quy chuẩn sư phạm: <strong>Cột càng cao càng tốt</strong> (Thang 1 đến 5 sao theo chuẩn lứa tuổi Khối {studentGradeNumber}).</span>
               </div>
               <div className="flex items-center gap-2 text-[11px] font-bold text-stone-600">
                 <span>So sánh với:</span>
                 <span className="px-2 py-0.5 rounded-md bg-white border border-amber-300 text-amber-900">
-                  {prevSub ? `Bài liền trước (${new Date(prevSub.completedAt || prevSub.startedAt || '').toLocaleDateString('vi-VN')})` : 'Bài đầu tiên trong hồ sơ'}
+                  {prevSub ? `Bài trước (${new Date(prevSub.completedAt || prevSub.startedAt || '').toLocaleDateString('vi-VN')})` : 'Bài khởi đầu hồ sơ'}
                 </span>
               </div>
             </div>
@@ -548,10 +546,8 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                 </div>
 
                 {competencies.map((comp) => {
-                  // Điểm từ 1 đến 5 -> chiều cao %
                   const heightPercent = Math.max(18, Math.round((comp.score / 5) * 92));
 
-                  // Icon & nhãn so sánh
                   let deltaBadge = null;
                   if (!prevSub) {
                     deltaBadge = (
@@ -582,7 +578,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                     );
                   }
 
-                  // Màu gradient cột
                   let gradient = 'from-emerald-500 to-teal-600';
                   if (comp.score >= 5) gradient = 'from-amber-400 via-amber-500 to-emerald-600';
                   else if (comp.score === 4) gradient = 'from-teal-500 to-emerald-600';
@@ -595,7 +590,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                       key={comp.key}
                       className="relative flex flex-col items-center justify-end h-full z-10 p-1.5 rounded-2xl hover:bg-stone-50 transition-all group"
                     >
-                      {/* Huy hiệu điểm và chỉ số so sánh */}
                       <div className="mb-2 flex flex-col items-center gap-1">
                         {deltaBadge}
                         <div className="text-xs font-black px-2 py-0.5 rounded-full bg-stone-900 text-white shadow-xs">
@@ -603,7 +597,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                         </div>
                       </div>
 
-                      {/* Cột năng lực */}
                       <div
                         style={{ height: `${heightPercent}%` }}
                         className={`w-full max-w-[56px] rounded-t-xl bg-gradient-to-t ${gradient} transition-all duration-300 shadow-xs relative overflow-hidden group-hover:brightness-105 flex items-end justify-center pb-1`}
@@ -613,7 +606,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                         </span>
                       </div>
 
-                      {/* Tên tiêu chí */}
                       <div className="mt-2 text-center w-full">
                         <span className="block font-extrabold text-xs text-stone-900 leading-tight">
                           {comp.label}
@@ -628,7 +620,7 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
               </div>
             </div>
 
-            {/* Bảng chi tiết yêu cầu cần đạt & minh chứng cho từng tiêu chí */}
+            {/* Thẻ ghi nhận chi tiết điểm mạnh và minh chứng thực tế */}
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3 pt-1">
               {competencies.map((comp) => (
                 <div
@@ -656,7 +648,7 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
 
                   <div className="text-xs text-stone-600 bg-emerald-50/60 p-2 rounded-xl border border-emerald-100">
                     <span className="font-bold text-emerald-900 block text-[11px] uppercase tracking-wide">
-                      Minh chứng từ bài viết:
+                      Điểm sáng ghi nhận từ bài viết:
                     </span>
                     <p className="mt-0.5 text-emerald-950 italic leading-relaxed">
                       "{comp.evidence}"
@@ -668,22 +660,22 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
           </div>
 
           {/* ========================================================================= */}
-          {/* BIỂU ĐỒ 3: LỊCH SỬ ĐIỂM SỐ (THANG 0-10, CHỈ BÀI ĐỊNH KỲ ĐÃ CÔNG BỐ)         */}
+          {/* MỤC 3: CON TIẾN BỘ MỖI NGÀY (LỊCH SỬ ĐIỂM SỐ ĐỊNH KỲ THANG 0-10)          */}
           {/* ========================================================================= */}
           <div className="bg-white rounded-3xl border-2 border-stone-200 p-5 sm:p-6 shadow-xs space-y-5">
-            {/* Header Biểu đồ 3 */}
+            {/* Header Mục 3 */}
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-stone-100">
               <div>
                 <div className="flex items-center gap-2">
                   <span className="p-1.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-200">
-                    <BarChart3 className="w-4 h-4" />
+                    <TrendingUp className="w-4 h-4" />
                   </span>
                   <h3 className="font-display font-black text-base sm:text-lg text-stone-900">
-                    Biểu đồ 3: Lịch sử điểm số bài kiểm tra định kỳ (Thang 0–10)
+                    3. Con tiến bộ mỗi ngày
                   </h3>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  Chỉ lấy điểm của bài đánh giá định kỳ đã được giáo viên công bố. Không quy đổi bài thường xuyên thành điểm.
+                  Theo dõi sự trưởng thành qua từng bài viết và lịch sử điểm số bài kiểm tra định kỳ chính thức (thang điểm 10).
                 </p>
               </div>
 
@@ -697,11 +689,11 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
             <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-950 text-xs">
               <Info className="w-4 h-4 text-blue-600 shrink-0" />
               <span>
-                Quy định sư phạm: Đánh giá thường xuyên tập trung vào nhận xét, khích lệ và sửa lỗi. Điểm số thang 10 chỉ áp dụng cho bài kiểm tra định kỳ chính thức (Giữa kỳ, Cuối kỳ) theo quy chế chuyên môn.
+                Quy định sư phạm: Đánh giá thường xuyên bằng nhận xét khích lệ để học sinh tự tin viết bài. Điểm số thang 10 chỉ ghi nhận cho bài kiểm tra định kỳ chính thức đã được giáo viên công bố.
               </span>
             </div>
 
-            {/* Nội dung biểu đồ hoặc thông báo bắt buộc "Chưa có bài đánh giá định kỳ" */}
+            {/* Nếu chưa có bài kiểm tra định kỳ: hiển thị chính xác text yêu cầu */}
             {periodicExamScores.length === 0 ? (
               <div className="py-12 px-4 text-center bg-stone-50/80 rounded-2xl border-2 border-dashed border-stone-200 space-y-3">
                 <div className="w-12 h-12 rounded-2xl bg-stone-100 flex items-center justify-center text-stone-400 mx-auto">
@@ -754,14 +746,12 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                           key={exam.submissionId || idx}
                           className="relative flex flex-col items-center justify-end h-full z-10 p-2 rounded-2xl hover:bg-stone-50 transition-all group min-w-[70px]"
                         >
-                          {/* Điểm số trên đỉnh cột */}
                           <div className="mb-2 text-center">
                             <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-stone-900 text-white shadow-xs">
                               {exam.score} / 10
                             </span>
                           </div>
 
-                          {/* Cột điểm */}
                           <div
                             style={{ height: `${heightPercent}%` }}
                             className={`w-full max-w-[48px] rounded-t-xl bg-gradient-to-t ${barGradient} transition-all duration-300 shadow-xs relative overflow-hidden group-hover:brightness-105 flex items-center justify-center`}
@@ -771,7 +761,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                             </span>
                           </div>
 
-                          {/* Thông tin bài thi và ngày */}
                           <div className="mt-2 text-center w-full">
                             <span className="block font-bold text-xs text-stone-900 truncate max-w-[110px]" title={exam.title}>
                               {exam.title}
@@ -786,10 +775,10 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                   </div>
                 </div>
 
-                {/* Danh sách các bài kiểm tra định kỳ */}
+                {/* Danh sách các bài kiểm tra định kỳ có dữ liệu thực */}
                 <div className="space-y-2.5">
                   <span className="text-xs font-extrabold uppercase tracking-wider text-stone-700 block">
-                    Danh mục bài kiểm tra định kỳ đã công bố
+                    Danh mục bài kiểm tra định kỳ đã công bố ({periodicExamScores.length} bài)
                   </span>
                   {periodicExamScores.map((exam, idx) => (
                     <div
@@ -849,4 +838,5 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
     </div>
   );
 };
+
 export default StudentSkillProgressTab;

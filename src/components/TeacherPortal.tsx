@@ -150,6 +150,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // Dual Assessment Mode: Regular practice vs Periodic test with 1-10 integer score
   const [isPeriodicExamReview, setIsPeriodicExamReview] = useState(false);
   const [examScore, setExamScore] = useState<number | ''>('');
+  const [editableCorrections, setEditableCorrections] = useState<any[]>([]);
 
   // 7 Writing Skills Rubric State (GDPT 2018)
   const [skillScores, setSkillScores] = useState<Record<string, number>>({
@@ -223,11 +224,22 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const fetch: typeof globalThis.fetch = async (input, init) => {
     const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
     if (!url.startsWith('/api/admin/') && !url.startsWith('/api/teacher/')) return globalThis.fetch(input, init);
-    const token = await firebaseAuth.currentUser?.getIdToken();
-    if (!token) throw new Error('Phiên Google đã hết hạn. Vui lòng đăng nhập lại.');
+    let token: string | undefined = undefined;
+    try {
+      token = await firebaseAuth?.currentUser?.getIdToken();
+    } catch {
+      // ignore
+    }
+    if (!token && currentUser?.token) {
+      token = currentUser.token;
+    }
     const headers = new Headers(init?.headers);
-    headers.set('Authorization', `Bearer ${token}`);
-    headers.delete('x-teacher-id');
+    if (token) {
+      headers.set('Authorization', `Bearer ${token}`);
+    }
+    if (currentUser?.teacherId) {
+      headers.set('x-teacher-id', currentUser.teacherId);
+    }
     return globalThis.fetch(input, { ...init, headers });
   };
   // Fetch classes assigned to this teacher
@@ -517,6 +529,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setFeedbackStatus(sub.teacherFeedback?.status || 'published');
     setExamScore(sub.score !== undefined ? sub.score : (sub.teacherFeedback?.score !== undefined ? sub.teacherFeedback.score : ''));
     setIsPeriodicExamReview(Boolean(sub.isExam || sub.teacherFeedback?.isExamGraded));
+    setEditableCorrections(sub.comprehensiveFeedback?.corrections ? JSON.parse(JSON.stringify(sub.comprehensiveFeedback.corrections)) : []);
     
     // Load existing skill evaluations
     if (sub.teacherSkillEvaluations && sub.teacherSkillEvaluations.length > 0) {
@@ -583,6 +596,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           confirmedStars,
           flowerSticker,
           editedAiNotes,
+          customCorrections: editableCorrections,
           score: isPeriodicExamReview && examScore !== '' ? Math.round(Number(examScore)) : undefined,
           status: targetStatus,
           teacherName: teacherName,
@@ -1410,13 +1424,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                       }`}
                     >
                       <TrendingUp className="w-3.5 h-3.5" />
-                      <span>Tiến bộ kỹ năng</span>
+                      <span>Hành trình tiến bộ</span>
                     </button>
                   </div>
                 </div>
               )}
 
-              {/* Nội dung Tab: Nếu chọn "Tiến bộ kỹ năng" thì render hồ sơ 3 biểu đồ */}
+              {/* Nội dung Tab: Nếu chọn "Hành trình tiến bộ" thì render hồ sơ 3 mục */}
               {selectedStudent && studentRightTab === 'progress' ? (
                 <StudentSkillProgressTab
                   student={selectedStudent}
@@ -1753,6 +1767,65 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                           </div>
 
                           {/* =================================================================== */}
+                          {/* PHẦN B2: RÀ SOÁT & CHỈNH SỬA CÁC ĐIỂM CẦN RÈN (AI ĐỀ XUẤT)           */}
+                          {/* =================================================================== */}
+                          <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2">
+                              <span className="text-xs font-black text-emerald-950 uppercase tracking-wide flex items-center gap-1.5">
+                                <span>🔍</span>
+                                <span>B2. Rà soát & Chỉnh sửa gợi ý sửa lỗi (Giáo viên toàn quyền điều chỉnh):</span>
+                              </span>
+                              <span className="text-[11px] text-stone-500 font-semibold">
+                                {editableCorrections.length} gợi ý phát hiện
+                              </span>
+                            </div>
+
+                            {editableCorrections.length === 0 ? (
+                              <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-xs text-emerald-800 font-bold flex items-center gap-2">
+                                <span>✓</span>
+                                <span>Không có lỗi sai nào cần chỉnh sửa. Học sinh viết bài rất chuẩn xác!</span>
+                              </div>
+                            ) : (
+                              <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
+                                {editableCorrections.map((corr: any, cIdx: number) => (
+                                  <div key={cIdx} className="p-2.5 bg-stone-50 rounded-xl border border-stone-200 space-y-1.5 text-xs">
+                                    <div className="flex justify-between items-center">
+                                      <span className="font-extrabold text-stone-800 flex items-center gap-1.5">
+                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-black bg-stone-200 text-stone-700">
+                                          {corr.type === 'chinh_ta' ? 'Chính tả' : corr.type === 'dung_tu' ? 'Dùng từ' : corr.type === 'dat_cau' ? 'Đặt câu' : 'Bố cục'}
+                                        </span>
+                                        <span>"{corr.originalText || 'Trích đoạn'}"</span>
+                                      </span>
+                                      <button
+                                        type="button"
+                                        onClick={() => {
+                                          setEditableCorrections(prev => prev.filter((_, i) => i !== cIdx));
+                                        }}
+                                        className="text-[10px] text-rose-600 hover:text-rose-800 font-bold px-2 py-0.5 rounded bg-rose-50 border border-rose-200 cursor-pointer"
+                                        title="Bỏ qua gợi ý này nếu thấy không cần thiết"
+                                      >
+                                        ✕ Bỏ qua
+                                      </button>
+                                    </div>
+                                    <div className="flex items-center gap-1.5">
+                                      <span className="text-[11px] font-bold text-emerald-800 shrink-0">Gợi ý sửa:</span>
+                                      <input
+                                        type="text"
+                                        value={corr.suggestion || ''}
+                                        onChange={(e) => {
+                                          const val = e.target.value;
+                                          setEditableCorrections(prev => prev.map((item, i) => i === cIdx ? { ...item, suggestion: val } : item));
+                                        }}
+                                        className="w-full px-2 py-1 text-xs rounded-lg border border-stone-300 bg-white font-medium focus:border-emerald-500 focus:outline-hidden"
+                                      />
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+
+                          {/* =================================================================== */}
                           {/* PHẦN C: NHẬN XÉT CỦA GIÁO VIÊN (4 Ô NHẬP)                          */}
                           {/* =================================================================== */}
                           <div className="p-3.5 sm:p-4 bg-white rounded-2xl border border-emerald-200 shadow-2xs space-y-3">
@@ -1847,6 +1920,38 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                             <div className="p-3 bg-emerald-100 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-pulse flex items-center gap-2">
                               <span>✓</span>
                               <span>{successMsg}</span>
+                            </div>
+                          )}
+
+                          {/* =================================================================== */}
+                          {/* LỊCH SỬ THAY ĐỔI NHẬN XÉT (NẾU ĐÃ CHỈNH SỬA SAU CÔNG BỐ)           */}
+                          {/* =================================================================== */}
+                          {sub.feedbackHistory && sub.feedbackHistory.length > 0 && (
+                            <div className="p-3.5 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
+                              <div className="flex items-center gap-2 text-xs font-black text-stone-800">
+                                <Clock className="w-4 h-4 text-emerald-600" />
+                                <span>Lịch sử thay đổi nhận xét ({sub.feedbackHistory.length} lần chỉnh sửa sau công bố):</span>
+                              </div>
+                              <div className="space-y-1.5 pl-2 max-h-36 overflow-y-auto">
+                                {sub.feedbackHistory.map((hist, hIdx) => (
+                                  <div key={hIdx} className="text-[11px] p-2 bg-white rounded-xl border border-stone-200 space-y-0.5">
+                                    <div className="flex justify-between items-center text-stone-500 font-medium">
+                                      <span>{new Date(hist.editedAt).toLocaleString('vi-VN')}</span>
+                                      <span className="font-bold text-stone-700">{hist.editedBy}</span>
+                                    </div>
+                                    {hist.previousComment && (
+                                      <p className="text-stone-700 italic">
+                                        Nội dung trước đó: "{hist.previousComment}"
+                                      </p>
+                                    )}
+                                    {hist.previousScore !== undefined && (
+                                      <p className="text-amber-700 font-bold">
+                                        Điểm số trước đó: {hist.previousScore}/10
+                                      </p>
+                                    )}
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
 

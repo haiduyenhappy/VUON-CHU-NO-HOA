@@ -145,6 +145,16 @@ export interface TeacherFeedback {
   isExamGraded?: boolean;
 }
 
+export interface FeedbackHistoryEntry {
+  editedAt: string;
+  editedBy: string;
+  previousComment?: string;
+  previousScore?: number;
+  previousStatus?: string;
+  timestamp?: string;
+  reason?: string;
+}
+
 export type TeacherRole = 'SUPER_ADMIN' | 'TEACHER';
 export type TeacherStatus = 'active' | 'locked' | 'inactive';
 
@@ -366,6 +376,7 @@ export interface Submission {
   revisionRequestNote?: string;
   lastActiveStepLabel?: string;
   lastSavedAt?: string;
+  feedbackHistory?: FeedbackHistoryEntry[];
 }
 
 export interface SampleReading {
