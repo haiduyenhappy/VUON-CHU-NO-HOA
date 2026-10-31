@@ -1068,6 +1068,81 @@ app.get('/api/sheets/teacher-data', async (req,res) => {
   }
 });
 
+// VCNH secure write bridge. Existing app routes remain unchanged until the UI is migrated.
+// All writes require a verified Firebase ID token and an active teacher record in Sheets.
+app.post('/api/sheets/teacher-write', async (req, res) => {
+  try {
+    const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!bearer) return res.status(401).json({success:false,message:'Cần đăng nhập Firebase'});
+    const identity = await vcnhVerifyFirebaseToken(bearer);
+    const teachers = await vcnhSheetsCall({action:'list',sheet:'GIAO_VIEN',limit:500});
+    const teacher = (teachers.items || []).find((t:any) =>
+      String(t.email||'').trim().toLowerCase() === identity.email &&
+      String(t.trang_thai||'').toLowerCase() === 'active');
+    if (!teacher) return res.status(403).json({success:false,message:'Không có quyền giáo viên'});
+    const action = String(req.body?.action || '');
+    const data = req.body?.data;
+    if (!data || typeof data !== 'object' || Array.isArray(data))
+      return res.status(400).json({success:false,message:'Thiếu dữ liệu hợp lệ'});
+    const classes = await vcnhSheetsCall({action:'list',sheet:'LOP_HOC',limit:500});
+    const isAdmin = String(teacher.vai_tro) === 'SUPER_ADMIN';
+    const myClasses = new Set((classes.items || []).filter((c:any) =>
+      String(c.ma_gv) === String(teacher.ma_gv)).map((c:any) => String(c.ma_lop)));
+    const permitted = (id:string) => isAdmin || myClasses.has(id);
+    if (action === 'assignment') {
+      const ma_lop = String(data.ma_lop || '').trim();
+      const ma_de = String(data.ma_de || '').trim();
+      const ma_giao = String(data.ma_giao || '').trim();
+      if (!ma_giao || !ma_de || !ma_lop || !permitted(ma_lop))
+        return res.status(403).json({success:false,message:'Thiếu mã hoặc không được giao bài cho lớp này'});
+      const topics = await vcnhSheetsCall({action:'list',sheet:'DE_BAI',filter:{ma_de},limit:2});
+      if (topics.total !== 1) return res.status(400).json({success:false,message:'Mã đề chưa có trong ngân hàng đề'});
+      const existing = await vcnhSheetsCall({action:'list',sheet:'GIAO_BAI',filter:{ma_giao},limit:2});
+      if (existing.total) return res.status(409).json({success:false,message:'Mã giao bài đã tồn tại; không tự ghi đè'});
+      const result = await vcnhSheetsCall({action:'upsert',sheet:'GIAO_BAI',data:{
+        ma_giao,ma_de,ma_lop,ma_gv:String(teacher.ma_gv),
+        ngay_giao:new Date().toISOString().slice(0,10),
+        han_nop:String(data.han_nop || ''),
+        loai_danh_gia:data.loai_danh_gia === 'Định kỳ' ? 'Định kỳ' : 'Thường xuyên',
+        trang_thai:'active',nguon:'vercel_api'
+      }});
+      return res.json({success:true,data:result});
+    }
+    if (action === 'review') {
+      const ma_nop = String(data.ma_nop || '').trim();
+      if (!ma_nop) return res.status(400).json({success:false,message:'Thiếu mã bài nộp'});
+      const submissions = await vcnhSheetsCall({action:'list',sheet:'BAI_NOP',filter:{ma_nop},limit:2});
+      if (submissions.total !== 1) return res.status(404).json({success:false,message:'Không tìm thấy bài nộp'});
+      const sub = submissions.items[0];
+      const assignments = await vcnhSheetsCall({action:'list',sheet:'GIAO_BAI',filter:{ma_giao:String(sub.ma_giao)},limit:2});
+      if (assignments.total !== 1 || !permitted(String(assignments.items[0].ma_lop)))
+        return res.status(403).json({success:false,message:'Không được nhận xét bài này'});
+      const isExam = String(assignments.items[0].loai_danh_gia).trim() === 'Định kỳ';
+      const score = data.diem_dinh_ky;
+      if ((!isExam && score !== undefined && score !== null && score !== '') ||
+          (isExam && score !== undefined && score !== null && score !== '' &&
+           (!Number.isInteger(Number(score)) || Number(score)<0 || Number(score)>10)))
+        return res.status(400).json({success:false,message:'Điểm chỉ dùng cho đánh giá định kỳ, là số nguyên từ 0 đến 10'});
+      const ma_danh_gia = 'DG-' + ma_nop;
+      const reviews = await vcnhSheetsCall({action:'list',sheet:'DANH_GIA',filter:{ma_danh_gia},limit:2});
+      if (reviews.total > 1) return res.status(409).json({success:false,message:'Trùng mã đánh giá'});
+      const result = await vcnhSheetsCall({action:'upsert',sheet:'DANH_GIA',data:{
+        ma_danh_gia,ma_nop,ma_gv:String(teacher.ma_gv),
+        loai_danh_gia:isExam?'Định kỳ':'Thường xuyên',
+        nhan_xet:String(data.nhan_xet || '').slice(0,10000),
+        diem_dinh_ky:isExam && score !== undefined && score !== null && score !== '' ? Number(score) : '',
+        trang_thai:data.trang_thai === 'DA_CONG_BO' ? 'DA_CONG_BO' : 'CHO_DUYET',
+        ngay_danh_gia:new Date().toISOString()
+      }});
+      return res.json({success:true,data:result});
+    }
+    return res.status(400).json({success:false,message:'Thao tác không được hỗ trợ'});
+  } catch (err:any) {
+    console.error('VCNH teacher-write:',err?.message||err);
+    return res.status(502).json({success:false,message:'Không ghi được dữ liệu Google Sheets'});
+  }
+});
+
 // REST API Endpoints
 
 // 1. Get health
