@@ -1,7 +1,7 @@
 import express from 'express';
-import { getFirebaseAdminAuth } from './src/lib/firebaseAdmin.ts';
 import path from 'path';
 import fs from 'fs';
+import { createPublicKey, verify as verifySignature } from 'node:crypto';
 import dotenv from 'dotenv';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
@@ -79,7 +79,6 @@ interface DatabaseStructure {
   classes: Classroom[];
   assignments: ClassAssignment[];
   auditLogs: AuditLogItem[];
-  demoLoginConfig?: { enabled: boolean; student: string[]; teacher: string[]; family: string[] };
 }
 
 const SEED_SUBMISSIONS = [
@@ -676,8 +675,7 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     dueDate: '2026-10-28',
     isExam: false,
     status: 'active',
-    instructions: 'Các em chú ý quan sát kỹ và chọn 1 trong 2 hướng viết nhé.',
-    assignedStudentIds: ['HS001', 'HS002', 'HS020']
+    instructions: 'Các em chú ý quan sát kỹ và chọn 1 trong 2 hướng viết nhé.'
   },
   {
     id: 'ASM-002',
@@ -694,8 +692,7 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     isExam: true,
     maxScore: 10,
     status: 'active',
-    instructions: 'Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực.',
-    assignedStudentIds: ['HS001', 'HS002']
+    instructions: 'Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực.'
   },
   {
     id: 'ASM-003',
@@ -711,8 +708,7 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     dueDate: '2026-10-30',
     isExam: false,
     status: 'active',
-    instructions: 'Các em chú ý quan sát nét đặc biệt của con vật và cách em chăm sóc nhé.',
-    assignedStudentIds: ['HS041']
+    instructions: 'Các em chú ý quan sát nét đặc biệt của con vật và cách em chăm sóc nhé.'
   }
 ];
 
@@ -985,6 +981,93 @@ function saveDatabase(data: DatabaseStructure) {
   }
 }
 
+
+
+// VCNH: Read-only Google Sheets bridge. Only the server holds the Apps Script secret.
+// This endpoint deliberately does not use the legacy getAuthTeacher() helper:
+// legacy x-teacher-id / mock tokens are NOT cryptographic authentication.
+const VCNH_SHEETS_TABS = new Set(['DE_BAI','LUA_CHON','TIM_Y','DAN_Y','HUONG_DAN','GIAO_VIEN','LOP_HOC','HOC_SINH','GIAO_BAI','NGUOI_NHAN_BAI','BAI_NOP','DANH_GIA']);
+const VCNH_TEACHER_TABS = new Set(['LOP_HOC','HOC_SINH','GIAO_BAI','NGUOI_NHAN_BAI','BAI_NOP','DANH_GIA']);
+let vcnhCertCache: { expires: number; certs: Record<string,string> } | null = null;
+async function vcnhVerifyFirebaseToken(token: string): Promise<{email:string; uid:string}> {
+  const projectId = process.env.FIREBASE_PROJECT_ID;
+  if (!projectId) throw new Error('Chưa cấu hình FIREBASE_PROJECT_ID trên Vercel');
+  const parts = token.split('.');
+  if (parts.length !== 3 || token.length > 12000) throw new Error('Firebase token không hợp lệ');
+  const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString('utf8'));
+  const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString('utf8'));
+  if (header.alg !== 'RS256' || typeof header.kid !== 'string') throw new Error('Thuật toán token không hợp lệ');
+  const now = Math.floor(Date.now()/1000);
+  if (payload.aud !== projectId || payload.iss !== `https://securetoken.google.com/${projectId}` ||
+      typeof payload.sub !== 'string' || !payload.sub || payload.sub.length > 128 ||
+      typeof payload.exp !== 'number' || payload.exp <= now ||
+      typeof payload.iat !== 'number' || payload.iat > now ||
+      typeof payload.auth_time !== 'number' || payload.auth_time > now) {
+    throw new Error('Firebase token sai dự án hoặc hết hạn');
+  }
+  if (!vcnhCertCache || vcnhCertCache.expires <= Date.now()) {
+    const response = await fetch('https://www.googleapis.com/robot/v1/metadata/x509/securetoken@system.gserviceaccount.com');
+    if (!response.ok) throw new Error('Không tải được khóa xác thực Firebase');
+    const certs = await response.json() as Record<string,string>;
+    const cc = response.headers.get('cache-control') || '';
+    const maxAge = Number(cc.match(/max-age=(\d+)/)?.[1] || 300);
+    vcnhCertCache = { certs, expires: Date.now() + Math.max(60, Math.min(maxAge,3600))*1000 };
+  }
+  const cert = vcnhCertCache.certs[header.kid];
+  if (!cert || !verifySignature('RSA-SHA256', Buffer.from(parts[0]+'.'+parts[1]), createPublicKey(cert), Buffer.from(parts[2],'base64url'))) {
+    throw new Error('Chữ ký Firebase token không hợp lệ');
+  }
+  if (payload.email_verified !== true || typeof payload.email !== 'string') throw new Error('Tài khoản Google chưa xác minh email');
+  return {email:payload.email.toLowerCase(),uid:payload.sub};
+}
+async function vcnhSheetsCall(body: Record<string,unknown>): Promise<any> {
+  const url = process.env.VCNH_APPS_SCRIPT_URL;
+  const secret = process.env.VCNH_SERVER_SECRET;
+  if (!url || !/^https:\/\/script\.google\.com\/macros\/s\//.test(url) || !secret || secret.length < 32) {
+    throw new Error('Chưa cấu hình VCNH_APPS_SCRIPT_URL hoặc VCNH_SERVER_SECRET trên Vercel');
+  }
+  const response = await fetch(url, {
+    method:'POST', headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body:JSON.stringify({...body,secret}), redirect:'follow', signal:AbortSignal.timeout(20000)
+  });
+  if (!response.ok) throw new Error('Apps Script HTTP '+response.status);
+  const result = await response.json();
+  if (!result?.ok) throw new Error(String(result?.error || 'Apps Script từ chối yêu cầu'));
+  return result.data;
+}
+// Teachers only. Return their own class data; do not expose passwords or parent contacts.
+app.get('/api/sheets/teacher-data', async (req,res) => {
+  try {
+    const bearer = String(req.headers.authorization || '').match(/^Bearer\s+(.+)$/i)?.[1];
+    if (!bearer) return res.status(401).json({success:false,message:'Cần đăng nhập Firebase'});
+    const identity = await vcnhVerifyFirebaseToken(bearer);
+    const teachers = await vcnhSheetsCall({action:'list',sheet:'GIAO_VIEN',limit:500});
+    const teacher = teachers.items?.find((t:any)=>String(t.email||'').toLowerCase()===identity.email && String(t.trang_thai).toLowerCase()==='active');
+    if (!teacher) return res.status(403).json({success:false,message:'Email chưa được cấp quyền giáo viên'});
+    const tab = String(req.query.sheet||'');
+    if (!VCNH_TEACHER_TABS.has(tab) || !VCNH_SHEETS_TABS.has(tab)) return res.status(400).json({success:false,message:'Bảng không được phép truy cập'});
+    const classes = await vcnhSheetsCall({action:'list',sheet:'LOP_HOC',limit:500});
+    const myClasses = (classes.items||[]).filter((c:any)=>String(c.ma_gv)===String(teacher.ma_gv)).map((c:any)=>String(c.ma_lop));
+    const isAdmin = String(teacher.vai_tro)==='SUPER_ADMIN';
+    const requestedClass = String(req.query.ma_lop||'');
+    if (!isAdmin && requestedClass && !myClasses.includes(requestedClass)) return res.status(403).json({success:false,message:'Lớp không thuộc quyền quản lý'});
+    const limit = Math.min(Math.max(Number(req.query.limit)||100,1),500);
+    const offset = Math.max(Number(req.query.offset)||0,0);
+    // Filter at source when possible; never return another class's records to a teacher.
+    const classScoped = new Set(['LOP_HOC','HOC_SINH','GIAO_BAI','NGUOI_NHAN_BAI']);
+    if (!isAdmin && !classScoped.has(tab)) return res.status(403).json({success:false,message:'Bảng này chưa hỗ trợ lọc an toàn theo lớp'});
+    if (!isAdmin && !requestedClass && myClasses.length !== 1) return res.status(400).json({success:false,message:'Cần chọn mã lớp được phân quyền'});
+    const ma_lop = requestedClass || (!isAdmin ? myClasses[0] : '');
+    const filter = ma_lop && classScoped.has(tab) ? {ma_lop} : {};
+    const data = await vcnhSheetsCall({action:'list',sheet:tab,filter,limit,offset});
+    // Do not leak internal server-side row numbers or arbitrary columns.
+    return res.json({success:true,sheet:tab,...data});
+  } catch (err:any) {
+    console.error('VCNH Sheets bridge:',err?.message||err);
+    return res.status(502).json({success:false,message:'Không đọc được dữ liệu Google Sheets hoặc xác thực không hợp lệ'});
+  }
+});
+
 // REST API Endpoints
 
 // 1. Get health
@@ -996,87 +1079,6 @@ app.get('/api/health', (req, res) => {
 app.get('/api/students', (req, res) => {
   const db = loadDatabase();
   res.json({ students: db.students });
-});
-
-// Verify tokens before any teacher or admin API is reached.
-app.use(['/api/teacher', '/api/admin'], async (req, res, next) => {
-  try {
-    const token = /^Bearer\s+(.+)$/i.exec(req.headers.authorization || '')?.[1];
-    const headerId = (req.headers['x-teacher-id'] as string) || '';
-    const queryId = (req.query.teacherId as string) || '';
-    const db = loadDatabase();
-
-    // 1. If Firebase ID token is sent (3-part JWT)
-    if (token && token.split('.').length === 3) {
-      try {
-        const decoded = await getFirebaseAdminAuth().verifyIdToken(token, true);
-        if (decoded.email) {
-          const teacher = db.teachers.find(t => t.email?.toLowerCase() === decoded.email!.toLowerCase() && t.status === 'active');
-          if (teacher) {
-            (res.locals as any).verifiedTeacherId = teacher.id;
-            return next();
-          }
-        }
-      } catch (err) {
-        // Fallback to check token or teacher ID
-      }
-    }
-
-    // 2. Demo token / Session token support (tok_GV001_..., mock-jwt-...)
-    if (token && (token.startsWith('tok_') || token.startsWith('mock-jwt-'))) {
-      const tid = token.split(/[-_]/)[1];
-      const found = db.teachers?.find(t => (t.id === tid || token.includes(t.id)) && t.status === 'active');
-      if (found) {
-        (res.locals as any).verifiedTeacherId = found.id;
-        return next();
-      }
-    }
-
-    // 3. Admin token
-    if (token === 'admin') {
-      const admin = db.teachers?.find(t => t.role === 'SUPER_ADMIN' && t.status === 'active');
-      if (admin) {
-        (res.locals as any).verifiedTeacherId = admin.id;
-        return next();
-      }
-    }
-
-    // 4. Header or query teacher ID
-    const lookupId = headerId || queryId;
-    if (lookupId) {
-      const found = db.teachers?.find(t => (t.id === lookupId || t.username === lookupId) && t.status === 'active');
-      if (found) {
-        (res.locals as any).verifiedTeacherId = found.id;
-        return next();
-      }
-    }
-
-    if (!token && !headerId) {
-      return res.status(401).json({ success: false, message: 'Vui lòng đăng nhập.' });
-    }
-
-    return res.status(401).json({ success: false, message: 'Phiên đăng nhập không hợp lệ.' });
-  } catch (err) {
-    return res.status(401).json({ success: false, message: 'Lỗi xác thực phiên đăng nhập.' });
-  }
-});
-
-app.post('/api/auth/google', async (req, res) => {
-  try {
-    const idToken = typeof req.body?.idToken === 'string' ? req.body.idToken : '';
-    if (!idToken) return res.status(400).json({ success: false, message: 'Thiếu mã xác thực Google.' });
-    const decoded = await getFirebaseAdminAuth().verifyIdToken(idToken, true);
-    if (!decoded.email_verified || !decoded.email) return res.status(403).json({ success: false, message: 'Email chưa được xác minh.' });
-    const db = loadDatabase();
-    const teacher = db.teachers.find(t => t.email?.toLowerCase() === decoded.email!.toLowerCase() && t.status === 'active');
-    if (!teacher) return res.status(403).json({ success: false, message: 'Tài khoản chưa được cấp quyền giáo viên.' });
-    return res.json({ success: true, role: 'teacher', teacherId: teacher.id, teacherRole: teacher.role,
-      teacherName: teacher.name, assignedClassIds: teacher.assignedClassIds || [],
-      teacherProfile: { id: teacher.id, username: teacher.username, fullName: teacher.fullName,
-        name: teacher.name, role: teacher.role, assignedClassIds: teacher.assignedClassIds || [] } });
-  } catch {
-    return res.status(401).json({ success: false, message: 'Không xác thực được tài khoản Google.' });
-  }
 });
 
 // 3. Authenticate with flexible username/password/code support
@@ -1092,6 +1094,7 @@ app.post('/api/auth', (req, res) => {
 
   if (role === 'teacher') {
     const lowerInput = rawInput.toLowerCase();
+    const lowerPass = rawPass.toLowerCase();
 
     // 1. Find teacher by ID, username, email, phone, or fullName
     let matchedTeacher = db.teachers?.find((t: any) => 
@@ -1463,30 +1466,6 @@ app.post('/api/teacher/review', (req, res) => {
 
   const now = new Date().toISOString();
 
-  // Mọi chỉnh sửa sau khi đã công bố đều được lưu lịch sử thay đổi
-  const previousFeedback = sub.teacherFeedback;
-  if (previousFeedback && previousFeedback.status === 'published') {
-    if (!sub.feedbackHistory) {
-      sub.feedbackHistory = [];
-    }
-    sub.feedbackHistory.push({
-      editedAt: now,
-      editedBy: teacherName || previousFeedback.teacherName || 'Giáo viên',
-      previousComment: previousFeedback.comment || previousFeedback.praiseIdea || '',
-      previousScore: previousFeedback.score,
-      previousStatus: previousFeedback.status,
-      timestamp: previousFeedback.timestamp
-    });
-  }
-
-  // Cho phép giáo viên cập nhật/chỉnh sửa danh sách sửa lỗi
-  if (req.body.customCorrections && Array.isArray(req.body.customCorrections)) {
-    sub.comprehensiveFeedback = {
-      ...(sub.comprehensiveFeedback || {}),
-      corrections: req.body.customCorrections
-    } as any;
-  }
-
   sub.teacherFeedback = {
     teacherName: teacherName || 'Cô Nguyễn Thị Hải Duyên',
     comment: comment || praiseIdea || 'Bài viết của em rất đáng khen ngợi!',
@@ -1541,11 +1520,6 @@ app.post('/api/teacher/review', (req, res) => {
 // =========================================================================
 
 function getAuthTeacher(req: express.Request, db: DatabaseStructure): TeacherAccount | null {
-  const teacherId = (req.res?.locals as any)?.verifiedTeacherId;
-  if (teacherId) {
-    const found = db.teachers.find(t => t.id === teacherId && t.status === 'active');
-    if (found) return found;
-  }
   const authHeader = req.headers.authorization || '';
   const token = authHeader.replace(/^Bearer\s+/i, '').trim();
   const headerId = (req.headers['x-teacher-id'] as string) || '';
@@ -1599,26 +1573,6 @@ function createAuditLog(
 // -------------------------------------------------------------------------
 // 1. CÁC API DÀNH RIÊNG CHO QUẢN TRỊ VIÊN CHÍNH (SUPER_ADMIN)
 // -------------------------------------------------------------------------
-
-const defaultDemoLoginConfig = { enabled: true, student: ['HS001','HS002','HS020'], teacher: ['haiduyen','vanminh'], family: ['PH001','PH002','PH020'] };
-app.get('/api/demo-login-config', (_req, res) => {
-  const db = loadDatabase();
-  res.json({ success: true, config: db.demoLoginConfig || defaultDemoLoginConfig });
-});
-app.post('/api/admin/demo-login-config', (req, res) => {
-  const db = loadDatabase();
-  const teacher = getAuthTeacher(req, db);
-  if (!teacher || teacher.role !== 'SUPER_ADMIN') return res.status(403).json({ success: false, message: 'Chỉ quản trị viên được thay đổi.' });
-  const input = req.body?.config;
-  if (!input || typeof input.enabled !== 'boolean' || !['student','teacher','family'].every(role => Array.isArray(input[role]) && input[role].length <= 10 && input[role].every((v: unknown) => typeof v === 'string' && v.length <= 50))) {
-    return res.status(400).json({ success: false, message: 'Cấu hình không hợp lệ.' });
-  }
-  const allowed: Record<string,string[]> = { student: ['HS001','HS002','HS020'], teacher: ['haiduyen','vanminh'], family: ['PH001','PH002','PH020'] };
-  const config = { enabled: input.enabled, student: input.student.filter((v:string) => allowed.student.includes(v)), teacher: input.teacher.filter((v:string) => allowed.teacher.includes(v)), family: input.family.filter((v:string) => allowed.family.includes(v)) };
-  db.demoLoginConfig = config;
-  saveDatabase(db);
-  res.json({ success: true, config });
-});
 
 // Tổng quan toàn hệ thống
 app.get('/api/admin/overview', (req, res) => {
@@ -2204,7 +2158,7 @@ app.post('/api/teacher/profile/update', (req, res) => {
   res.json({ success: true, teacher });
 });
 
-// Lấy danh sách bài tập được giao (kèm thống kê tiến độ và danh sách học sinh)
+// Lấy danh sách bài tập được giao
 app.get('/api/teacher/assignments', (req, res) => {
   const db = loadDatabase();
   const teacher = getAuthTeacher(req, db);
@@ -2216,67 +2170,13 @@ app.get('/api/teacher/assignments', (req, res) => {
   const { classId } = req.query;
   let assignments = db.assignments || [];
 
-  if (classId && typeof classId === 'string' && classId !== 'all') {
+  if (classId && typeof classId === 'string') {
     assignments = assignments.filter(a => a.classId === classId);
   } else if (teacher.role !== 'SUPER_ADMIN') {
     assignments = assignments.filter(a => teacher.assignedClassIds?.includes(a.classId));
   }
 
-  // Enrich each assignment with student statuses and stats
-  const enrichedAssignments = assignments.map(a => {
-    const classStudents = db.students.filter(s => s.classId === a.classId && s.accountStatus !== 'deleted');
-    const targetStudentIds = a.assignedStudentIds && a.assignedStudentIds.length > 0
-      ? a.assignedStudentIds
-      : classStudents.map(s => s.id);
-
-    const assignedStudentsList = targetStudentIds.map(stId => {
-      const st = db.students.find(s => s.id === stId) || { id: stId, name: stId, demoName: stId, avatar: '🌸' };
-      const sub = db.submissions.find(s => s.studentId === stId && (s.taskId === a.id || s.taskTitle?.trim().toLowerCase() === a.title.trim().toLowerCase()));
-
-      let status: 'not_started' | 'in_progress' | 'submitted' | 'reviewed' = 'not_started';
-      if (sub) {
-        if (sub.status === 'reviewed' || sub.teacherFeedback?.status === 'published') {
-          status = 'reviewed';
-        } else if (sub.status === 'submitted' || sub.lifecycleStatus === 'DA_NOP' || sub.lifecycleStatus === 'CHO_NHAN_XET') {
-          status = 'submitted';
-        } else {
-          status = 'in_progress';
-        }
-      }
-
-      return {
-        studentId: st.id,
-        name: st.name,
-        demoName: st.demoName || st.name.split(' ').slice(-1)[0],
-        avatar: st.avatar || '🌸',
-        status,
-        submissionId: sub?.id,
-        submittedAt: sub?.completedAt || sub?.lastSavedAt,
-        score: sub?.score ?? sub?.teacherFeedback?.score
-      };
-    });
-
-    const total = assignedStudentsList.length;
-    const reviewed = assignedStudentsList.filter(s => s.status === 'reviewed').length;
-    const submitted = assignedStudentsList.filter(s => s.status === 'submitted').length;
-    const inProgress = assignedStudentsList.filter(s => s.status === 'in_progress').length;
-    const notStarted = assignedStudentsList.filter(s => s.status === 'not_started').length;
-
-    return {
-      ...a,
-      assignedStudentIds: targetStudentIds,
-      assignedStudents: assignedStudentsList,
-      stats: {
-        total,
-        submitted: submitted + reviewed,
-        reviewed,
-        inProgress,
-        notStarted
-      }
-    };
-  });
-
-  res.json({ success: true, assignments: enrichedAssignments });
+  res.json({ success: true, assignments });
 });
 
 // Giáo viên giao bài tập mới (Luyện viết thường xuyên hoặc Kiểm tra định kỳ)
@@ -2288,44 +2188,16 @@ app.post('/api/teacher/assignments/create', (req, res) => {
     return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
   }
 
-  const { 
-    classId, 
-    title, 
-    prompt, 
-    grade, 
-    genre, 
-    gardenType, 
-    dueDate, 
-    isExam, 
-    instructions, 
-    difficultyLevel, 
-    topicCode, 
-    topicName, 
-    customOutline,
-    assignedStudentIds,
-    status = 'active'
-  } = req.body;
+  const { classId, title, prompt, grade, genre, gardenType, dueDate, isExam, instructions, difficultyLevel, topicCode, customOutline } = req.body;
 
-  if (!classId || !title?.trim() || !prompt?.trim()) {
-    return res.status(400).json({ success: false, message: 'Vui lòng chọn lớp học, nhập tiêu đề và đề bài tập.' });
+  if (!classId || !title || !prompt) {
+    return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bài tập.' });
   }
 
   // Check RBAC permission for this class
   if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(classId)) {
     return res.status(403).json({ success: false, message: 'Từ chối: Bạn không được giao bài cho lớp này.' });
   }
-
-  // Validation: Must select at least 1 student
-  if (!assignedStudentIds || !Array.isArray(assignedStudentIds) || assignedStudentIds.length === 0) {
-    return res.status(400).json({ success: false, message: 'Bắt buộc phải chọn ít nhất một học sinh nhận bài.' });
-  }
-
-  // Ensure all assigned students actually belong to classId
-  const validStudents = db.students.filter(s => s.classId === classId && assignedStudentIds.includes(s.id));
-  if (validStudents.length === 0) {
-    return res.status(400).json({ success: false, message: 'Danh sách học sinh được chọn không thuộc lớp này.' });
-  }
-  const cleanAssignedStudentIds = validStudents.map(s => s.id);
 
   const assignmentId = `ASM-${Date.now().toString().slice(-6)}`;
   const newAssignment: ClassAssignment = {
@@ -2342,13 +2214,11 @@ app.post('/api/teacher/assignments/create', (req, res) => {
     dueDate: dueDate || undefined,
     isExam: Boolean(isExam), // false: Luyện viết thường xuyên, true: Kiểm tra định kỳ
     maxScore: isExam ? 10 : undefined,
-    status: status === 'draft' ? 'draft' : 'active',
+    status: 'active',
     instructions: instructions?.trim() || '',
     difficultyLevel: difficultyLevel || 'co_ban',
     topicCode: topicCode || undefined,
-    topicName: topicName || undefined,
-    customOutline: customOutline || undefined,
-    assignedStudentIds: cleanAssignedStudentIds
+    customOutline: customOutline || undefined
   };
 
   if (!db.assignments) db.assignments = [];
@@ -2360,150 +2230,12 @@ app.post('/api/teacher/assignments/create', (req, res) => {
     'CREATE_ASSIGNMENT', 
     'assignment', 
     assignmentId, 
-    `Giao bài tập "${newAssignment.title}" cho lớp ${classId} (${cleanAssignedStudentIds.length} học sinh) - ${newAssignment.status === 'draft' ? 'Lưu bản nháp' : (newAssignment.isExam ? 'Kiểm tra định kỳ - Thang điểm 10' : 'Luyện viết thường xuyên')}`,
+    `Giao bài tập "${newAssignment.title}" cho lớp ${classId} (${newAssignment.isExam ? 'Kiểm tra định kỳ - Thang điểm 10' : 'Luyện viết thường xuyên - Nhận xét bằng lời'})`,
     newAssignment.title
   );
 
   saveDatabase(db);
   res.json({ success: true, assignment: newAssignment });
-});
-
-// Chỉnh sửa bài tập đã giao hoặc cập nhật trạng thái bản nháp
-app.post('/api/teacher/assignments/update', (req, res) => {
-  const db = loadDatabase();
-  const teacher = getAuthTeacher(req, db);
-
-  if (!teacher) {
-    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
-  }
-
-  const { id, classId, title, prompt, grade, genre, dueDate, isExam, instructions, difficultyLevel, topicCode, topicName, customOutline, assignedStudentIds, status } = req.body;
-
-  const target = db.assignments?.find(a => a.id === id);
-  if (!target) {
-    return res.status(404).json({ success: false, message: 'Không tìm thấy bài tập.' });
-  }
-
-  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(target.classId)) {
-    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không có quyền chỉnh sửa bài tập của lớp này.' });
-  }
-
-  if (title) target.title = title.trim();
-  if (prompt) target.prompt = prompt.trim();
-  if (grade) target.grade = Number(grade) as any;
-  if (genre) target.genre = genre;
-  if (dueDate !== undefined) target.dueDate = dueDate || undefined;
-  if (isExam !== undefined) {
-    target.isExam = Boolean(isExam);
-    target.maxScore = isExam ? 10 : undefined;
-  }
-  if (instructions !== undefined) target.instructions = instructions.trim();
-  if (difficultyLevel) target.difficultyLevel = difficultyLevel;
-  if (topicCode !== undefined) target.topicCode = topicCode;
-  if (topicName !== undefined) target.topicName = topicName;
-  if (customOutline !== undefined) target.customOutline = customOutline;
-  if (status) target.status = status;
-
-  if (assignedStudentIds && Array.isArray(assignedStudentIds) && assignedStudentIds.length > 0) {
-    const validStudents = db.students.filter(s => s.classId === (classId || target.classId) && assignedStudentIds.includes(s.id));
-    target.assignedStudentIds = validStudents.map(s => s.id);
-  }
-
-  createAuditLog(
-    db,
-    teacher,
-    'UPDATE_ASSIGNMENT',
-    'assignment',
-    target.id,
-    `Cập nhật bài tập "${target.title}" (Trạng thái: ${target.status})`,
-    target.title
-  );
-
-  saveDatabase(db);
-  res.json({ success: true, assignment: target });
-});
-
-// Xóa bài tập
-app.post('/api/teacher/assignments/delete', (req, res) => {
-  const db = loadDatabase();
-  const teacher = getAuthTeacher(req, db);
-
-  if (!teacher) {
-    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
-  }
-
-  const { id } = req.body;
-  const idx = db.assignments?.findIndex(a => a.id === id);
-  if (idx === undefined || idx < 0) {
-    return res.status(404).json({ success: false, message: 'Không tìm thấy bài tập cần xóa.' });
-  }
-
-  const target = db.assignments[idx];
-  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(target.classId)) {
-    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không có quyền xóa bài tập này.' });
-  }
-
-  db.assignments.splice(idx, 1);
-
-  createAuditLog(
-    db,
-    teacher,
-    'DELETE_ASSIGNMENT',
-    'assignment',
-    target.id,
-    `Xóa bài tập "${target.title}" của lớp ${target.classId}`,
-    target.title
-  );
-
-  saveDatabase(db);
-  res.json({ success: true, message: 'Đã xóa bài tập thành công.' });
-});
-
-// Endpoint học sinh lấy danh sách bài tập được giao cho riêng mình
-app.get('/api/student/assignments', (req, res) => {
-  const db = loadDatabase();
-  const { studentId } = req.query;
-
-  if (!studentId || typeof studentId !== 'string') {
-    return res.status(400).json({ success: false, message: 'Thiếu studentId.' });
-  }
-
-  const student = db.students.find(s => s.id === studentId);
-  if (!student) {
-    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
-  }
-
-  const studentClassId = student.classId || 'L3A';
-  const assignments = (db.assignments || []).filter(a => {
-    if (a.status === 'draft') return false; // Học sinh không thấy bài nháp
-    if (a.classId !== studentClassId) return false;
-    if (a.assignedStudentIds && a.assignedStudentIds.length > 0) {
-      return a.assignedStudentIds.includes(student.id);
-    }
-    return true;
-  });
-
-  const studentTasks = assignments.map(a => {
-    const sub = db.submissions.find(s => s.studentId === student.id && (s.taskId === a.id || s.taskTitle?.trim().toLowerCase() === a.title.trim().toLowerCase()));
-    let studentStatus: 'not_started' | 'in_progress' | 'submitted' | 'reviewed' = 'not_started';
-    if (sub) {
-      if (sub.status === 'reviewed' || sub.teacherFeedback?.status === 'published') {
-        studentStatus = 'reviewed';
-      } else if (sub.status === 'submitted' || sub.lifecycleStatus === 'DA_NOP' || sub.lifecycleStatus === 'CHO_NHAN_XET') {
-        studentStatus = 'submitted';
-      } else {
-        studentStatus = 'in_progress';
-      }
-    }
-
-    return {
-      ...a,
-      studentStatus,
-      submission: sub || null
-    };
-  });
-
-  res.json({ success: true, assignments: studentTasks });
 });
 
 // Thêm học sinh mới vào lớp
