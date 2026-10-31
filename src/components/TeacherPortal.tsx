@@ -1290,9 +1290,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           </div>
 
           {/* Main Grid: Student List on Left, Submissions / Reviews on Right */}
-          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 min-w-0 w-full">
             {/* Left Column: Students List (4 cols) */}
-            <div className="lg:col-span-4 bg-white rounded-3xl border-2 border-stone-200 p-4 shadow-xs space-y-3">
+            <div className="lg:col-span-4 bg-white rounded-3xl border-2 border-stone-200 p-4 shadow-xs space-y-3 min-w-0">
               <div className="flex items-center justify-between pb-2 border-b border-stone-100">
                 <span className="font-extrabold text-xs uppercase tracking-wider text-stone-700">
                   Danh sách {filteredStudents.length} học sinh {assignedClasses.find(c => c.id === selectedClassId)?.name || (isSuperAdmin ? 'toàn trường' : (assignedClasses[0]?.name || ''))}
@@ -1367,10 +1367,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
             </div>
 
             {/* Right Column: Submission List & Formative Assessment Card (8 cols) */}
-            <div className="lg:col-span-8 space-y-4">
+            <div className="lg:col-span-8 min-w-0 w-full space-y-4">
               {/* Header chuyển đổi 2 Tab khi giáo viên chọn 1 học sinh cụ thể */}
               {selectedStudent && (
-                <div className="bg-white p-3 sm:p-4 rounded-3xl border-2 border-emerald-300 shadow-xs flex flex-wrap items-center justify-between gap-3">
+                <div className="bg-white p-3 sm:p-4 rounded-3xl border-2 border-emerald-300 shadow-xs flex flex-wrap items-center justify-between gap-3 min-w-0">
                   <div className="flex items-center gap-2.5">
                     <div className="w-9 h-9 rounded-2xl bg-emerald-50 border border-emerald-200 flex items-center justify-center text-xl shrink-0">
                       {selectedStudent.avatar || '🌸'}
@@ -1394,7 +1394,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                   </div>
 
                   {/* 2 Tab: Bài viết của em & Tiến bộ kỹ năng */}
-                  <div className="flex items-center gap-1.5 bg-stone-100 p-1 rounded-2xl border border-stone-200">
+                  <div className="flex flex-wrap items-center gap-1.5 bg-stone-100 p-1 rounded-2xl border border-stone-200">
                     <button
                       type="button"
                       onClick={() => {
