@@ -1630,7 +1630,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                                     Phiếu Nhận Xét & Đánh Giá Bài Viết – {teacherName}
                                   </h4>
                                   <p className="text-[11px] text-stone-500 font-semibold">
-                                    Đánh giá thường xuyên theo định hướng phát triển năng lực (GDPT 2018)
+                                    Đánh giá thường xuyên theo định hướng phát triển năng lực
                                   </p>
                                 </div>
                               </div>
@@ -1689,7 +1689,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                               <div className="flex items-center justify-between">
                                 <span className="text-xs font-black text-amber-950 flex items-center gap-1.5">
                                   <Star className="w-4 h-4 text-amber-600 fill-amber-500" />
-                                  <span>Điểm số định kỳ (Thang điểm 10 theo Thông tư 27 GDPT 2018):</span>
+                                  <span>Điểm số định kỳ (Thang điểm 10):</span>
                                 </span>
                                 <span className="text-xs font-extrabold text-amber-800 bg-amber-100 px-2 py-0.5 rounded-md border border-amber-300">
                                   {examScore !== '' ? `Điểm: ${examScore} / 10` : 'Chưa nhập điểm'}
@@ -3064,8 +3064,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 </label>
                 <p className="text-[11px] text-stone-500 pl-6">
                   {newAssignIsExam 
-                    ? 'Bài kiểm tra định kỳ sẽ cho phép chấm điểm số nguyên từ 1 đến 10 kèm nhận xét chi tiết theo Thông tư 27.' 
-                    : 'Mặc định là bài luyện tập thường xuyên, chỉ nhận xét định tính khích lệ học sinh.'}
+                    ? 'Bài kiểm tra định kỳ cho phép chấm điểm số 1 đến 10 kèm nhận xét chi tiết.' 
+                    : 'Bài luyện tập thường xuyên, đánh giá bằng lời nhận xét khích lệ học sinh.'}
                 </p>
               </div>
 

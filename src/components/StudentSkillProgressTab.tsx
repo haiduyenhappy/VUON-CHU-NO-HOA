@@ -173,11 +173,8 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
           </div>
 
           <div className="bg-white/10 backdrop-blur-md px-3.5 py-2 rounded-2xl border border-white/15 text-right shrink-0">
-            <span className="text-[11px] font-bold text-emerald-200 uppercase tracking-wider block">
+            <span className="text-xs font-extrabold text-white uppercase tracking-wider block">
               Hành trình tiến bộ
-            </span>
-            <span className="text-xs font-extrabold text-white">
-              Thông tư 27/2020/BGDĐT
             </span>
           </div>
         </div>
@@ -194,7 +191,7 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
       ) : (
         <>
           {/* ========================================================================= */}
-          {/* MỤC 1: CON CẦN LUYỆN THÊM (CỘT CÀNG THẤP CÀNG TỐT)                       */}
+          {/* MỤC 1: CON CẦN LUYỆN THÊM                                                 */}
           {/* ========================================================================= */}
           <div className="bg-white rounded-3xl border-2 border-stone-200 p-5 sm:p-6 shadow-xs space-y-5">
             {/* Header Mục 1 */}
@@ -213,33 +210,27 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                 </p>
               </div>
 
-              {/* Bộ lọc bài viết */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs font-bold text-stone-500">Xem theo bài:</span>
-                <select
-                  value={errorFilterSubId}
-                  onChange={(e) => setErrorFilterSubId(e.target.value)}
-                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 focus:outline-hidden focus:border-emerald-500 text-stone-800"
-                >
-                  <option value="all">Tất cả bài viết ({studentSubs.length} bài)</option>
-                  {studentSubs.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {new Date(s.completedAt || s.startedAt || '').toLocaleDateString('vi-VN')} - {s.taskTitle || s.id}
-                    </option>
-                  ))}
-                </select>
+              {/* Bộ lọc bài viết & số liệu thực tế */}
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                <span className="text-xs font-bold text-stone-700 bg-stone-100 px-3 py-1.5 rounded-xl border border-stone-200">
+                  Tổng điểm cần rèn: {allDetectedErrors.length}
+                </span>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-stone-500">Xem theo bài:</span>
+                  <select
+                    value={errorFilterSubId}
+                    onChange={(e) => setErrorFilterSubId(e.target.value)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 focus:outline-hidden focus:border-emerald-500 text-stone-800"
+                  >
+                    <option value="all">Tất cả bài viết ({studentSubs.length} bài)</option>
+                    {studentSubs.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {new Date(s.completedAt || s.startedAt || '').toLocaleDateString('vi-VN')} - {s.taskTitle || s.id}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
-            </div>
-
-            {/* Quy chuẩn sư phạm: Cột càng thấp càng tốt */}
-            <div className="flex items-center justify-between px-3.5 py-2.5 rounded-2xl bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-xs">
-              <div className="flex items-center gap-2 font-bold">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
-                <span>Quy chuẩn sư phạm: <strong>Cột càng thấp càng tốt</strong> (Số điểm cần sửa giảm dần thể hiện con viết ngày càng vững vàng).</span>
-              </div>
-              <span className="text-[11px] font-semibold text-emerald-700 hidden md:inline">
-                Tổng điểm cần rèn: {allDetectedErrors.length}
-              </span>
             </div>
 
             {/* Biểu đồ cột Tần suất điểm cần rèn */}
@@ -254,7 +245,7 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                     <span>{Math.round(maxErrorCount / 2)} điểm</span>
                   </div>
                   <div className="border-b border-stone-300 w-full">
-                    <span>0 điểm (Chuẩn mực hoàn thiện)</span>
+                    <span>0 điểm</span>
                   </div>
                 </div>
 
@@ -488,38 +479,31 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                   </h3>
                 </div>
                 <p className="text-xs text-stone-500 mt-1">
-                  Đánh giá 4 năng lực thành phần cốt lõi theo thang 1–5 sao của CTGDPT 2018 và ghi nhận những điểm sáng nổi bật của học sinh.
+                  Đánh giá 4 năng lực thành phần theo thang điểm 1–5 sao và ghi nhận những điểm sáng nổi bật của học sinh.
                 </p>
               </div>
 
               {/* Bộ chọn bài viết */}
-              <div className="flex items-center gap-2 shrink-0">
-                <span className="text-xs font-bold text-stone-500">Bài đánh giá:</span>
-                <select
-                  value={competencySubId}
-                  onChange={(e) => setCompetencySubId(e.target.value)}
-                  className="text-xs font-bold px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 focus:outline-hidden focus:border-amber-500 text-stone-800 max-w-xs"
-                >
-                  {studentSubs.map((s, idx) => (
-                    <option key={s.id} value={s.id}>
-                      Bài {idx + 1}: {s.taskTitle || s.id} ({new Date(s.completedAt || s.startedAt || '').toLocaleDateString('vi-VN')})
-                    </option>
-                  ))}
-                </select>
-              </div>
-            </div>
-
-            {/* Quy chuẩn sư phạm: Cột càng cao càng tốt */}
-            <div className="flex flex-wrap items-center justify-between px-3.5 py-2.5 rounded-2xl bg-amber-50/80 border border-amber-200 text-amber-950 text-xs gap-2">
-              <div className="flex items-center gap-2 font-bold">
-                <Sparkles className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Quy chuẩn sư phạm: <strong>Cột càng cao càng tốt</strong> (Thang 1 đến 5 sao theo chuẩn lứa tuổi Khối {studentGradeNumber}).</span>
-              </div>
-              <div className="flex items-center gap-2 text-[11px] font-bold text-stone-600">
-                <span>So sánh với:</span>
-                <span className="px-2 py-0.5 rounded-md bg-white border border-amber-300 text-amber-900">
-                  {prevSub ? `Bài trước (${new Date(prevSub.completedAt || prevSub.startedAt || '').toLocaleDateString('vi-VN')})` : 'Bài khởi đầu hồ sơ'}
-                </span>
+              <div className="flex flex-wrap items-center gap-2 shrink-0">
+                {prevSub && (
+                  <span className="text-xs text-stone-600 font-semibold bg-stone-100 px-2.5 py-1.5 rounded-xl border border-stone-200">
+                    So sánh: Bài trước ({new Date(prevSub.completedAt || prevSub.startedAt || '').toLocaleDateString('vi-VN')})
+                  </span>
+                )}
+                <div className="flex items-center gap-1.5">
+                  <span className="text-xs font-bold text-stone-500">Bài đánh giá:</span>
+                  <select
+                    value={competencySubId}
+                    onChange={(e) => setCompetencySubId(e.target.value)}
+                    className="text-xs font-bold px-3 py-1.5 rounded-xl border border-stone-200 bg-stone-50 hover:bg-stone-100 focus:outline-hidden focus:border-amber-500 text-stone-800 max-w-xs"
+                  >
+                    {studentSubs.map((s, idx) => (
+                      <option key={s.id} value={s.id}>
+                        Bài {idx + 1}: {s.taskTitle || s.id} ({new Date(s.completedAt || s.startedAt || '').toLocaleDateString('vi-VN')})
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
 
@@ -535,7 +519,7 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                     <span>Mức 4: Khá tốt</span>
                   </div>
                   <div className="border-b border-dashed border-stone-200 w-full flex justify-between">
-                    <span>Mức 3: Đạt chuẩn (Khối {studentGradeNumber})</span>
+                    <span>Mức 3: Đạt chuẩn</span>
                   </div>
                   <div className="border-b border-dashed border-stone-200 w-full flex justify-between">
                     <span>Mức 2: Hoàn thành một phần</span>
@@ -685,14 +669,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
               </div>
             </div>
 
-            {/* Ghi chú sư phạm Thông tư 27 */}
-            <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl bg-blue-50/80 border border-blue-200 text-blue-950 text-xs">
-              <Info className="w-4 h-4 text-blue-600 shrink-0" />
-              <span>
-                Quy định sư phạm: Đánh giá thường xuyên bằng nhận xét khích lệ để học sinh tự tin viết bài. Điểm số thang 10 chỉ ghi nhận cho bài kiểm tra định kỳ chính thức đã được giáo viên công bố.
-              </span>
-            </div>
-
             {/* Nếu chưa có bài kiểm tra định kỳ: hiển thị chính xác text yêu cầu */}
             {periodicExamScores.length === 0 ? (
               <div className="py-12 px-4 text-center bg-stone-50/80 rounded-2xl border-2 border-dashed border-stone-200 space-y-3">
@@ -706,11 +682,6 @@ export const StudentSkillProgressTab: React.FC<StudentSkillProgressTabProps> = (
                 <p className="text-xs text-stone-500 max-w-lg mx-auto leading-relaxed">
                   Học sinh chưa có bài kiểm tra định kỳ nào được giáo viên cho điểm và công bố. Các bài viết đã nộp hiện tại là bài rèn luyện và đánh giá thường xuyên bằng lời nhận xét.
                 </p>
-                <div className="pt-1">
-                  <span className="inline-block px-3 py-1 rounded-full text-[11px] font-bold bg-amber-50 text-amber-800 border border-amber-200">
-                    Tuân thủ Thông tư 27/2020: Không tự động quy đổi đánh giá thường xuyên thành điểm số
-                  </span>
-                </div>
               </div>
             ) : (
               <div className="space-y-4">
