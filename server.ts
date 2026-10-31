@@ -676,7 +676,8 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     dueDate: '2026-10-28',
     isExam: false,
     status: 'active',
-    instructions: 'Các em chú ý quan sát kỹ và chọn 1 trong 2 hướng viết nhé.'
+    instructions: 'Các em chú ý quan sát kỹ và chọn 1 trong 2 hướng viết nhé.',
+    assignedStudentIds: ['HS001', 'HS002', 'HS020']
   },
   {
     id: 'ASM-002',
@@ -693,7 +694,8 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     isExam: true,
     maxScore: 10,
     status: 'active',
-    instructions: 'Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực.'
+    instructions: 'Bài kiểm tra đánh giá theo thang điểm 10. Các em tự làm bài trung thực.',
+    assignedStudentIds: ['HS001', 'HS002']
   },
   {
     id: 'ASM-003',
@@ -709,7 +711,8 @@ const SEED_ASSIGNMENTS: ClassAssignment[] = [
     dueDate: '2026-10-30',
     isExam: false,
     status: 'active',
-    instructions: 'Các em chú ý quan sát nét đặc biệt của con vật và cách em chăm sóc nhé.'
+    instructions: 'Các em chú ý quan sát nét đặc biệt của con vật và cách em chăm sóc nhé.',
+    assignedStudentIds: ['HS041']
   }
 ];
 
@@ -2201,7 +2204,7 @@ app.post('/api/teacher/profile/update', (req, res) => {
   res.json({ success: true, teacher });
 });
 
-// Lấy danh sách bài tập được giao
+// Lấy danh sách bài tập được giao (kèm thống kê tiến độ và danh sách học sinh)
 app.get('/api/teacher/assignments', (req, res) => {
   const db = loadDatabase();
   const teacher = getAuthTeacher(req, db);
@@ -2213,13 +2216,67 @@ app.get('/api/teacher/assignments', (req, res) => {
   const { classId } = req.query;
   let assignments = db.assignments || [];
 
-  if (classId && typeof classId === 'string') {
+  if (classId && typeof classId === 'string' && classId !== 'all') {
     assignments = assignments.filter(a => a.classId === classId);
   } else if (teacher.role !== 'SUPER_ADMIN') {
     assignments = assignments.filter(a => teacher.assignedClassIds?.includes(a.classId));
   }
 
-  res.json({ success: true, assignments });
+  // Enrich each assignment with student statuses and stats
+  const enrichedAssignments = assignments.map(a => {
+    const classStudents = db.students.filter(s => s.classId === a.classId && s.accountStatus !== 'deleted');
+    const targetStudentIds = a.assignedStudentIds && a.assignedStudentIds.length > 0
+      ? a.assignedStudentIds
+      : classStudents.map(s => s.id);
+
+    const assignedStudentsList = targetStudentIds.map(stId => {
+      const st = db.students.find(s => s.id === stId) || { id: stId, name: stId, demoName: stId, avatar: '🌸' };
+      const sub = db.submissions.find(s => s.studentId === stId && (s.taskId === a.id || s.taskTitle?.trim().toLowerCase() === a.title.trim().toLowerCase()));
+
+      let status: 'not_started' | 'in_progress' | 'submitted' | 'reviewed' = 'not_started';
+      if (sub) {
+        if (sub.status === 'reviewed' || sub.teacherFeedback?.status === 'published') {
+          status = 'reviewed';
+        } else if (sub.status === 'submitted' || sub.lifecycleStatus === 'DA_NOP' || sub.lifecycleStatus === 'CHO_NHAN_XET') {
+          status = 'submitted';
+        } else {
+          status = 'in_progress';
+        }
+      }
+
+      return {
+        studentId: st.id,
+        name: st.name,
+        demoName: st.demoName || st.name.split(' ').slice(-1)[0],
+        avatar: st.avatar || '🌸',
+        status,
+        submissionId: sub?.id,
+        submittedAt: sub?.completedAt || sub?.lastSavedAt,
+        score: sub?.score ?? sub?.teacherFeedback?.score
+      };
+    });
+
+    const total = assignedStudentsList.length;
+    const reviewed = assignedStudentsList.filter(s => s.status === 'reviewed').length;
+    const submitted = assignedStudentsList.filter(s => s.status === 'submitted').length;
+    const inProgress = assignedStudentsList.filter(s => s.status === 'in_progress').length;
+    const notStarted = assignedStudentsList.filter(s => s.status === 'not_started').length;
+
+    return {
+      ...a,
+      assignedStudentIds: targetStudentIds,
+      assignedStudents: assignedStudentsList,
+      stats: {
+        total,
+        submitted: submitted + reviewed,
+        reviewed,
+        inProgress,
+        notStarted
+      }
+    };
+  });
+
+  res.json({ success: true, assignments: enrichedAssignments });
 });
 
 // Giáo viên giao bài tập mới (Luyện viết thường xuyên hoặc Kiểm tra định kỳ)
@@ -2231,16 +2288,44 @@ app.post('/api/teacher/assignments/create', (req, res) => {
     return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
   }
 
-  const { classId, title, prompt, grade, genre, gardenType, dueDate, isExam, instructions, difficultyLevel, topicCode, customOutline } = req.body;
+  const { 
+    classId, 
+    title, 
+    prompt, 
+    grade, 
+    genre, 
+    gardenType, 
+    dueDate, 
+    isExam, 
+    instructions, 
+    difficultyLevel, 
+    topicCode, 
+    topicName, 
+    customOutline,
+    assignedStudentIds,
+    status = 'active'
+  } = req.body;
 
-  if (!classId || !title || !prompt) {
-    return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bài tập.' });
+  if (!classId || !title?.trim() || !prompt?.trim()) {
+    return res.status(400).json({ success: false, message: 'Vui lòng chọn lớp học, nhập tiêu đề và đề bài tập.' });
   }
 
   // Check RBAC permission for this class
   if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(classId)) {
     return res.status(403).json({ success: false, message: 'Từ chối: Bạn không được giao bài cho lớp này.' });
   }
+
+  // Validation: Must select at least 1 student
+  if (!assignedStudentIds || !Array.isArray(assignedStudentIds) || assignedStudentIds.length === 0) {
+    return res.status(400).json({ success: false, message: 'Bắt buộc phải chọn ít nhất một học sinh nhận bài.' });
+  }
+
+  // Ensure all assigned students actually belong to classId
+  const validStudents = db.students.filter(s => s.classId === classId && assignedStudentIds.includes(s.id));
+  if (validStudents.length === 0) {
+    return res.status(400).json({ success: false, message: 'Danh sách học sinh được chọn không thuộc lớp này.' });
+  }
+  const cleanAssignedStudentIds = validStudents.map(s => s.id);
 
   const assignmentId = `ASM-${Date.now().toString().slice(-6)}`;
   const newAssignment: ClassAssignment = {
@@ -2257,11 +2342,13 @@ app.post('/api/teacher/assignments/create', (req, res) => {
     dueDate: dueDate || undefined,
     isExam: Boolean(isExam), // false: Luyện viết thường xuyên, true: Kiểm tra định kỳ
     maxScore: isExam ? 10 : undefined,
-    status: 'active',
+    status: status === 'draft' ? 'draft' : 'active',
     instructions: instructions?.trim() || '',
     difficultyLevel: difficultyLevel || 'co_ban',
     topicCode: topicCode || undefined,
-    customOutline: customOutline || undefined
+    topicName: topicName || undefined,
+    customOutline: customOutline || undefined,
+    assignedStudentIds: cleanAssignedStudentIds
   };
 
   if (!db.assignments) db.assignments = [];
@@ -2273,12 +2360,150 @@ app.post('/api/teacher/assignments/create', (req, res) => {
     'CREATE_ASSIGNMENT', 
     'assignment', 
     assignmentId, 
-    `Giao bài tập "${newAssignment.title}" cho lớp ${classId} (${newAssignment.isExam ? 'Kiểm tra định kỳ - Thang điểm 10' : 'Luyện viết thường xuyên - Nhận xét bằng lời'})`,
+    `Giao bài tập "${newAssignment.title}" cho lớp ${classId} (${cleanAssignedStudentIds.length} học sinh) - ${newAssignment.status === 'draft' ? 'Lưu bản nháp' : (newAssignment.isExam ? 'Kiểm tra định kỳ - Thang điểm 10' : 'Luyện viết thường xuyên')}`,
     newAssignment.title
   );
 
   saveDatabase(db);
   res.json({ success: true, assignment: newAssignment });
+});
+
+// Chỉnh sửa bài tập đã giao hoặc cập nhật trạng thái bản nháp
+app.post('/api/teacher/assignments/update', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { id, classId, title, prompt, grade, genre, dueDate, isExam, instructions, difficultyLevel, topicCode, topicName, customOutline, assignedStudentIds, status } = req.body;
+
+  const target = db.assignments?.find(a => a.id === id);
+  if (!target) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy bài tập.' });
+  }
+
+  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(target.classId)) {
+    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không có quyền chỉnh sửa bài tập của lớp này.' });
+  }
+
+  if (title) target.title = title.trim();
+  if (prompt) target.prompt = prompt.trim();
+  if (grade) target.grade = Number(grade) as any;
+  if (genre) target.genre = genre;
+  if (dueDate !== undefined) target.dueDate = dueDate || undefined;
+  if (isExam !== undefined) {
+    target.isExam = Boolean(isExam);
+    target.maxScore = isExam ? 10 : undefined;
+  }
+  if (instructions !== undefined) target.instructions = instructions.trim();
+  if (difficultyLevel) target.difficultyLevel = difficultyLevel;
+  if (topicCode !== undefined) target.topicCode = topicCode;
+  if (topicName !== undefined) target.topicName = topicName;
+  if (customOutline !== undefined) target.customOutline = customOutline;
+  if (status) target.status = status;
+
+  if (assignedStudentIds && Array.isArray(assignedStudentIds) && assignedStudentIds.length > 0) {
+    const validStudents = db.students.filter(s => s.classId === (classId || target.classId) && assignedStudentIds.includes(s.id));
+    target.assignedStudentIds = validStudents.map(s => s.id);
+  }
+
+  createAuditLog(
+    db,
+    teacher,
+    'UPDATE_ASSIGNMENT',
+    'assignment',
+    target.id,
+    `Cập nhật bài tập "${target.title}" (Trạng thái: ${target.status})`,
+    target.title
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, assignment: target });
+});
+
+// Xóa bài tập
+app.post('/api/teacher/assignments/delete', (req, res) => {
+  const db = loadDatabase();
+  const teacher = getAuthTeacher(req, db);
+
+  if (!teacher) {
+    return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
+  }
+
+  const { id } = req.body;
+  const idx = db.assignments?.findIndex(a => a.id === id);
+  if (idx === undefined || idx < 0) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy bài tập cần xóa.' });
+  }
+
+  const target = db.assignments[idx];
+  if (teacher.role !== 'SUPER_ADMIN' && !teacher.assignedClassIds?.includes(target.classId)) {
+    return res.status(403).json({ success: false, message: 'Từ chối: Bạn không có quyền xóa bài tập này.' });
+  }
+
+  db.assignments.splice(idx, 1);
+
+  createAuditLog(
+    db,
+    teacher,
+    'DELETE_ASSIGNMENT',
+    'assignment',
+    target.id,
+    `Xóa bài tập "${target.title}" của lớp ${target.classId}`,
+    target.title
+  );
+
+  saveDatabase(db);
+  res.json({ success: true, message: 'Đã xóa bài tập thành công.' });
+});
+
+// Endpoint học sinh lấy danh sách bài tập được giao cho riêng mình
+app.get('/api/student/assignments', (req, res) => {
+  const db = loadDatabase();
+  const { studentId } = req.query;
+
+  if (!studentId || typeof studentId !== 'string') {
+    return res.status(400).json({ success: false, message: 'Thiếu studentId.' });
+  }
+
+  const student = db.students.find(s => s.id === studentId);
+  if (!student) {
+    return res.status(404).json({ success: false, message: 'Không tìm thấy học sinh.' });
+  }
+
+  const studentClassId = student.classId || 'L3A';
+  const assignments = (db.assignments || []).filter(a => {
+    if (a.status === 'draft') return false; // Học sinh không thấy bài nháp
+    if (a.classId !== studentClassId) return false;
+    if (a.assignedStudentIds && a.assignedStudentIds.length > 0) {
+      return a.assignedStudentIds.includes(student.id);
+    }
+    return true;
+  });
+
+  const studentTasks = assignments.map(a => {
+    const sub = db.submissions.find(s => s.studentId === student.id && (s.taskId === a.id || s.taskTitle?.trim().toLowerCase() === a.title.trim().toLowerCase()));
+    let studentStatus: 'not_started' | 'in_progress' | 'submitted' | 'reviewed' = 'not_started';
+    if (sub) {
+      if (sub.status === 'reviewed' || sub.teacherFeedback?.status === 'published') {
+        studentStatus = 'reviewed';
+      } else if (sub.status === 'submitted' || sub.lifecycleStatus === 'DA_NOP' || sub.lifecycleStatus === 'CHO_NHAN_XET') {
+        studentStatus = 'submitted';
+      } else {
+        studentStatus = 'in_progress';
+      }
+    }
+
+    return {
+      ...a,
+      studentStatus,
+      submission: sub || null
+    };
+  });
+
+  res.json({ success: true, assignments: studentTasks });
 });
 
 // Thêm học sinh mới vào lớp

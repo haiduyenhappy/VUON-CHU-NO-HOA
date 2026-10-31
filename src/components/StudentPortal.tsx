@@ -62,7 +62,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 }) => {
   // Navigation & Workflow state
   const [currentStep, setCurrentStep] = useState<StudentStep>('choose_task');
-  const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics' | 'my_submissions'>('volume1');
+  const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics' | 'my_submissions' | 'teacher_assignments'>('teacher_assignments');
   const [selectedVolume, setSelectedVolume] = useState<1 | 2>(1);
 
   // Grade state for student practice (Lớp 1 đến Lớp 5)
@@ -83,6 +83,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [activeTask, setActiveTask] = useState<WritingTask | null>(null);
   const [isIndependentMode, setIsIndependentMode] = useState<boolean>(false);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+  const [assignedTasks, setAssignedTasks] = useState<any[]>([]);
 
   // Fetch student submissions for the authenticated student
   const fetchMySubmissions = async () => {
@@ -93,8 +94,20 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     } catch (e) {}
   };
 
+  // Fetch assignments specifically assigned to this student
+  const fetchAssignedTasks = async () => {
+    try {
+      const res = await fetch(`/api/student/assignments?studentId=${student.id}`);
+      const data = await res.json();
+      if (data.assignments && Array.isArray(data.assignments)) {
+        setAssignedTasks(data.assignments);
+      }
+    } catch (e) {}
+  };
+
   useEffect(() => {
     fetchMySubmissions();
+    fetchAssignedTasks();
   }, [student.id]);
 
   // Ideation (Cùng em tìm ý) state
@@ -184,6 +197,39 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
     return () => clearTimeout(timer);
   }, [essayContent, currentStep]);
+
+  // Action: Start or resume an assignment given by teacher
+  const handleStartAssignedTask = (assign: any) => {
+    playSparkle(settings.soundEnabled);
+    const convertedTask: WritingTask = {
+      id: assign.id,
+      title: assign.title,
+      prompt: assign.prompt,
+      volume: 1,
+      grade: assign.grade || activeGrade,
+      week: 1,
+      genre: assign.genre || 'ke_su_viec',
+      gardenType: assign.gardenType || 'sac_mau',
+      suggestedQuestions: [
+        'Em có cảm xúc gì đầu tiên khi đọc đề bài của thầy/cô?',
+        'Em muốn kể hoặc miêu tả chi tiết đặc biệt nào nhất?',
+        'Em hãy chọn một hình ảnh thật gần gũi nhé!'
+      ],
+      evaluationCriteria: ['Ý tưởng phong phú', 'Diễn đạt mạch lạc', 'Cảm xúc chân thật', 'Chữ viết và chính tả']
+    };
+
+    if (assign.submission && assign.submission.finalContent) {
+      setEssayContent(assign.submission.finalContent);
+      setFirstDraftContent(assign.submission.firstDraft || assign.submission.finalContent);
+      setSubmissionId(assign.submission.id);
+      setActiveTask(convertedTask);
+      setIsIndependentMode(Boolean(assign.isExam));
+      setCurrentStep('write');
+      return;
+    }
+
+    handleSelectTask(convertedTask, Boolean(assign.isExam));
+  };
 
   // Start a new task
   const handleSelectTask = (task: WritingTask, independent: boolean = false) => {
@@ -595,8 +641,19 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
           {/* Main 4 Tabs Switcher */}
           <div className="flex flex-wrap items-center justify-between gap-3 bg-white p-3 sm:p-4 rounded-3xl border-2 border-stone-200">
-            {/* 4 Main Tab Buttons */}
+            {/* 5 Main Tab Buttons */}
             <div className="flex flex-wrap items-center gap-2">
+              <button
+                onClick={() => { setActiveMainTab('teacher_assignments'); playSparkle(settings.soundEnabled); }}
+                className={`px-3.5 sm:px-4 py-2 rounded-2xl font-extrabold text-xs sm:text-sm transition-all flex items-center gap-1.5 ${
+                  activeMainTab === 'teacher_assignments'
+                    ? 'bg-emerald-600 text-white shadow-md border border-emerald-700'
+                    : 'bg-emerald-50 text-emerald-900 hover:bg-emerald-100 border border-emerald-300'
+                }`}
+              >
+                <span>📝</span>
+                <span>Bài Thầy Cô Giao ({assignedTasks.length})</span>
+              </button>
               <button
                 onClick={() => { setActiveMainTab('volume1'); setSelectedVolume(1); playPop(settings.soundEnabled); }}
                 className={`px-3.5 sm:px-4 py-2 rounded-2xl font-bold text-xs sm:text-sm transition-all ${
@@ -704,18 +761,138 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             <HoaNhoMascot mood="happy" size="sm" reducedMotion={settings.reducedMotion} />
             <div>
               <h3 className="font-bold text-amber-950 text-base sm:text-lg font-display">
-                {activeMainTab === 'other_topics' ? 'Khám phá 24 chủ đề sáng tạo mở rộng!' : 'Em chọn bài viết hôm nay nhé!'}
+                {activeMainTab === 'teacher_assignments'
+                  ? 'Bài tập thầy cô giao riêng cho con!'
+                  : activeMainTab === 'other_topics'
+                  ? 'Khám phá 24 chủ đề sáng tạo mở rộng!'
+                  : 'Em chọn bài viết hôm nay nhé!'}
               </h3>
               <p className="text-xs sm:text-sm text-stone-700 font-medium">
-                {activeMainTab === 'other_topics'
+                {activeMainTab === 'teacher_assignments'
+                  ? 'Hãy chọn bài tập con muốn làm và bấm "Bắt đầu làm bài" để cùng Hoa Nhỏ gieo hạt ý tưởng nhé!'
+                  : activeMainTab === 'other_topics'
                   ? 'Bấm "🌸 Luyện viết với Hoa Nhỏ" để lập tức mở Bản đồ ý tưởng (Trang 1) với dàn ý chi tiết và ngân hàng từ ngữ sinh động!'
                   : 'Em có thể chọn "🌸 Luyện viết với Hoa Nhỏ" để bắt đầu tìm ý và lập dàn ý 3 phần, hoặc chọn "⭐ Em tự thử sức" để tự mình viết độc lập.'}
               </p>
             </div>
           </div>
 
-          {/* TASKS GRID: Either Curriculum Tasks, Other Creative Topics, or My Submissions */}
-          {activeMainTab === 'my_submissions' ? (
+          {/* TASKS GRID: Teacher Assignments, Curriculum Tasks, Other Creative Topics, or My Submissions */}
+          {activeMainTab === 'teacher_assignments' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {assignedTasks.map((item) => {
+                  const studentStatus = item.studentStatus || 'not_started';
+                  const isDone = studentStatus === 'reviewed';
+                  const isSubmitted = studentStatus === 'submitted';
+                  const isInProgress = studentStatus === 'in_progress';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white rounded-3xl border-2 border-emerald-200 hover:border-emerald-400 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3"
+                    >
+                      <div className="space-y-2.5">
+                        <div className="flex items-center justify-between gap-2 flex-wrap">
+                          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                            Khối {item.grade} • {item.genre}
+                          </span>
+
+                          <div>
+                            {isDone ? (
+                              <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-600 text-white flex items-center gap-1">
+                                <span>🌸</span>
+                                <span>Đã nhận xét {item.submission?.score !== undefined ? `(${item.submission.score}/10)` : ''}</span>
+                              </span>
+                            ) : isSubmitted ? (
+                              <span className="text-xs font-black px-3 py-1 rounded-full bg-amber-500 text-white flex items-center gap-1">
+                                <span>📤</span>
+                                <span>Đã nộp bài</span>
+                              </span>
+                            ) : isInProgress ? (
+                              <span className="text-xs font-black px-3 py-1 rounded-full bg-sky-500 text-white flex items-center gap-1">
+                                <span>📝</span>
+                                <span>Đang viết dở</span>
+                              </span>
+                            ) : (
+                              <span className="text-xs font-black px-3 py-1 rounded-full bg-stone-200 text-stone-700 flex items-center gap-1">
+                                <span>⏳</span>
+                                <span>Chưa làm</span>
+                              </span>
+                            )}
+                          </div>
+                        </div>
+
+                        <h4 className="text-base sm:text-lg font-bold text-stone-900 font-display">
+                          {item.title}
+                        </h4>
+
+                        <p className="text-xs sm:text-sm text-stone-600 line-clamp-3 leading-relaxed font-medium bg-stone-50/80 p-3 rounded-2xl border border-stone-100 italic">
+                          "{item.prompt}"
+                        </p>
+
+                        <div className="flex flex-wrap items-center justify-between text-xs text-stone-500 font-medium pt-1">
+                          <span>Giáo viên giao: <strong className="text-stone-800">{item.teacherName}</strong></span>
+                          {item.dueDate && (
+                            <span className="text-rose-600 font-bold">
+                              Hạn nộp: {new Date(item.dueDate).toLocaleDateString('vi-VN')}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Action buttons based on student status */}
+                      <div className="pt-3 border-t border-emerald-100 flex items-center gap-2">
+                        {isDone ? (
+                          <button
+                            onClick={() => {
+                              playPop(settings.soundEnabled);
+                              setActiveMainTab('my_submissions');
+                            }}
+                            className="w-full py-2.5 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <span>🌸 Xem lời cô nhận xét & Bông hoa khen tặng</span>
+                          </button>
+                        ) : isSubmitted ? (
+                          <div className="w-full p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900 font-bold">
+                            Bài của em đã được gửi an toàn cho thầy/cô. Đang chờ cô đọc và nhận xét!
+                          </div>
+                        ) : isInProgress ? (
+                          <button
+                            onClick={() => handleStartAssignedTask(item)}
+                            className="w-full py-2.5 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Pencil className="w-4 h-4" />
+                            <span>✏️ Viết tiếp bài tập này</span>
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleStartAssignedTask(item)}
+                            className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center justify-center gap-1.5 cursor-pointer"
+                          >
+                            <Sparkles className="w-4 h-4 text-yellow-200" />
+                            <span>🚀 Bắt đầu làm bài</span>
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {assignedTasks.length === 0 && (
+                <div className="bg-white rounded-3xl border-2 border-dashed border-emerald-200 p-10 text-center space-y-2">
+                  <span className="text-4xl block">🌸</span>
+                  <h4 className="text-base sm:text-lg font-bold text-stone-700">
+                    Hiện tại chưa có bài tập nào được giao riêng cho em
+                  </h4>
+                  <p className="text-xs sm:text-sm text-stone-500 max-w-md mx-auto">
+                    Em hãy bấm sang thẻ <strong>📘 Tập 1</strong> hoặc <strong>📗 Tập 2</strong> để tự do luyện viết cùng Hoa Nhỏ nhé!
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : activeMainTab === 'my_submissions' ? (
             <div className="space-y-4">
               {mySubmissions.map((sub) => (
                 <div key={sub.id} className="bg-white rounded-3xl border-2 border-rose-200 p-5 shadow-xs space-y-3">

@@ -203,11 +203,33 @@ export interface ClassAssignment {
   dueDate?: string;
   isExam: boolean; // false: Luyện viết thường xuyên (nhận xét bằng lời); true: Kiểm tra định kỳ (chấm điểm thang 10)
   maxScore?: number; // 10
-  status: 'active' | 'closed';
+  status: 'active' | 'closed' | 'draft';
   instructions?: string;
   difficultyLevel?: DifficultyLevel;
   topicCode?: string;
+  topicName?: string;
   customOutline?: DetailedOutlineGroup;
+  assignedStudentIds?: string[]; // Danh sách mã học sinh được giao bài
+  stats?: {
+    total: number;
+    notStarted: number;
+    inProgress: number;
+    submitted: number;
+    reviewed: number;
+  };
+  assignedStudents?: {
+    id: string;
+    studentId?: string;
+    name: string;
+    demoName?: string;
+    avatar?: string;
+    classId?: string;
+    status: 'chua_lam' | 'dang_lam' | 'da_nop' | 'da_nhan_xet' | 'not_started' | 'in_progress' | 'submitted' | 'reviewed';
+    submissionId?: string;
+    submittedAt?: string;
+    score?: number;
+    comment?: string;
+  }[];
 }
 
 export interface AuditLogItem {

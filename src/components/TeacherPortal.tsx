@@ -49,6 +49,7 @@ import {
   TrendingUp
 } from 'lucide-react';
 import { StudentSkillProgressTab } from './StudentSkillProgressTab';
+import { CreateAssignmentPage } from './CreateAssignmentPage';
 
 interface TeacherPortalProps {
   currentUser?: AuthUser | null;
@@ -102,18 +103,9 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
   // Assignments Management State
   const [assignments, setAssignments] = useState<ClassAssignment[]>([]);
-  const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
-  const [newAssignTitle, setNewAssignTitle] = useState('');
-  const [newAssignGrade, setNewAssignGrade] = useState<number>(3);
-  const [newAssignGenre, setNewAssignGenre] = useState<string>('Tả đồ vật');
-  const [newAssignPrompt, setNewAssignPrompt] = useState('');
-  const [newAssignIsExam, setNewAssignIsExam] = useState(false);
-  const [newAssignDueDate, setNewAssignDueDate] = useState('');
-  const [newAssignTopicCode, setNewAssignTopicCode] = useState<string>('CD06');
-  const [newAssignDifficulty, setNewAssignDifficulty] = useState<DifficultyLevel>('co_ban');
-  const [aiPreviewData, setAiPreviewData] = useState<PromptAnalysisData | null>(null);
-  const [isAiPreviewLoading, setIsAiPreviewLoading] = useState<boolean>(false);
-  const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
+  const [assignmentView, setAssignmentView] = useState<'list' | 'create' | 'edit'>('list');
+  const [editingAssignment, setEditingAssignment] = useState<ClassAssignment | null>(null);
+  const [expandedAssignmentId, setExpandedAssignmentId] = useState<string | null>(null);
   const [assignmentActionMsg, setAssignmentActionMsg] = useState('');
 
   // Teacher Profile & Password Change State
@@ -338,72 +330,46 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     }
   };
 
-  // AI Phân tích & Xem trước sơ đồ & dàn ý cho giáo viên
-  const handlePreviewAssignmentWithAi = async () => {
-    if (!newAssignPrompt.trim()) return;
-    setIsAiPreviewLoading(true);
+  // Action: Delete Assignment
+  const handleDeleteAssignment = async (assignId: string, assignTitle: string) => {
+    if (!window.confirm(`Cô/thầy có chắc chắn muốn xóa bài tập "${assignTitle}" không? Các bài viết học sinh đã nộp vẫn được bảo lưu an toàn.`)) return;
     try {
-      const res = await fetch('/api/ai/analyze-prompt-deep', {
+      const res = await fetch('/api/teacher/assignments/delete', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          prompt: newAssignPrompt.trim(),
-          grade: Number(newAssignGrade),
-          difficultyLevel: newAssignDifficulty
-        })
+        body: JSON.stringify({ id: assignId })
       });
       const data = await res.json();
-      setAiPreviewData(data);
-      if (data.topicCode) setNewAssignTopicCode(data.topicCode);
+      if (data.success) {
+        playPop(settings.soundEnabled);
+        setAssignmentActionMsg(`✓ Đã xóa bài tập "${assignTitle}" thành công.`);
+        fetchAssignments();
+      } else {
+        alert(data.message || 'Không thể xóa bài tập.');
+      }
     } catch (e) {
-      console.error('Error previewing assignment:', e);
-    } finally {
-      setIsAiPreviewLoading(false);
+      alert('Lỗi kết nối khi xóa bài tập.');
     }
   };
 
-  // Handler: Create Assignment
-  const handleCreateAssignment = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newAssignTitle.trim() || !newAssignPrompt.trim()) return;
-    setIsCreatingAssignment(true);
-    setAssignmentActionMsg('');
+  // Action: Publish Draft Assignment
+  const handlePublishDraft = async (assign: ClassAssignment) => {
     try {
-      const res = await fetch('/api/teacher/assignments/create', {
+      const res = await fetch('/api/teacher/assignments/update', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: newAssignTitle.trim(),
-          grade: Number(newAssignGrade),
-          genre: newAssignGenre,
-          prompt: newAssignPrompt.trim(),
-          isExam: newAssignIsExam,
-          dueDate: newAssignDueDate || undefined,
-          classId: selectedClassId !== 'all' ? selectedClassId : (assignedClasses[0]?.id || (teacherId === 'GV002' ? 'L4B' : 'L3A')),
-          teacherId: teacherId,
-          teacherName: teacherName,
-          difficultyLevel: newAssignDifficulty,
-          topicCode: newAssignTopicCode,
-          customOutline: aiPreviewData?.outline || undefined
-        })
+        body: JSON.stringify({ id: assign.id, status: 'active' })
       });
       const data = await res.json();
       if (data.success) {
         playChime(settings.soundEnabled);
-        setAssignmentActionMsg('✓ Đã giao bài tập thành công cho học sinh!');
-        setNewAssignTitle('');
-        setNewAssignPrompt('');
-        setNewAssignDueDate('');
-        setAiPreviewData(null);
-        setIsCreateAssignmentOpen(false);
+        setAssignmentActionMsg(`✓ Đã ban hành bài tập "${assign.title}" thành công! Học sinh đã có thể nhận bài và làm bài.`);
         fetchAssignments();
       } else {
-        setAssignmentActionMsg(data.message || 'Không thể giao bài tập.');
+        alert(data.message || 'Không thể ban hành bài tập.');
       }
-    } catch (err) {
-      setAssignmentActionMsg('Lỗi kết nối máy chủ khi giao bài.');
-    } finally {
-      setIsCreatingAssignment(false);
+    } catch (e) {
+      alert('Lỗi kết nối khi ban hành bài tập.');
     }
   };
 
@@ -2486,79 +2452,270 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
       {/* ================= TAB 3: GIAO BÀI TẬP ================= */}
       {activeTab === 'assignments' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg sm:text-xl font-black text-emerald-950 font-display flex items-center gap-2">
-                <span>📝</span>
-                <span>Danh Sách Đề Bài & Nhiệm Vụ Đã Giao</span>
-              </h3>
-              <p className="text-xs text-stone-600 font-medium mt-0.5">
-                Giao bài tập luyện tập thường xuyên hoặc bài kiểm tra định kỳ theo Chương trình GDPT 2018 (Khối 1–5).
-              </p>
-            </div>
-
-            <button
-              onClick={() => {
-                playPop(settings.soundEnabled);
-                setIsCreateAssignmentOpen(true);
+        <>
+          {assignmentView === 'create' || assignmentView === 'edit' ? (
+            <CreateAssignmentPage
+              currentUser={currentUser}
+              classes={assignedClasses}
+              allStudents={localStudents}
+              initialClassId={selectedClassId !== 'all' ? selectedClassId : assignedClasses[0]?.id}
+              initialAssignment={assignmentView === 'edit' ? editingAssignment : null}
+              settings={settings}
+              onBack={() => {
+                setAssignmentView('list');
+                setEditingAssignment(null);
               }}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Giao bài tập mới</span>
-            </button>
-          </div>
-
-          {assignmentActionMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-fade-in">
-              {assignmentActionMsg}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {assignments.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white p-5 rounded-3xl border-2 border-stone-200 hover:border-emerald-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      Khối {item.grade}
-                    </span>
-                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${
-                      item.isExam 
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300' 
-                        : 'bg-sky-100 text-sky-800 border border-sky-200'
-                    }`}>
-                      {item.isExam ? '⭐ Kiểm tra định kỳ (Thang điểm 10)' : '🌸 Luyện tập thường xuyên'}
-                    </span>
-                  </div>
-
-                  <h4 className="text-base font-extrabold text-stone-900 leading-snug">
-                    {item.title}
-                  </h4>
-
-                  <p className="text-xs text-stone-600 line-clamp-3 bg-stone-50 p-2.5 rounded-xl border border-stone-100 italic">
-                    "{item.prompt}"
+              onSuccess={(savedAssign, isDraft) => {
+                setAssignmentView('list');
+                setEditingAssignment(null);
+                setAssignmentActionMsg(
+                  isDraft 
+                    ? `✓ Đã lưu bản nháp bài tập "${savedAssign.title}" thành công!`
+                    : `✓ Đã giao bài tập "${savedAssign.title}" cho lớp ${savedAssign.classId} thành công!`
+                );
+                fetchAssignments();
+              }}
+            />
+          ) : (
+            <div className="space-y-6 animate-fade-in">
+              <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+                <div>
+                  <h3 className="text-xl sm:text-2xl font-black text-emerald-950 font-display flex items-center gap-2">
+                    <span>📝</span>
+                    <span>Danh Sách Đề Bài & Nhiệm Vụ Đã Giao</span>
+                  </h3>
+                  <p className="text-xs sm:text-sm text-stone-600 font-medium mt-0.5">
+                    Quản lý đề bài luyện viết thường xuyên và bài kiểm tra định kỳ theo Chương trình GDPT 2018 (Khối 1–5).
                   </p>
                 </div>
 
-                <div className="pt-3 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500 font-medium">
-                  <span>Thể loại: <strong className="text-stone-700">{item.genre}</strong></span>
-                  {item.dueDate && <span>Hạn: <strong className="text-rose-600">{new Date(item.dueDate).toLocaleDateString('vi-VN')}</strong></span>}
-                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    playPop(settings.soundEnabled);
+                    setEditingAssignment(null);
+                    setAssignmentView('create');
+                  }}
+                  className="px-5 py-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-sm sm:text-base shadow-md transition-all hover:scale-102 flex items-center gap-2 cursor-pointer"
+                >
+                  <Plus className="w-5 h-5" />
+                  <span>Giao bài tập mới</span>
+                </button>
               </div>
-            ))}
 
-            {assignments.length === 0 && (
-              <div className="col-span-full bg-white p-8 rounded-3xl border-2 border-dashed border-stone-200 text-center text-stone-500">
-                Chưa có bài tập nào được giao. Cô hãy bấm nút "Giao bài tập mới" ở góc trên để tạo đề bài nhé!
+              {assignmentActionMsg && (
+                <div className="p-4 bg-emerald-50 border-2 border-emerald-300 rounded-3xl text-sm sm:text-base font-bold text-emerald-900 animate-fade-in flex items-center justify-between">
+                  <span>{assignmentActionMsg}</span>
+                  <button onClick={() => setAssignmentActionMsg('')} className="text-stone-400 hover:text-stone-600 text-xs">✕</button>
+                </div>
+              )}
+
+              {/* Assignment Cards Grid */}
+              <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+                {assignments.map((item) => {
+                  const targetClass = assignedClasses.find(c => c.id === item.classId);
+                  const isExpanded = expandedAssignmentId === item.id;
+                  const totalCount = item.stats?.total ?? (item.assignedStudentIds?.length || 0);
+                  const submittedCount = item.stats?.submitted ?? 0;
+                  const reviewedCount = item.stats?.reviewed ?? 0;
+                  const notStartedCount = item.stats?.notStarted ?? Math.max(0, totalCount - submittedCount);
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="bg-white p-5 sm:p-6 rounded-3xl border-2 border-stone-200 hover:border-emerald-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-4"
+                    >
+                      <div className="space-y-3">
+                        {/* Top Badges */}
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              {targetClass?.name || item.classId} • Khối {item.grade}
+                            </span>
+                            <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-stone-100 text-stone-700">
+                              {item.genre}
+                            </span>
+                            {item.status === 'draft' ? (
+                              <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                📝 Bản nháp
+                              </span>
+                            ) : (
+                              <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-teal-100 text-teal-900 border border-teal-300">
+                                🌿 Đã ban hành
+                              </span>
+                            )}
+                          </div>
+
+                          <span className={`text-xs font-black px-2.5 py-1 rounded-xl border ${
+                            item.isExam 
+                              ? 'bg-amber-100 text-amber-950 border-amber-300' 
+                              : 'bg-sky-50 text-sky-900 border-sky-200'
+                          }`}>
+                            {item.isExam ? '⭐ Kiểm tra định kỳ (Thang 10)' : '🌸 Luyện tập thường xuyên'}
+                          </span>
+                        </div>
+
+                        {/* Title & Prompt */}
+                        <div>
+                          <h4 className="text-lg sm:text-xl font-black text-stone-900 leading-snug font-display">
+                            {item.title}
+                          </h4>
+                          <p className="text-xs sm:text-sm text-stone-600 line-clamp-3 bg-stone-50 p-3 rounded-2xl border border-stone-100 italic mt-2 font-medium">
+                            "{item.prompt}"
+                          </p>
+                        </div>
+
+                        {/* Submission Status Metrics Bar */}
+                        <div className="grid grid-cols-4 gap-2 pt-1 text-center">
+                          <div className="bg-stone-50 p-2 rounded-xl border border-stone-200">
+                            <span className="text-[11px] font-bold text-stone-500 uppercase block">Nhận bài</span>
+                            <span className="text-sm sm:text-base font-black text-stone-900">{totalCount} em</span>
+                          </div>
+                          <div className="bg-amber-50 p-2 rounded-xl border border-amber-200">
+                            <span className="text-[11px] font-bold text-amber-800 uppercase block">Đã nộp</span>
+                            <span className="text-sm sm:text-base font-black text-amber-900">{submittedCount}</span>
+                          </div>
+                          <div className="bg-emerald-50 p-2 rounded-xl border border-emerald-200">
+                            <span className="text-[11px] font-bold text-emerald-800 uppercase block">Đã nhận xét</span>
+                            <span className="text-sm sm:text-base font-black text-emerald-900">{reviewedCount}</span>
+                          </div>
+                          <div className="bg-sky-50 p-2 rounded-xl border border-sky-200">
+                            <span className="text-[11px] font-bold text-sky-800 uppercase block">Chưa nộp</span>
+                            <span className="text-sm sm:text-base font-black text-sky-900">{notStartedCount}</span>
+                          </div>
+                        </div>
+
+                        {/* Due date & instructions */}
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-stone-500 font-medium pt-1">
+                          <span>Người giao: <strong className="text-stone-700">{item.teacherName}</strong></span>
+                          {item.dueDate && (
+                            <span className="flex items-center gap-1 text-rose-600 font-bold">
+                              <Calendar className="w-3.5 h-3.5" />
+                              <span>Hạn nộp: {new Date(item.dueDate).toLocaleDateString('vi-VN')}</span>
+                            </span>
+                          )}
+                        </div>
+
+                        {/* Expandable Student Roster & Individual Status */}
+                        {isExpanded && item.assignedStudents && (
+                          <div className="p-3 bg-stone-50/80 rounded-2xl border border-stone-200 space-y-2.5 animate-fade-in mt-2">
+                            <div className="flex items-center justify-between pb-1.5 border-b border-stone-200 text-xs font-bold text-stone-700">
+                              <span>Danh sách học sinh nhận bài ({item.assignedStudents.length} em):</span>
+                              <span className="text-[11px] text-stone-500">Trạng thái độc lập từng em</span>
+                            </div>
+
+                            <div className="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                              {item.assignedStudents.map((st, sIdx) => {
+                                const stStatus = st.status;
+                                const isReviewed = stStatus === 'reviewed' || stStatus === 'da_nhan_xet';
+                                const isSubmitted = stStatus === 'submitted' || stStatus === 'da_nop';
+                                const isInProgress = stStatus === 'in_progress' || stStatus === 'dang_lam';
+                                const studentIdentifier = st.studentId || st.id;
+
+                                return (
+                                  <div key={studentIdentifier} className="p-2 rounded-xl bg-white border border-stone-200 flex items-center justify-between gap-2 text-xs">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-[11px] font-bold text-stone-400 w-4 text-right">{sIdx + 1}</span>
+                                      <span className="text-base">{st.avatar || '🌸'}</span>
+                                      <div>
+                                        <span className="font-bold text-stone-800">{st.name}</span>
+                                        <span className="text-[10px] text-stone-400 font-mono ml-1.5">({studentIdentifier})</span>
+                                      </div>
+                                    </div>
+
+                                    <div>
+                                      {isReviewed ? (
+                                        <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-extrabold text-[11px] border border-emerald-200">
+                                          🌸 Đã nhận xét {st.score !== undefined ? `(${st.score}/10)` : ''}
+                                        </span>
+                                      ) : isSubmitted ? (
+                                        <span className="px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-extrabold text-[11px] border border-amber-200">
+                                          📤 Đã nộp bài
+                                        </span>
+                                      ) : isInProgress ? (
+                                        <span className="px-2 py-0.5 rounded-full bg-sky-100 text-sky-800 font-extrabold text-[11px] border border-sky-200">
+                                          📝 Đang làm
+                                        </span>
+                                      ) : (
+                                        <span className="px-2 py-0.5 rounded-full bg-stone-100 text-stone-600 font-bold text-[11px] border border-stone-200">
+                                          ⏳ Chưa làm
+                                        </span>
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Card Bottom Actions */}
+                      <div className="pt-3 border-t border-stone-100 flex flex-wrap items-center justify-between gap-2">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            playPop(settings.soundEnabled);
+                            setExpandedAssignmentId(isExpanded ? null : item.id);
+                          }}
+                          className="text-xs sm:text-sm font-bold text-emerald-700 hover:text-emerald-900 flex items-center gap-1 cursor-pointer"
+                        >
+                          <Users className="w-4 h-4" />
+                          <span>{isExpanded ? 'Thu gọn danh sách HS' : `Xem tiến độ ${totalCount} học sinh`}</span>
+                        </button>
+
+                        <div className="flex items-center gap-1.5">
+                          {item.status === 'draft' && (
+                            <button
+                              type="button"
+                              onClick={() => handlePublishDraft(item)}
+                              className="px-3 py-1.5 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 border border-teal-300 font-bold text-xs transition-colors cursor-pointer"
+                              title="Ban hành bài tập cho học sinh"
+                            >
+                              🚀 Ban hành
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              playPop(settings.soundEnabled);
+                              setEditingAssignment(item);
+                              setAssignmentView('edit');
+                            }}
+                            className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs border border-stone-300 flex items-center gap-1 transition-colors cursor-pointer"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                            <span>Sửa</span>
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteAssignment(item.id, item.title)}
+                            className="px-2.5 py-1.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 font-bold text-xs border border-rose-200 flex items-center gap-1 transition-colors cursor-pointer"
+                            title="Xóa bài tập"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+
+                {assignments.length === 0 && (
+                  <div className="col-span-full bg-white p-12 rounded-3xl border-2 border-dashed border-stone-200 text-center space-y-3">
+                    <span className="text-4xl block">📝</span>
+                    <h4 className="text-lg font-bold text-stone-700">Chưa có bài tập nào được giao</h4>
+                    <p className="text-sm text-stone-500 max-w-md mx-auto">
+                      Cô hãy bấm nút "Giao bài tập mới" ở góc trên để tạo đề bài và chọn học sinh của lớp nhận bài nhé!
+                    </p>
+                  </div>
+                )}
               </div>
-            )}
-          </div>
-        </div>
+            </div>
+          )}
+        </>
       )}
 
       {/* ================= TAB 4: LỚP HỌC CỦA TÔI ================= */}
@@ -2854,241 +3011,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL: GIAO BÀI TẬP MỚI ================= */}
-      {isCreateAssignmentOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsCreateAssignmentOpen(false)}
-              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
-            >
-              <X className="w-5 h-5" />
-            </button>
 
-            <h3 className="text-lg font-black text-emerald-950 font-display flex items-center gap-2">
-              <span>📝</span>
-              <span>Giao Bài Tập Tiếng Việt Mới</span>
-            </h3>
-
-            <form onSubmit={handleCreateAssignment} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Tiêu đề bài tập:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newAssignTitle}
-                  onChange={e => setNewAssignTitle(e.target.value)}
-                  placeholder="Ví dụ: Tả chiếc bút mực thân yêu của em"
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Khối lớp (1–5):
-                  </label>
-                  <select
-                    value={newAssignGrade}
-                    onChange={e => setNewAssignGrade(Number(e.target.value))}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
-                  >
-                    {[1, 2, 3, 4, 5].map(g => (
-                      <option key={g} value={g}>Lớp {g}</option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Mức độ thử thách:
-                  </label>
-                  <select
-                    value={newAssignDifficulty}
-                    onChange={e => setNewAssignDifficulty(e.target.value as DifficultyLevel)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
-                  >
-                    <option value="co_ban">🌱 Cơ bản (Chuẩn SGK)</option>
-                    <option value="mo_rong">🌿 Mở rộng (Quan sát phong phú)</option>
-                    <option value="nang_cao">⭐ Nâng cao (Từ ngữ gợi cảm & nghệ thuật)</option>
-                    <option value="sang_tao">✨ Sáng tạo (Tư duy mới lạ, bứt phá)</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Chủ đề (25 nhóm chủ đề GDPT 2018):
-                  </label>
-                  <select
-                    value={newAssignTopicCode}
-                    onChange={e => setNewAssignTopicCode(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white font-medium"
-                  >
-                    {TOPIC_GROUPS.map(t => (
-                      <option key={t.code} value={t.code}>
-                        {t.code}: {t.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Thể loại bài viết:
-                  </label>
-                  <select
-                    value={newAssignGenre}
-                    onChange={e => setNewAssignGenre(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
-                  >
-                    <option value="Tả đồ vật">Tả đồ vật</option>
-                    <option value="Tả con vật">Tả con vật</option>
-                    <option value="Tả cây cối">Tả cây cối</option>
-                    <option value="Tả người">Tả người</option>
-                    <option value="Tả cảnh vật">Tả cảnh vật</option>
-                    <option value="Kể chuyện">Kể chuyện</option>
-                    <option value="Thuật lại sự việc">Thuật lại sự việc</option>
-                    <option value="Cảm nghĩ">Bày tỏ cảm xúc</option>
-                    <option value="Nêu ý kiến">Nêu ý kiến</option>
-                    <option value="Viết thư">Viết thư thăm hỏi / chia sẻ</option>
-                    <option value="Lời nhắn">Viết lời nhắn / tin nhắn</option>
-                    <option value="Thông báo">Viết thông báo</option>
-                    <option value="Báo cáo">Viết báo cáo / kế hoạch</option>
-                    <option value="Sáng tạo">Tưởng tượng / Sáng tạo</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-stone-700">
-                    Đề bài & Yêu cầu chi tiết:
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handlePreviewAssignmentWithAi}
-                    disabled={isAiPreviewLoading || !newAssignPrompt.trim()}
-                    className="text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Sparkles className={`w-3.5 h-3.5 ${isAiPreviewLoading ? 'animate-spin text-purple-600' : ''}`} />
-                    <span>{isAiPreviewLoading ? 'Đang phân tích...' : '🔍 Xem trước sơ đồ & dàn ý AI'}</span>
-                  </button>
-                </div>
-                <textarea
-                  rows={3}
-                  required
-                  value={newAssignPrompt}
-                  onChange={e => {
-                    setNewAssignPrompt(e.target.value);
-                    setAiPreviewData(null);
-                  }}
-                  placeholder="Viết một đoạn văn từ 5 đến 7 câu tả một đồ dùng học tập gắn bó với em hàng ngày..."
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
-                />
-              </div>
-
-              {/* AI PREVIEW CARD FOR TEACHER */}
-              {aiPreviewData && (
-                <div className="p-3.5 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-2xl space-y-2.5 text-xs animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-purple-200 pb-2">
-                    <span className="font-extrabold text-purple-950 flex items-center gap-1.5">
-                      <span>🌸</span>
-                      <span>Kết quả phân tích đề bài & Bản đồ ý tưởng</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] border border-emerald-300 flex items-center gap-1">
-                      <span>✓</span>
-                      <span>Đạt 20/20 tiêu chuẩn GDPT 2018</span>
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
-                      <strong className="text-purple-900 block font-bold">Đối tượng chính:</strong>
-                      <span className="text-stone-800">{aiPreviewData.mainObject || aiPreviewData.coreSubject}</span>
-                    </div>
-                    <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
-                      <strong className="text-purple-900 block font-bold">Chủ đề & Thể loại:</strong>
-                      <span className="text-stone-800">{aiPreviewData.topicName} • {aiPreviewData.writingFormat}</span>
-                    </div>
-                  </div>
-
-                  {aiPreviewData.branches && aiPreviewData.branches.length > 0 && (
-                    <div className="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-1">
-                      <strong className="text-purple-900 block font-bold text-[11px]">
-                        5 nhánh gợi mở tư duy:
-                      </strong>
-                      <div className="flex flex-wrap gap-1.5">
-                        {aiPreviewData.branches.map((b, idx) => (
-                          <span key={idx} className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 font-semibold text-[10px]">
-                            {b.icon} {b.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-[11px] text-purple-900 italic font-medium">
-                    "{aiPreviewData.hoaNhoUnderstand}"
-                  </p>
-                </div>
-              )}
-
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Hạn nộp bài (tùy chọn):
-                </label>
-                <input
-                  type="date"
-                  value={newAssignDueDate}
-                  onChange={e => setNewAssignDueDate(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white focus:border-emerald-500 focus:outline-hidden"
-                />
-              </div>
-
-              {/* Mode Selection */}
-              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newAssignIsExam}
-                    onChange={e => setNewAssignIsExam(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded-sm"
-                  />
-                  <span className="text-xs font-black text-stone-800">
-                    Đánh dấu đây là bài kiểm tra định kỳ (Có thang điểm số 1–10)
-                  </span>
-                </label>
-                <p className="text-[11px] text-stone-500 pl-6">
-                  {newAssignIsExam 
-                    ? 'Bài kiểm tra định kỳ cho phép chấm điểm số 1 đến 10 kèm nhận xét chi tiết.' 
-                    : 'Bài luyện tập thường xuyên, đánh giá bằng lời nhận xét khích lệ học sinh.'}
-                </p>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
-                <button
-                  type="button"
-                  onClick={() => setIsCreateAssignmentOpen(false)}
-                  className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
-                >
-                  Hủy
-                </button>
-                <button
-                  type="submit"
-                  disabled={isCreatingAssignment}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
-                >
-                  {isCreatingAssignment ? 'Đang giao...' : 'Giao bài tập'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
 
       {/* ================= MODAL 1A: CẤP LẠI MẬT KHẨU (TỰ ĐỘNG HOẶC TỰ ĐẶT) ================= */}
       {promptResetStudent && (
