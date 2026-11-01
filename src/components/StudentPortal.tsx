@@ -16,6 +16,7 @@ import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { HoaNhoMascot } from './HoaNhoMascot';
 import { playPop, playChime, playSparkle } from '../utils/audio';
 import { getStudentGreeting } from '../utils/timeGreeting';
+import { formatDateVN } from '../utils/schoolWeekUtils';
 import { 
   BookOpen, 
   Pencil, 
@@ -84,6 +85,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [isIndependentMode, setIsIndependentMode] = useState<boolean>(false);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<any[]>([]);
+  const [currentWeekTasks, setCurrentWeekTasks] = useState<any[]>([]);
+  const [pendingPastTasks, setPendingPastTasks] = useState<any[]>([]);
+  const [currentWeekSchedule, setCurrentWeekSchedule] = useState<{ weekNumber: number; startDate: string; endDate: string } | null>(null);
 
   // Fetch student submissions for the authenticated student
   const fetchMySubmissions = async () => {
@@ -101,6 +105,17 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       const data = await res.json();
       if (data.assignments && Array.isArray(data.assignments)) {
         setAssignedTasks(data.assignments);
+      }
+      if (data.currentWeekAssignments && Array.isArray(data.currentWeekAssignments)) {
+        setCurrentWeekTasks(data.currentWeekAssignments);
+      } else {
+        setCurrentWeekTasks(data.assignments || []);
+      }
+      if (data.pendingPastAssignments && Array.isArray(data.pendingPastAssignments)) {
+        setPendingPastTasks(data.pendingPastAssignments);
+      }
+      if (data.weekInfo) {
+        setCurrentWeekSchedule(data.weekInfo);
       }
     } catch (e) {}
   };
@@ -670,7 +685,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                 }`}
               >
                 <span>📝</span>
-                <span>Bài Thầy Cô Giao ({assignedTasks.length})</span>
+                <span>Bài Thầy Cô Giao ({currentWeekTasks.length + pendingPastTasks.length})</span>
               </button>
               <button
                 onClick={() => { setActiveMainTab('volume1'); setSelectedVolume(1); playPop(settings.soundEnabled); }}
@@ -796,23 +811,30 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
           {/* TASKS GRID: Teacher Assignments, Curriculum Tasks, Other Creative Topics, or My Submissions */}
           {activeMainTab === 'teacher_assignments' ? (
             <div className="space-y-6">
-              {/* TRƯỜNG HỢP 1 – CÓ BÀI TẬP GIÁO VIÊN GIAO */}
-              {assignedTasks.length > 0 ? (
+              {/* TRƯỜNG HỢP 1 – CÓ BÀI TẬP GIÁO VIÊN GIAO TRONG TUẦN HIỆN TẠI */}
+              {currentWeekTasks.length > 0 ? (
                 <div className="space-y-4">
-                  {/* Tiêu đề ngắn gọn, rõ ràng */}
-                  <div className="flex items-center justify-between">
-                    <h3 className="text-base sm:text-lg font-bold text-stone-900 font-display flex items-center gap-2">
-                      <span>📚</span>
-                      <span>Bài cô giao cho con</span>
-                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                        {assignedTasks.length} bài
-                      </span>
-                    </h3>
+                  {/* Tiêu đề ngắn gọn, rõ ràng theo yêu cầu */}
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-gradient-to-r from-emerald-50 to-teal-50 p-4 rounded-3xl border-2 border-emerald-300">
+                    <div>
+                      <h3 className="text-base sm:text-lg font-black text-emerald-950 font-display flex items-center gap-2">
+                        <span>📚</span>
+                        <span>Bài học tuần này của con</span>
+                        <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-600 text-white">
+                          {currentWeekTasks.length} bài
+                        </span>
+                      </h3>
+                      {currentWeekSchedule && (
+                        <p className="text-xs text-stone-600 font-semibold mt-0.5">
+                          Tuần {currentWeekSchedule.weekNumber} ({formatDateVN(currentWeekSchedule.startDate)} – {formatDateVN(currentWeekSchedule.endDate)})
+                        </p>
+                      )}
+                    </div>
                   </div>
 
-                  {/* Danh sách bài tập thực tế */}
+                  {/* Danh sách bài tập thực tế của tuần */}
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {assignedTasks.map((item) => {
+                    {currentWeekTasks.map((item) => {
                       const studentStatus = item.studentStatus || 'not_started';
                       const isDone = studentStatus === 'reviewed';
                       const isSubmitted = studentStatus === 'submitted';
@@ -826,7 +848,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                                Khối {item.grade} • {item.genre}
+                                Tuần {item.weekNumber || (currentWeekSchedule?.weekNumber || 1)} • Khối {item.grade} • {item.genre}
                               </span>
 
                               <div>
@@ -866,7 +888,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                               <span>Giáo viên giao: <strong className="text-stone-800">{item.teacherName}</strong></span>
                               {item.dueDate && (
                                 <span className="text-rose-600 font-bold">
-                                  Hạn nộp: {new Date(item.dueDate).toLocaleDateString('vi-VN')}
+                                  Hạn nộp: {formatDateVN(item.dueDate)}
                                 </span>
                               )}
                             </div>
@@ -930,7 +952,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                             <div className="space-y-2">
                               <div className="flex items-center justify-between gap-2">
                                 <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                                  Lớp {recTask.grade || activeGrade} • {recTask.volume === 2 ? 'Tập 2' : 'Tập 1'}
+                                  Bài luyện cùng Hoa Nhỏ • Lớp {recTask.grade || activeGrade}
                                 </span>
                                 <span className="text-xs font-medium text-stone-500">
                                   Tuần {recTask.week}
@@ -962,17 +984,21 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                   )}
                 </div>
               ) : (
-                /* TRƯỜNG HỢP 2 – CHƯA CÓ BÀI TẬP GIÁO VIÊN GIAO */
+                /* TRƯỜNG HỢP 2 – TUẦN NÀY CHƯA CÓ BÀI TẬP GIÁO VIÊN GIAO */
                 <div className="space-y-4">
-                  {/* Khung duy nhất: 🌸 Hoa Nhỏ mời con luyện viết! */}
                   <div className="bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50 rounded-3xl border-2 border-pink-200 p-5 sm:p-6 text-center space-y-2 shadow-xs">
                     <span className="text-3xl inline-block">🌸</span>
                     <h3 className="text-base sm:text-lg font-black text-rose-950 font-display">
-                      🌸 Hoa Nhỏ mời con luyện viết!
+                      🌸 Tuần này, Hoa Nhỏ cùng con luyện viết nhé!
                     </h3>
                     <p className="text-xs sm:text-sm text-stone-700 max-w-lg mx-auto font-medium leading-relaxed">
-                      Hoa Nhỏ đã chọn sẵn những bài viết thú vị dành cho con. Chọn một bài và cùng bắt đầu nhé!
+                      Trong lúc chờ bài mới từ thầy cô, con hãy chọn một bài luyện viết thật thú vị để khám phá những ý tưởng của mình nhé!
                     </p>
+                    {currentWeekSchedule && (
+                      <span className="inline-block text-[11px] font-bold text-rose-800 bg-white/90 px-3 py-1 rounded-full border border-pink-200">
+                        Tuần {currentWeekSchedule.weekNumber} ({formatDateVN(currentWeekSchedule.startDate)} – {formatDateVN(currentWeekSchedule.endDate)})
+                      </span>
+                    )}
                   </div>
 
                   {/* 1–2 Bài luyện phù hợp với khối lớp và bộ sách Kết nối tri thức */}
@@ -984,8 +1010,8 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                       >
                         <div className="space-y-2.5">
                           <div className="flex items-center justify-between gap-2 flex-wrap">
-                            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                              Lớp {recTask.grade || activeGrade} • {recTask.volume === 2 ? 'Tập 2' : 'Tập 1'} • Tuần {recTask.week}
+                            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-900 border border-pink-300">
+                              🌸 Bài luyện cùng Hoa Nhỏ • Lớp {recTask.grade || activeGrade} • Tuần {recTask.week}
                             </span>
                             <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
                               {recTask.expectedLength || 'Bài luyện viết'}
@@ -1012,6 +1038,78 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
                         </div>
                       </div>
                     ))}
+                  </div>
+                </div>
+              )}
+
+              {/* MỤC BÀI CÁC TUẦN TRƯỚC CHƯA HOÀN THÀNH (ĐẢM BẢO HỌC SINH KHÔNG BỊ MẤT BÀI) */}
+              {pendingPastTasks.length > 0 && (
+                <div className="pt-6 border-t-2 border-dashed border-amber-300 space-y-4">
+                  <div className="flex flex-wrap items-center justify-between gap-2 bg-amber-50 p-3.5 rounded-2xl border border-amber-200">
+                    <div>
+                      <h4 className="text-sm sm:text-base font-black text-amber-950 font-display flex items-center gap-1.5">
+                        <span>⏳</span>
+                        <span>Bài các tuần trước con cần hoàn thành:</span>
+                        <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-amber-200 text-amber-900">
+                          {pendingPastTasks.length} bài
+                        </span>
+                      </h4>
+                      <p className="text-xs text-amber-800 font-medium mt-0.5">
+                        Các bài tập thầy cô đã giao ở tuần trước con chưa kịp nộp, con hãy hoàn thành để nhận hoa nhé!
+                      </p>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {pendingPastTasks.map((item) => {
+                      const studentStatus = item.studentStatus || 'not_started';
+                      const isInProgress = studentStatus === 'in_progress';
+
+                      return (
+                        <div
+                          key={item.id}
+                          className="bg-white rounded-3xl border-2 border-amber-200 hover:border-amber-400 p-5 shadow-xs transition-all flex flex-col justify-between space-y-3"
+                        >
+                          <div className="space-y-2.5">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                              <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300">
+                                Tuần {item.weekNumber || 1} • Khối {item.grade} • {item.genre}
+                              </span>
+                              <span className="text-xs font-bold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
+                                {isInProgress ? '📝 Đang viết dở' : '⏳ Chưa hoàn thành'}
+                              </span>
+                            </div>
+
+                            <h4 className="text-base font-bold text-stone-900 font-display">
+                              {item.title}
+                            </h4>
+
+                            <p className="text-xs text-stone-600 line-clamp-2 italic bg-stone-50 p-2.5 rounded-xl border border-stone-100">
+                              "{item.prompt}"
+                            </p>
+
+                            <div className="flex items-center justify-between text-[11px] text-stone-500 font-medium">
+                              <span>Cô giao: <strong>{item.teacherName}</strong></span>
+                              {item.dueDate && (
+                                <span className="text-rose-600 font-bold">
+                                  Hạn: {formatDateVN(item.dueDate)}
+                                </span>
+                              )}
+                            </div>
+                          </div>
+
+                          <div className="pt-2 border-t border-amber-100">
+                            <button
+                              onClick={() => handleStartAssignedTask(item)}
+                              className="w-full py-2 px-3 rounded-2xl bg-amber-600 hover:bg-amber-700 text-white font-extrabold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                            >
+                              <Pencil className="w-3.5 h-3.5" />
+                              <span>{isInProgress ? 'Viết tiếp bài này' : 'Làm bù bài tuần trước'}</span>
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

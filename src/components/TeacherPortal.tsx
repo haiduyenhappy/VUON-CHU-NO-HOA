@@ -5,6 +5,8 @@ import { WRITING_SKILLS_META, getLevelFromScore } from '../utils/writingSkillsRu
 import { playPop, playChime } from '../utils/audio';
 import { getTeacherGreeting } from '../utils/timeGreeting';
 import { HoaNhoMascot } from './HoaNhoMascot';
+import { CreateAssignmentPage } from './CreateAssignmentPage';
+import { getCurrentWeekInfo, formatWeekScheduleTitle, generateDefaultClassWeeks, formatDateVN } from '../utils/schoolWeekUtils';
 import { 
   GraduationCap, 
   Search, 
@@ -100,6 +102,17 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   // Assignments Management State
   const [assignments, setAssignments] = useState<ClassAssignment[]>([]);
   const [isCreateAssignmentOpen, setIsCreateAssignmentOpen] = useState(false);
+  const [editingAssignment, setEditingAssignment] = useState<ClassAssignment | null>(null);
+  const [assignmentWeekFilter, setAssignmentWeekFilter] = useState<number | 'all'>('all');
+  const [assignmentStatusFilter, setAssignmentStatusFilter] = useState<'all' | 'active' | 'draft' | 'paused' | 'completed'>('all');
+  
+  // School Week Schedule Modal State
+  const [isScheduleModalOpen, setIsScheduleModalOpen] = useState(false);
+  const [editingCurrentWeek, setEditingCurrentWeek] = useState<number>(8);
+  const [editingStartDate, setEditingStartDate] = useState<string>('2026-09-07');
+  const [scheduleActionMsg, setScheduleActionMsg] = useState('');
+  const [isSavingSchedule, setIsSavingSchedule] = useState(false);
+
   const [newAssignTitle, setNewAssignTitle] = useState('');
   const [newAssignGrade, setNewAssignGrade] = useState<number>(3);
   const [newAssignGenre, setNewAssignGenre] = useState<string>('Tả đồ vật');
@@ -378,6 +391,70 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
       setAssignmentActionMsg('Lỗi kết nối máy chủ khi giao bài.');
     } finally {
       setIsCreatingAssignment(false);
+    }
+  };
+
+  // Handler: Toggle status of assignment (active, paused, completed)
+  const handleToggleAssignmentStatus = async (assignmentId: string, newStatus: 'active' | 'draft' | 'paused' | 'completed') => {
+    try {
+      const token = currentUser?.token || (isSuperAdmin ? 'admin' : undefined);
+      const res = await fetch('/api/teacher/assignments/toggle-status', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-teacher-id': teacherId
+        },
+        body: JSON.stringify({ assignmentId, status: newStatus, teacherId })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playPop(settings.soundEnabled);
+        fetchAssignments();
+        setAssignmentActionMsg(`✓ Đã cập nhật trạng thái bài tập: ${newStatus === 'active' ? 'Đang giao' : newStatus === 'paused' ? 'Tạm dừng' : newStatus === 'completed' ? 'Đã hoàn thành' : 'Bản nháp'}`);
+      }
+    } catch (e) {
+      console.error('Error toggling assignment status:', e);
+    }
+  };
+
+  // Handler: Save Class School Schedule (currentWeek, startDate)
+  const handleSaveSchedule = async (targetClassId: string) => {
+    setIsSavingSchedule(true);
+    setScheduleActionMsg('');
+    try {
+      const token = currentUser?.token || (isSuperAdmin ? 'admin' : undefined);
+      const res = await fetch('/api/teacher/classes/update-schedule', {
+        method: 'POST',
+        headers: { 
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+          'x-teacher-id': teacherId
+        },
+        body: JSON.stringify({
+          classId: targetClassId,
+          currentWeek: Number(editingCurrentWeek),
+          startDate: editingStartDate,
+          teacherId
+        })
+      });
+      const data = await res.json();
+      if (data.success) {
+        playChime(settings.soundEnabled);
+        setScheduleActionMsg('✓ Đã cập nhật tiến độ tuần học thành công!');
+        fetchClasses();
+        fetchAssignments();
+        setTimeout(() => {
+          setIsScheduleModalOpen(false);
+          setScheduleActionMsg('');
+        }, 1200);
+      } else {
+        setScheduleActionMsg(data.message || 'Không thể cập nhật tiến độ.');
+      }
+    } catch (e) {
+      setScheduleActionMsg('Lỗi kết nối khi cập nhật tiến độ.');
+    } finally {
+      setIsSavingSchedule(false);
     }
   };
 
@@ -1045,6 +1122,31 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     if (accountFilter === 'deleted') return matchSearch && st.accountStatus === 'deleted';
     return matchSearch;
   });
+
+  if (isCreateAssignmentOpen) {
+    return (
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 animate-fade-in font-sans">
+        <CreateAssignmentPage
+          currentUser={currentUser}
+          classes={assignedClasses}
+          allStudents={students}
+          initialClassId={selectedClassId !== 'all' ? selectedClassId : undefined}
+          initialAssignment={editingAssignment}
+          settings={settings}
+          onBack={() => {
+            playPop(settings.soundEnabled);
+            setIsCreateAssignmentOpen(false);
+            setEditingAssignment(null);
+          }}
+          onSuccess={() => {
+            setIsCreateAssignmentOpen(false);
+            setEditingAssignment(null);
+            fetchAssignments();
+          }}
+        />
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
@@ -2295,81 +2397,313 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
       )}
 
       {/* ================= TAB 3: GIAO BÀI TẬP ================= */}
-      {activeTab === 'assignments' && (
-        <div className="space-y-6 animate-fade-in">
-          <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
-            <div>
-              <h3 className="text-lg sm:text-xl font-black text-emerald-950 font-display flex items-center gap-2">
-                <span>📝</span>
-                <span>Danh Sách Đề Bài & Nhiệm Vụ Đã Giao</span>
-              </h3>
-              <p className="text-xs text-stone-600 font-medium mt-0.5">
-                Giao bài tập luyện tập thường xuyên hoặc bài kiểm tra định kỳ theo Chương trình GDPT 2018 (Khối 1–5).
-              </p>
+      {activeTab === 'assignments' && (() => {
+        const activeClass = assignedClasses.find(c => c.id === selectedClassId) || assignedClasses[0];
+        const weekInfo = activeClass ? getCurrentWeekInfo(activeClass) : null;
+        
+        const filteredAssignments = assignments.filter(item => {
+          if (selectedClassId !== 'all' && item.classId && item.classId !== selectedClassId) return false;
+          if (assignmentWeekFilter !== 'all' && item.weekNumber !== assignmentWeekFilter) return false;
+          if (assignmentStatusFilter !== 'all' && (item.status || 'active') !== assignmentStatusFilter) return false;
+          return true;
+        });
+
+        return (
+          <div className="space-y-6 animate-fade-in">
+            {/* Top Action Bar */}
+            <div className="bg-white p-5 rounded-3xl border-2 border-emerald-200 shadow-xs flex flex-wrap items-center justify-between gap-4">
+              <div>
+                <h3 className="text-lg sm:text-xl font-black text-emerald-950 font-display flex items-center gap-2">
+                  <span>📝</span>
+                  <span>Quản Lý & Giao Bài Tập Theo Tuần Học</span>
+                </h3>
+                <p className="text-xs text-stone-600 font-medium mt-0.5">
+                  Chương trình GDPT 2018 (35 tuần thực tế) • Bộ sách Kết nối tri thức với cuộc sống.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  onClick={() => {
+                    playPop(settings.soundEnabled);
+                    if (activeClass) {
+                      setEditingCurrentWeek(activeClass.currentWeek || 8);
+                      setEditingStartDate(activeClass.startDate || '2026-09-07');
+                    }
+                    setIsScheduleModalOpen(true);
+                  }}
+                  className="px-3.5 py-2.5 rounded-2xl bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-300 font-bold text-xs sm:text-sm transition-all flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Calendar className="w-4 h-4 text-amber-700" />
+                  <span>Điều chỉnh tuần học của lớp</span>
+                </button>
+
+                <button
+                  onClick={() => {
+                    playPop(settings.soundEnabled);
+                    setEditingAssignment(null);
+                    setIsCreateAssignmentOpen(true);
+                  }}
+                  className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>Giao bài tập mới</span>
+                </button>
+              </div>
             </div>
 
-            <button
-              onClick={() => {
-                playPop(settings.soundEnabled);
-                setIsCreateAssignmentOpen(true);
-              }}
-              className="px-4 py-2.5 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center gap-1.5 cursor-pointer"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Giao bài tập mới</span>
-            </button>
-          </div>
-
-          {assignmentActionMsg && (
-            <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-fade-in">
-              {assignmentActionMsg}
-            </div>
-          )}
-
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-            {assignments.map((item) => (
-              <div
-                key={item.id}
-                className="bg-white p-5 rounded-3xl border-2 border-stone-200 hover:border-emerald-300 shadow-xs hover:shadow-md transition-all flex flex-col justify-between"
-              >
-                <div className="space-y-2.5">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
-                      Khối {item.grade}
-                    </span>
-                    <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-md ${
-                      item.isExam 
-                        ? 'bg-amber-100 text-amber-900 border border-amber-300' 
-                        : 'bg-sky-100 text-sky-800 border border-sky-200'
-                    }`}>
-                      {item.isExam ? '⭐ Kiểm tra định kỳ (Thang điểm 10)' : '🌸 Luyện tập thường xuyên'}
-                    </span>
+            {/* School Week Banner: Tuần học – Thời gian – Bài tập của tuần */}
+            {activeClass && (
+              <div className="bg-gradient-to-r from-emerald-50 via-teal-50 to-amber-50 border-2 border-emerald-300 rounded-3xl p-4 sm:p-5 shadow-xs">
+                <div className="flex flex-wrap items-center justify-between gap-4">
+                  <div className="space-y-1">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2.5 py-0.5 rounded-full bg-emerald-600 text-white text-[11px] font-black uppercase tracking-wider">
+                        {activeClass.name} (Khối {activeClass.grade})
+                      </span>
+                      <span className="text-xs font-bold text-stone-500">
+                        Năm học {activeClass.schoolYear || '2025-2026'}
+                      </span>
+                    </div>
+                    <h4 className="text-base sm:text-lg font-black text-emerald-950 font-display flex items-center gap-2">
+                      <span>📅</span>
+                      <span>Tuần học hiện tại: <span className="text-emerald-700">Tuần {activeClass.currentWeek || 8}</span></span>
+                      {weekInfo && (
+                        <span className="text-xs font-bold text-stone-600 bg-white/80 px-2.5 py-1 rounded-xl border border-emerald-200">
+                          {formatDateVN(weekInfo.startDate)} – {formatDateVN(weekInfo.endDate)}
+                        </span>
+                      )}
+                    </h4>
+                    <p className="text-xs text-stone-600 font-medium">
+                      Ngày bắt đầu năm học: <strong>{formatDateVN(activeClass.startDate || '2026-09-07')}</strong> • Lịch học được thiết lập linh hoạt theo kế hoạch của lớp.
+                    </p>
                   </div>
 
-                  <h4 className="text-base font-extrabold text-stone-900 leading-snug">
-                    {item.title}
-                  </h4>
-
-                  <p className="text-xs text-stone-600 line-clamp-3 bg-stone-50 p-2.5 rounded-xl border border-stone-100 italic">
-                    "{item.prompt}"
-                  </p>
+                  <div className="flex items-center gap-3">
+                    <div className="bg-white/90 px-3.5 py-2 rounded-2xl border border-emerald-200 text-center">
+                      <div className="text-lg font-black text-emerald-800">
+                        {assignments.filter(a => a.weekNumber === (activeClass.currentWeek || 8) && a.status === 'active').length}
+                      </div>
+                      <div className="text-[10px] font-extrabold text-stone-500 uppercase">Bài tuần này</div>
+                    </div>
+                    <div className="bg-white/90 px-3.5 py-2 rounded-2xl border border-emerald-200 text-center">
+                      <div className="text-lg font-black text-stone-800">{assignments.length}</div>
+                      <div className="text-[10px] font-extrabold text-stone-500 uppercase">Tổng số bài</div>
+                    </div>
+                  </div>
                 </div>
-
-                <div className="pt-3 mt-3 border-t border-stone-100 flex items-center justify-between text-[11px] text-stone-500 font-medium">
-                  <span>Thể loại: <strong className="text-stone-700">{item.genre}</strong></span>
-                  {item.dueDate && <span>Hạn: <strong className="text-rose-600">{new Date(item.dueDate).toLocaleDateString('vi-VN')}</strong></span>}
-                </div>
-              </div>
-            ))}
-
-            {assignments.length === 0 && (
-              <div className="col-span-full bg-white p-8 rounded-3xl border-2 border-dashed border-stone-200 text-center text-stone-500">
-                Chưa có bài tập nào được giao. Cô hãy bấm nút "Giao bài tập mới" ở góc trên để tạo đề bài nhé!
               </div>
             )}
+
+            {/* Filter Bar: Week & Status */}
+            <div className="bg-white p-4 rounded-2xl border border-stone-200 flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-bold text-stone-600 flex items-center gap-1">
+                  <Filter className="w-3.5 h-3.5" />
+                  Lọc tuần:
+                </span>
+                <select
+                  value={assignmentWeekFilter}
+                  onChange={(e) => setAssignmentWeekFilter(e.target.value === 'all' ? 'all' : Number(e.target.value))}
+                  className="px-3 py-1.5 rounded-xl border border-stone-300 font-semibold bg-stone-50 focus:outline-hidden focus:border-emerald-500"
+                >
+                  <option value="all">Tất cả các tuần (1–35)</option>
+                  {activeClass && (
+                    <option value={activeClass.currentWeek || 8}>
+                      ★ Tuần hiện tại (Tuần {activeClass.currentWeek || 8})
+                    </option>
+                  )}
+                  {Array.from({ length: 35 }, (_, i) => i + 1).map((w) => (
+                    <option key={w} value={w}>
+                      Tuần {w}
+                    </option>
+                  ))}
+                </select>
+
+                <span className="font-bold text-stone-600 ml-2">Trạng thái:</span>
+                <select
+                  value={assignmentStatusFilter}
+                  onChange={(e) => setAssignmentStatusFilter(e.target.value as any)}
+                  className="px-3 py-1.5 rounded-xl border border-stone-300 font-semibold bg-stone-50 focus:outline-hidden focus:border-emerald-500"
+                >
+                  <option value="all">Tất cả trạng thái</option>
+                  <option value="active">🟢 Đang giao (Học sinh thấy & làm bài)</option>
+                  <option value="draft">📝 Bản nháp (Chưa công bố)</option>
+                  <option value="paused">⏸️ Tạm dừng</option>
+                  <option value="completed">✅ Đã hoàn thành / Đóng</option>
+                </select>
+              </div>
+
+              <div className="text-xs text-stone-500 font-medium">
+                Tìm thấy <strong className="text-stone-800">{filteredAssignments.length}</strong> bài tập
+              </div>
+            </div>
+
+            {assignmentActionMsg && (
+              <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-fade-in flex items-center justify-between">
+                <span>{assignmentActionMsg}</span>
+                <button onClick={() => setAssignmentActionMsg('')} className="text-emerald-700 hover:text-emerald-900 text-xs font-bold">✕</button>
+              </div>
+            )}
+
+            {/* Assignments Grid */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+              {filteredAssignments.map((item) => {
+                const status = item.status || 'active';
+                return (
+                  <div
+                    key={item.id}
+                    className={`bg-white p-5 rounded-3xl border-2 transition-all flex flex-col justify-between shadow-xs hover:shadow-md ${
+                      status === 'active' 
+                        ? 'border-emerald-200 hover:border-emerald-400' 
+                        : status === 'paused'
+                        ? 'border-amber-200 bg-amber-50/20'
+                        : status === 'completed'
+                        ? 'border-stone-300 bg-stone-50/40 opacity-80'
+                        : 'border-dashed border-stone-300 bg-stone-50/50'
+                    }`}
+                  >
+                    <div className="space-y-3">
+                      <div className="flex flex-wrap items-center justify-between gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className="text-[11px] font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            Tuần {item.weekNumber || 1}
+                          </span>
+                          <span className="text-[11px] font-black px-2 py-0.5 rounded-md bg-stone-100 text-stone-700">
+                            Khối {item.grade}
+                          </span>
+                        </div>
+
+                        {/* Status Badge */}
+                        <span className={`text-[10px] font-extrabold px-2.5 py-0.5 rounded-full flex items-center gap-1 ${
+                          status === 'active'
+                            ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                            : status === 'paused'
+                            ? 'bg-amber-100 text-amber-900 border border-amber-300'
+                            : status === 'completed'
+                            ? 'bg-blue-100 text-blue-800 border border-blue-200'
+                            : 'bg-stone-100 text-stone-600 border border-stone-300'
+                        }`}>
+                          {status === 'active' && '🟢 Đang giao'}
+                          {status === 'paused' && '⏸️ Tạm dừng'}
+                          {status === 'completed' && '✅ Hoàn thành'}
+                          {status === 'draft' && '📝 Bản nháp'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <div className="text-[10px] font-extrabold text-stone-500 uppercase tracking-wider mb-0.5">
+                          {item.isExam ? '⭐ Kiểm tra định kỳ (Thang 10)' : '🌸 Bài luyện tập thường xuyên'}
+                        </div>
+                        <h4 className="text-base font-extrabold text-stone-900 leading-snug">
+                          {item.title}
+                        </h4>
+                      </div>
+
+                      <p className="text-xs text-stone-600 line-clamp-3 bg-stone-50 p-2.5 rounded-xl border border-stone-100 italic">
+                        "{item.prompt}"
+                      </p>
+
+                      <div className="bg-stone-50/80 p-2.5 rounded-xl border border-stone-100 space-y-1 text-[11px] text-stone-600">
+                        <div className="flex items-center justify-between">
+                          <span>Thể loại: <strong className="text-stone-800">{item.genre}</strong></span>
+                          <span>Học sinh: <strong className="text-emerald-700">{item.assignedStudentIds?.length ? `${item.assignedStudentIds.length} em riêng` : 'Cả lớp'}</strong></span>
+                        </div>
+                        <div className="flex items-center justify-between text-[10px] text-stone-500">
+                          <span>Bắt đầu: {item.startDate ? formatDateVN(item.startDate) : 'Từ khi giao'}</span>
+                          <span>Hạn: <strong className={item.dueDate ? 'text-rose-600' : 'text-stone-600'}>{item.dueDate ? formatDateVN(item.dueDate) : 'Không giới hạn'}</strong></span>
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="pt-3 mt-3 border-t border-stone-100 flex items-center justify-between gap-2">
+                      <button
+                        onClick={() => {
+                          playPop(settings.soundEnabled);
+                          setEditingAssignment(item);
+                          setIsCreateAssignmentOpen(true);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs transition-all flex items-center gap-1 cursor-pointer"
+                      >
+                        <Edit3 className="w-3.5 h-3.5" />
+                        <span>Sửa bài</span>
+                      </button>
+
+                      <div className="flex items-center gap-1">
+                        {status === 'active' && (
+                          <button
+                            onClick={() => handleToggleAssignmentStatus(item.id, 'paused')}
+                            title="Tạm dừng hiển thị cho học sinh"
+                            className="px-2.5 py-1.5 rounded-xl bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 font-bold text-[11px] transition-all cursor-pointer"
+                          >
+                            ⏸️ Tạm dừng
+                          </button>
+                        )}
+                        {status === 'paused' && (
+                          <button
+                            onClick={() => handleToggleAssignmentStatus(item.id, 'active')}
+                            title="Kích hoạt lại bài giao"
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 font-bold text-[11px] transition-all cursor-pointer"
+                          >
+                            ▶️ Kích hoạt
+                          </button>
+                        )}
+                        {status === 'draft' && (
+                          <button
+                            onClick={() => handleToggleAssignmentStatus(item.id, 'active')}
+                            title="Công bố giao bài cho học sinh"
+                            className="px-2.5 py-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] shadow-xs transition-all cursor-pointer"
+                          >
+                            🚀 Giao bài ngay
+                          </button>
+                        )}
+                        {status !== 'completed' ? (
+                          <button
+                            onClick={() => handleToggleAssignmentStatus(item.id, 'completed')}
+                            title="Đánh dấu hoàn thành"
+                            className="px-2 py-1.5 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-600 font-bold text-[11px] transition-all cursor-pointer"
+                          >
+                            ✓ Xong
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => handleToggleAssignmentStatus(item.id, 'active')}
+                            title="Mở lại bài tập"
+                            className="px-2 py-1.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-800 border border-blue-200 font-bold text-[11px] transition-all cursor-pointer"
+                          >
+                            🔄 Mở lại
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {filteredAssignments.length === 0 && (
+                <div className="col-span-full bg-white p-8 rounded-3xl border-2 border-dashed border-stone-200 text-center space-y-3">
+                  <div className="text-3xl">🌸</div>
+                  <div className="text-sm font-bold text-stone-700">
+                    Không có bài tập nào phù hợp với bộ lọc tuần hoặc trạng thái đang chọn.
+                  </div>
+                  <p className="text-xs text-stone-500 max-w-md mx-auto">
+                    Cô có thể bấm nút "Giao bài tập mới" ở trên để tạo đề bài mới hoặc chọn đề có sẵn từ Ngân hàng đề SGK nhé!
+                  </p>
+                  <button
+                    onClick={() => {
+                      setAssignmentWeekFilter('all');
+                      setAssignmentStatusFilter('all');
+                    }}
+                    className="px-4 py-2 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 font-bold text-xs"
+                  >
+                    Xem tất cả các bài tập
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ================= TAB 4: LỚP HỌC CỦA TÔI ================= */}
       {activeTab === 'classes' && (
@@ -2664,241 +2998,133 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL: GIAO BÀI TẬP MỚI ================= */}
-      {isCreateAssignmentOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
-            <button
-              onClick={() => setIsCreateAssignmentOpen(false)}
-              className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
-            >
-              <X className="w-5 h-5" />
-            </button>
+      {/* ================= MODAL: ĐIỀU CHỈNH TIẾN ĐỘ TUẦN HỌC CỦA LỚP ================= */}
+      {isScheduleModalOpen && (() => {
+        const targetClass = assignedClasses.find(c => c.id === selectedClassId) || assignedClasses[0];
+        const previewWeeks = targetClass ? generateDefaultClassWeeks(editingStartDate, editingCurrentWeek) : [];
 
-            <h3 className="text-lg font-black text-emerald-950 font-display flex items-center gap-2">
-              <span>📝</span>
-              <span>Giao Bài Tập Tiếng Việt Mới</span>
-            </h3>
+        return (
+          <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
+            <div className="bg-white rounded-3xl border-3 border-amber-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
+              <button
+                onClick={() => setIsScheduleModalOpen(false)}
+                className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
+              >
+                <X className="w-5 h-5" />
+              </button>
 
-            <form onSubmit={handleCreateAssignment} className="space-y-4">
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Tiêu đề bài tập:
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={newAssignTitle}
-                  onChange={e => setNewAssignTitle(e.target.value)}
-                  placeholder="Ví dụ: Tả chiếc bút mực thân yêu của em"
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Khối lớp (1–5):
-                  </label>
-                  <select
-                    value={newAssignGrade}
-                    onChange={e => setNewAssignGrade(Number(e.target.value))}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
-                  >
-                    {[1, 2, 3, 4, 5].map(g => (
-                      <option key={g} value={g}>Lớp {g}</option>
-                    ))}
-                  </select>
+              <div className="flex items-center gap-2.5 border-b border-amber-100 pb-3">
+                <div className="w-10 h-10 rounded-2xl bg-amber-100 flex items-center justify-center text-xl">
+                  📅
                 </div>
-
                 <div>
-                  <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Mức độ thử thách:
-                  </label>
-                  <select
-                    value={newAssignDifficulty}
-                    onChange={e => setNewAssignDifficulty(e.target.value as DifficultyLevel)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
-                  >
-                    <option value="co_ban">🌱 Cơ bản (Chuẩn SGK)</option>
-                    <option value="mo_rong">🌿 Mở rộng (Quan sát phong phú)</option>
-                    <option value="nang_cao">⭐ Nâng cao (Từ ngữ gợi cảm & nghệ thuật)</option>
-                    <option value="sang_tao">✨ Sáng tạo (Tư duy mới lạ, bứt phá)</option>
-                  </select>
+                  <h3 className="text-base sm:text-lg font-black text-amber-950 font-display">
+                    Điều Chỉnh Tuần Học & Lịch Dạy Của Lớp
+                  </h3>
+                  <p className="text-xs text-stone-500 font-medium">
+                    Theo Chương trình GDPT 2018 • Bộ sách Kết nối tri thức (35 tuần thực tế)
+                  </p>
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
+              {scheduleActionMsg && (
+                <div className="p-3 bg-emerald-50 border border-emerald-300 rounded-2xl text-xs sm:text-sm font-bold text-emerald-900 animate-fade-in">
+                  {scheduleActionMsg}
+                </div>
+              )}
+
+              <div className="space-y-4 text-xs">
+                {/* Select Class */}
                 <div>
                   <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Chủ đề (25 nhóm chủ đề GDPT 2018):
+                    Lớp học áp dụng:
                   </label>
                   <select
-                    value={newAssignTopicCode}
-                    onChange={e => setNewAssignTopicCode(e.target.value)}
-                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white font-medium"
+                    value={targetClass?.id || ''}
+                    onChange={(e) => {
+                      const c = assignedClasses.find(cl => cl.id === e.target.value);
+                      if (c) {
+                        setSelectedClassId(c.id);
+                        setEditingCurrentWeek(c.currentWeek || 8);
+                        setEditingStartDate(c.startDate || '2026-09-07');
+                      }
+                    }}
+                    className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm font-semibold bg-white"
                   >
-                    {TOPIC_GROUPS.map(t => (
-                      <option key={t.code} value={t.code}>
-                        {t.code}: {t.name}
+                    {assignedClasses.map(c => (
+                      <option key={c.id} value={c.id}>
+                        {c.name} (Khối {c.grade} • Năm học {c.schoolYear || '2025-2026'})
                       </option>
                     ))}
                   </select>
                 </div>
 
+                {/* Start Date */}
                 <div>
                   <label className="text-xs font-bold text-stone-700 block mb-1">
-                    Thể loại bài viết:
+                    Ngày bắt đầu năm học của lớp (Mốc tính tuần 1):
                   </label>
-                  <select
-                    value={newAssignGenre}
-                    onChange={e => setNewAssignGenre(e.target.value)}
+                  <input
+                    type="date"
+                    value={editingStartDate}
+                    onChange={(e) => setEditingStartDate(e.target.value)}
                     className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white"
-                  >
-                    <option value="Tả đồ vật">Tả đồ vật</option>
-                    <option value="Tả con vật">Tả con vật</option>
-                    <option value="Tả cây cối">Tả cây cối</option>
-                    <option value="Tả người">Tả người</option>
-                    <option value="Tả cảnh vật">Tả cảnh vật</option>
-                    <option value="Kể chuyện">Kể chuyện</option>
-                    <option value="Thuật lại sự việc">Thuật lại sự việc</option>
-                    <option value="Cảm nghĩ">Bày tỏ cảm xúc</option>
-                    <option value="Nêu ý kiến">Nêu ý kiến</option>
-                    <option value="Viết thư">Viết thư thăm hỏi / chia sẻ</option>
-                    <option value="Lời nhắn">Viết lời nhắn / tin nhắn</option>
-                    <option value="Thông báo">Viết thông báo</option>
-                    <option value="Báo cáo">Viết báo cáo / kế hoạch</option>
-                    <option value="Sáng tạo">Tưởng tượng / Sáng tạo</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <div className="flex items-center justify-between mb-1">
-                  <label className="text-xs font-bold text-stone-700">
-                    Đề bài & Yêu cầu chi tiết:
-                  </label>
-                  <button
-                    type="button"
-                    onClick={handlePreviewAssignmentWithAi}
-                    disabled={isAiPreviewLoading || !newAssignPrompt.trim()}
-                    className="text-[11px] font-bold text-purple-700 hover:text-purple-900 bg-purple-50 hover:bg-purple-100 px-2.5 py-1 rounded-lg border border-purple-200 flex items-center gap-1 transition-all cursor-pointer disabled:opacity-50"
-                  >
-                    <Sparkles className={`w-3.5 h-3.5 ${isAiPreviewLoading ? 'animate-spin text-purple-600' : ''}`} />
-                    <span>{isAiPreviewLoading ? 'Đang phân tích...' : '🔍 Xem trước sơ đồ & dàn ý AI'}</span>
-                  </button>
-                </div>
-                <textarea
-                  rows={3}
-                  required
-                  value={newAssignPrompt}
-                  onChange={e => {
-                    setNewAssignPrompt(e.target.value);
-                    setAiPreviewData(null);
-                  }}
-                  placeholder="Viết một đoạn văn từ 5 đến 7 câu tả một đồ dùng học tập gắn bó với em hàng ngày..."
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm focus:border-emerald-500 focus:outline-hidden"
-                />
-              </div>
-
-              {/* AI PREVIEW CARD FOR TEACHER */}
-              {aiPreviewData && (
-                <div className="p-3.5 bg-gradient-to-br from-purple-50 to-pink-50 border-2 border-purple-300 rounded-2xl space-y-2.5 text-xs animate-fade-in">
-                  <div className="flex items-center justify-between border-b border-purple-200 pb-2">
-                    <span className="font-extrabold text-purple-950 flex items-center gap-1.5">
-                      <span>🌸</span>
-                      <span>Kết quả phân tích đề bài & Bản đồ ý tưởng</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 font-black text-[11px] border border-emerald-300 flex items-center gap-1">
-                      <span>✓</span>
-                      <span>Đạt 20/20 tiêu chuẩn GDPT 2018</span>
-                    </span>
-                  </div>
-
-                  <div className="grid grid-cols-2 gap-2 text-[11px]">
-                    <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
-                      <strong className="text-purple-900 block font-bold">Đối tượng chính:</strong>
-                      <span className="text-stone-800">{aiPreviewData.mainObject || aiPreviewData.coreSubject}</span>
-                    </div>
-                    <div className="bg-white/80 p-2 rounded-xl border border-purple-100">
-                      <strong className="text-purple-900 block font-bold">Chủ đề & Thể loại:</strong>
-                      <span className="text-stone-800">{aiPreviewData.topicName} • {aiPreviewData.writingFormat}</span>
-                    </div>
-                  </div>
-
-                  {aiPreviewData.branches && aiPreviewData.branches.length > 0 && (
-                    <div className="bg-white/90 p-2.5 rounded-xl border border-purple-100 space-y-1">
-                      <strong className="text-purple-900 block font-bold text-[11px]">
-                        5 nhánh gợi mở tư duy:
-                      </strong>
-                      <div className="flex flex-wrap gap-1.5">
-                        {aiPreviewData.branches.map((b, idx) => (
-                          <span key={idx} className="px-2 py-0.5 rounded-md bg-purple-100 text-purple-900 font-semibold text-[10px]">
-                            {b.icon} {b.name}
-                          </span>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  <p className="text-[11px] text-purple-900 italic font-medium">
-                    "{aiPreviewData.hoaNhoUnderstand}"
+                  />
+                  <p className="text-[11px] text-stone-500 mt-1">
+                    Mỗi lớp có thể có ngày bắt đầu riêng, không bắt buộc cố định ngày 1/9.
                   </p>
                 </div>
-              )}
 
-              <div>
-                <label className="text-xs font-bold text-stone-700 block mb-1">
-                  Hạn nộp bài (tùy chọn):
-                </label>
-                <input
-                  type="date"
-                  value={newAssignDueDate}
-                  onChange={e => setNewAssignDueDate(e.target.value)}
-                  className="w-full p-2.5 rounded-xl border border-stone-200 text-xs sm:text-sm bg-white focus:border-emerald-500 focus:outline-hidden"
-                />
+                {/* Current Week Selection */}
+                <div>
+                  <label className="text-xs font-bold text-stone-700 block mb-1">
+                    Thiết lập tuần học hiện tại:
+                  </label>
+                  <select
+                    value={editingCurrentWeek}
+                    onChange={(e) => setEditingCurrentWeek(Number(e.target.value))}
+                    className="w-full p-2.5 rounded-xl border-2 border-emerald-400 text-xs sm:text-sm font-bold bg-white text-emerald-950"
+                  >
+                    {previewWeeks.map((w) => (
+                      <option key={w.weekNumber} value={w.weekNumber}>
+                        Tuần {w.weekNumber} ({formatDateVN(w.startDate)} – {formatDateVN(w.endDate)}) {w.weekNumber <= 18 ? '• Học kỳ I' : '• Học kỳ II'}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="p-3 bg-amber-50 rounded-2xl border border-amber-200 text-[11px] text-amber-900 space-y-1">
+                  <div className="font-bold flex items-center gap-1">
+                    <span>💡</span>
+                    <span>Quy định sư phạm & Linh hoạt kế hoạch:</span>
+                  </div>
+                  <p>
+                    Học sinh trong lớp sẽ nhìn thấy bài tập của đúng tuần học này trên bảng bài tập tuần. Nếu lớp nghỉ lễ hoặc dời lịch giảng dạy, cô chỉ cần chọn lại tuần tại đây.
+                  </p>
+                </div>
               </div>
 
-              {/* Mode Selection */}
-              <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={newAssignIsExam}
-                    onChange={e => setNewAssignIsExam(e.target.checked)}
-                    className="w-4 h-4 text-emerald-600 rounded-sm"
-                  />
-                  <span className="text-xs font-black text-stone-800">
-                    Đánh dấu đây là bài kiểm tra định kỳ (Có thang điểm số 1–10)
-                  </span>
-                </label>
-                <p className="text-[11px] text-stone-500 pl-6">
-                  {newAssignIsExam 
-                    ? 'Bài kiểm tra định kỳ sẽ cho phép chấm điểm số nguyên từ 1 đến 10 kèm nhận xét chi tiết theo Thông tư 27.' 
-                    : 'Mặc định là bài luyện tập thường xuyên, chỉ nhận xét định tính khích lệ học sinh.'}
-                </p>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t border-stone-100">
+              <div className="flex justify-end gap-2 pt-3 border-t border-stone-100">
                 <button
                   type="button"
-                  onClick={() => setIsCreateAssignmentOpen(false)}
+                  onClick={() => setIsScheduleModalOpen(false)}
                   className="px-4 py-2 rounded-xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-bold text-xs"
                 >
-                  Hủy
+                  Đóng
                 </button>
                 <button
-                  type="submit"
-                  disabled={isCreatingAssignment}
-                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs"
+                  type="button"
+                  disabled={isSavingSchedule || !targetClass}
+                  onClick={() => targetClass && handleSaveSchedule(targetClass.id)}
+                  className="px-5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-xs cursor-pointer disabled:opacity-50"
                 >
-                  {isCreatingAssignment ? 'Đang giao...' : 'Giao bài tập'}
+                  {isSavingSchedule ? 'Đang lưu...' : 'Lưu điều chỉnh tuần học'}
                 </button>
               </div>
-            </form>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
 
       {/* ================= MODAL 1A: CẤP LẠI MẬT KHẨU (TỰ ĐỘNG HOẶC TỰ ĐẶT) ================= */}
       {promptResetStudent && (

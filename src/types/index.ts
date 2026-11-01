@@ -176,12 +176,24 @@ export interface TeacherAccount {
   mustChangePasswordNextLogin?: boolean;
 }
 
+export interface ClassWeekSchedule {
+  weekNumber: number; // 1 -> 35
+  title: string; // "Tuần 1", "Tuần 2", ..., "Tuần 8"
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  isCurrent?: boolean;
+  notes?: string;
+}
+
 export interface Classroom {
   id: string; // L3A
   name: string; // Lớp 3A
   grade: 1 | 2 | 3 | 4 | 5;
   school: string;
   schoolYear: string;
+  startDate?: string; // Ngày bắt đầu năm học của lớp (mặc định: 2026-09-07)
+  currentWeek?: number; // Tuần học thực tế hiện tại (1–35, vd: 8)
+  weeks?: ClassWeekSchedule[]; // Lịch chi tiết 35 tuần học của lớp do giáo viên thiết lập
   teacherIds: string[]; // Danh sách giáo viên phụ trách
   primaryTeacherId: string; // Giáo viên chủ nhiệm chính
   studentCount?: number;
@@ -200,10 +212,14 @@ export interface ClassAssignment {
   genre: EssayGenre;
   gardenType: GardenType;
   assignedDate: string;
-  dueDate?: string;
+  startDate?: string; // Ngày bắt đầu làm bài (ngay_bat_dau)
+  dueDate?: string; // Hạn nộp bài (han_nop)
+  weekNumber?: number; // Tuần học thực tế (tuan_hoc, 1-35, vd: 8)
+  weekTitle?: string; // Tên tuần học hiển thị (vd: "Tuần 8 (20/10/2026 – 28/10/2026)")
+  allowPreview?: boolean; // Giáo viên cho phép xem trước bài khi chưa đến tuần học
   isExam: boolean; // false: Luyện viết thường xuyên (nhận xét bằng lời); true: Kiểm tra định kỳ (chấm điểm thang 10)
   maxScore?: number; // 10
-  status: 'active' | 'closed' | 'draft';
+  status: 'active' | 'draft' | 'paused' | 'completed' | 'closed'; // Trạng thái: Bản nháp (draft), Đã giao (active), Tạm dừng (paused), Hoàn thành (completed)
   instructions?: string;
   difficultyLevel?: DifficultyLevel;
   topicCode?: string;
