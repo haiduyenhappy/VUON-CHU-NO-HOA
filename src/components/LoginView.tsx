@@ -43,7 +43,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
   const demoAccessEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN !== 'false' && demoConfig.enabled;
   const demoAccounts = {
     student: [
-      { label: 'HS001 · Tuệ An', username: 'HS001', password: '2026' },
+      { label: 'HS001 · Tuệ An', username: 'HS001', password: '2016' },
       { label: 'HS002 · Bảo An', username: 'HS002', password: '2016' },
       { label: 'HS020 · Tuệ Lâm', username: 'HS020', password: '2016' },
     ],

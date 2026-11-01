@@ -945,7 +945,7 @@ function loadDatabase(): DatabaseStructure {
 
         const inviteCodes = Array.isArray(s.inviteCodes) ? s.inviteCodes : [];
 
-        return {
+        const studentObj = {
           ...s,
           classId: s.classId || 'L3A',
           className: s.className || (s.classId === 'L4B' ? 'Lớp 4B – Trường TH Lê Đức Thọ' : 'Lớp 3 – Trường TH Lê Đức Thọ'),
@@ -955,6 +955,15 @@ function loadDatabase(): DatabaseStructure {
           linkedCaregivers: caregivers,
           inviteCodes
         };
+
+        if (studentObj.id === 'HS001') {
+          studentObj.pin = '2016';
+          if (studentObj.temporaryPassword === 'HoaNho2026' || studentObj.temporaryPassword === '2026') {
+            studentObj.temporaryPassword = '2016';
+          }
+        }
+
+        return studentObj;
       });
     }
 
