@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Student, 
   WritingTask, 
@@ -59,6 +59,7 @@ import {
 import { TopicSelectionModal } from './TopicSelectionModal';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
 import { isFamilyLoveGrade1Prompt, isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
+import { analyzePromptRequirements, purgeIncompatibleWishes } from '../utils/promptRequirementAnalyzer';
 
 interface DirectionDraft {
   mindMapBranches: MindMapBranch[];
@@ -271,90 +272,17 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     { value: 'khac', label: 'Dạng bài khác', icon: '📝' }
   ];
 
-  // Quick special wish tags tailored to genre
-  const normalQuickWishes = [
-    'Viết khoảng 4–6 câu',
-    'Viết khoảng 7–9 câu',
-    'Có sử dụng từ láy',
-    'Có hình ảnh so sánh',
-    'Có hình ảnh nhân hóa',
-    'Thể hiện cảm xúc chân thật',
-    'Có mở bài hấp dẫn',
-    'Có câu kết ấn tượng',
-    'Có chi tiết từ trải nghiệm của em'
-  ];
+  // Phân tích đề bài, trích xuất yêu cầu số câu, khối lớp và tạo bộ gợi ý Phần 3 phụ thuộc 100% vào Phần 1
+  const promptRequirement = useMemo(() => {
+    return analyzePromptRequirements(promptText, grade, genre);
+  }, [promptText, grade, genre]);
 
-  const letterQuickWishes = [
-    'Thư ngắn (khoảng 80–120 chữ)',
-    'Đủ 5 phần chuẩn mực của thư',
-    'Lời xưng hô thân mật, lễ phép',
-    'Thăm hỏi sức khỏe và sinh hoạt',
-    'Kể chuyện trường lớp, học tập',
-    'Bày tỏ tình cảm gắn bó, nhớ thương',
-    'Lời chúc ấm áp và lời hứa chăm ngoan'
-  ];
+  const quickWishes = promptRequirement.quickWishes;
 
-  const noteQuickWishes = [
-    'Lời nhắn ngắn gọn, súc tích (3–5 câu)',
-    'Ghi rõ người nhận lời nhắn',
-    'Nội dung dặn dò hoặc hẹn giờ rõ ràng',
-    'Lời nhắn lễ phép, chân thành',
-    'Ghi rõ người để lại lời nhắn & thời gian'
-  ];
-
-  const opinionQuickWishes = [
-    'Nêu rõ ý kiến đồng tình / ủng hộ',
-    'Lý lẽ xác đáng, thuyết phục',
-    'Có dẫn chứng từ thực tế cuộc sống',
-    'Từ ngữ lập luận mạch lạc, tự nhiên',
-    'Thông điệp ý nghĩa gửi tới mọi người'
-  ];
-
-  const emotionQuickWishes = [
-    'Kể một kỷ niệm ấm áp với người thân',
-    'Bộc lộ lòng biết ơn và yêu kính',
-    'Dùng từ ngữ gợi cảm xúc chân thành',
-    'Có câu văn so sánh giàu cảm xúc',
-    'Có lời hứa chăm ngoan, tiến bộ'
-  ];
-
-  const sentenceQuickWishes = [
-    'Viết đúng 2–3 câu theo yêu cầu',
-    'Đầu câu viết hoa, cuối câu có dấu chấm',
-    'Các câu liên kết tự nhiên, mạch lạc',
-    'Từ ngữ trong sáng, giàu cảm xúc'
-  ];
-
-  const grade1ItemQuickWishes = [
-    'Viết đúng 1–2 câu hoàn chỉnh',
-    'Đầu câu viết hoa, cuối câu có dấu chấm',
-    'Tả một đặc điểm nổi bật hoặc công dụng',
-    'Dùng từ ngữ sinh động (xinh xắn, thon dài, gọn gàng)'
-  ];
-
-  const grade2ItemQuickWishes = [
-    'Đoạn văn ngắn 3–5 câu',
-    'Tả hình dáng và màu sắc nổi bật',
-    'Nêu đặc điểm em thích nhất và ích lợi',
-    'Tình cảm gắn bó và lời hứa giữ gìn',
-    'Đầu câu viết hoa, cuối câu có dấu chấm'
-  ];
-
-  const quickWishes = isItemGrade1Prompt
-    ? grade1ItemQuickWishes
-    : isItemGrade2Prompt
-    ? grade2ItemQuickWishes
-    : isLetterPrompt
-    ? letterQuickWishes
-    : isNotePrompt
-    ? noteQuickWishes
-    : isOpinionPrompt
-    ? opinionQuickWishes
-    : isEmotionPrompt
-    ? emotionQuickWishes
-    : isSentencePrompt
-    ? (grade === 1 ? grade1ItemQuickWishes : sentenceQuickWishes)
-    : normalQuickWishes;
+  // Tự động thanh lọc các lựa chọn cũ không còn phù hợp khi học sinh đổi đề, đổi lớp hoặc nhập tay
+  useEffect(() => {
+    setSpecialWishes(prev => purgeIncompatibleWishes(prev, promptRequirement));
+  }, [promptRequirement]);
 
   // Image Rotation (Canvas-based)
   const rotateImage = (dataUrl: string, degrees: 90 | 180 | 270): Promise<string> => {
@@ -1907,22 +1835,14 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
               <span>🎯</span>
-              <span>Mức độ thử thách rèn luyện:</span>
+              <span>Mức độ thử thách rèn luyện (Lớp {grade}):</span>
             </label>
             <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-              {difficultyLevel === 'co_ban' && '🌱 Cơ bản: Nắm chắc kết cấu chuẩn SGK'}
-              {difficultyLevel === 'mo_rong' && '🌿 Mở rộng: Quan sát phong phú, liên tưởng mở rộng'}
-              {difficultyLevel === 'nang_cao' && '⭐ Nâng cao: Vận dụng so sánh, nhân hóa & từ ngữ gợi cảm'}
-              {difficultyLevel === 'sang_tao' && '✨ Sáng tạo: Góc nhìn mới mẻ, bất ngờ, cảm xúc lắng đọng'}
+              {promptRequirement.difficultyLevels.find(d => d.id === difficultyLevel)?.badgeText || '🌱 Cơ bản: Nắm chắc kết cấu chuẩn SGK'}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {[
-              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: 'Chuẩn SGK' },
-              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: 'Thêm quan sát' },
-              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: 'Từ ngữ gợi cảm' },
-              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: 'Ý tưởng mới lạ' }
-            ].map((dl) => (
+            {promptRequirement.difficultyLevels.map((dl) => (
               <button
                 key={dl.id}
                 type="button"
@@ -1940,7 +1860,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   <span>{dl.icon}</span>
                   <span>{dl.label}</span>
                 </div>
-                <span className="text-[10px] text-stone-500 block mt-0.5">{dl.desc}</span>
+                <span className="text-[10px] text-stone-500 block mt-0.5">{dl.shortDesc}</span>
               </button>
             ))}
           </div>
