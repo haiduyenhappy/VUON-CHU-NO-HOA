@@ -36,6 +36,8 @@ export interface Student {
   classId?: string; // ID lớp học (ví dụ: L3A)
   grade?: number; // Khối 1-5 theo chuẩn GDPT 2018
   username?: string; // Tên đăng nhập tiện lợi (vd: hs001 hoặc phamtuean)
+  firebaseUid?: string; // Firebase Authentication UID
+  uid?: string; // Định danh duy nhất (alias UID)
   accountStatus?: 'active' | 'locked' | 'deleted'; // Tình trạng tài khoản: đang hoạt động, tạm khóa, hoặc đã xóa
   lastLogin?: string; // Lần đăng nhập gần nhất
   temporaryPassword?: string; // Mật khẩu mới cấp một lần

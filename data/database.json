@@ -13,7 +13,7 @@
       "className": "Lớp 3 – Trường TH Lê Đức Thọ",
       "username": "hs001",
       "accountStatus": "active",
-      "lastLogin": "09:21:48 1/11/2026",
+      "lastLogin": "11:12:11 1/11/2026",
       "linkedCaregivers": [
         {
           "relation": "Bố / Mẹ",
@@ -27,7 +27,9 @@
       ],
       "temporaryPassword": "2016",
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs001",
+      "uid": "uid_hs001"
     },
     {
       "id": "HS002",
@@ -42,7 +44,7 @@
       "className": "Lớp 3 – Trường TH Lê Đức Thọ",
       "username": "hs002",
       "accountStatus": "active",
-      "lastLogin": "09:22:00 1/11/2026",
+      "lastLogin": "11:12:33 1/11/2026",
       "linkedCaregivers": [
         {
           "relation": "Bố / Mẹ",
@@ -55,7 +57,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs002",
+      "uid": "uid_hs002"
     },
     {
       "id": "HS003",
@@ -83,7 +87,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs003",
+      "uid": "uid_hs003"
     },
     {
       "id": "HS004",
@@ -111,7 +117,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs004",
+      "uid": "uid_hs004"
     },
     {
       "id": "HS005",
@@ -139,7 +147,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs005",
+      "uid": "uid_hs005"
     },
     {
       "id": "HS006",
@@ -167,7 +177,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs006",
+      "uid": "uid_hs006"
     },
     {
       "id": "HS007",
@@ -195,7 +207,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs007",
+      "uid": "uid_hs007"
     },
     {
       "id": "HS008",
@@ -223,7 +237,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs008",
+      "uid": "uid_hs008"
     },
     {
       "id": "HS009",
@@ -251,7 +267,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs009",
+      "uid": "uid_hs009"
     },
     {
       "id": "HS010",
@@ -279,7 +297,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs010",
+      "uid": "uid_hs010"
     },
     {
       "id": "HS011",
@@ -307,7 +327,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs011",
+      "uid": "uid_hs011"
     },
     {
       "id": "HS012",
@@ -335,7 +357,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs012",
+      "uid": "uid_hs012"
     },
     {
       "id": "HS013",
@@ -363,7 +387,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs013",
+      "uid": "uid_hs013"
     },
     {
       "id": "HS014",
@@ -391,7 +417,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs014",
+      "uid": "uid_hs014"
     },
     {
       "id": "HS015",
@@ -419,7 +447,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs015",
+      "uid": "uid_hs015"
     },
     {
       "id": "HS016",
@@ -447,7 +477,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs016",
+      "uid": "uid_hs016"
     },
     {
       "id": "HS017",
@@ -475,7 +507,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs017",
+      "uid": "uid_hs017"
     },
     {
       "id": "HS018",
@@ -503,7 +537,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs018",
+      "uid": "uid_hs018"
     },
     {
       "id": "HS019",
@@ -531,7 +567,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs019",
+      "uid": "uid_hs019"
     },
     {
       "id": "HS020",
@@ -559,7 +597,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs020",
+      "uid": "uid_hs020"
     },
     {
       "id": "HS021",
@@ -587,7 +627,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs021",
+      "uid": "uid_hs021"
     },
     {
       "id": "HS022",
@@ -615,7 +657,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs022",
+      "uid": "uid_hs022"
     },
     {
       "id": "HS023",
@@ -643,7 +687,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs023",
+      "uid": "uid_hs023"
     },
     {
       "id": "HS024",
@@ -671,7 +717,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs024",
+      "uid": "uid_hs024"
     },
     {
       "id": "HS025",
@@ -699,7 +747,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs025",
+      "uid": "uid_hs025"
     },
     {
       "id": "HS026",
@@ -727,7 +777,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs026",
+      "uid": "uid_hs026"
     },
     {
       "id": "HS027",
@@ -755,7 +807,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs027",
+      "uid": "uid_hs027"
     },
     {
       "id": "HS028",
@@ -783,7 +837,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs028",
+      "uid": "uid_hs028"
     },
     {
       "id": "HS029",
@@ -811,7 +867,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs029",
+      "uid": "uid_hs029"
     },
     {
       "id": "HS030",
@@ -839,7 +897,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs030",
+      "uid": "uid_hs030"
     },
     {
       "id": "HS031",
@@ -867,7 +927,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs031",
+      "uid": "uid_hs031"
     },
     {
       "id": "HS032",
@@ -895,7 +957,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs032",
+      "uid": "uid_hs032"
     },
     {
       "id": "HS033",
@@ -923,7 +987,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs033",
+      "uid": "uid_hs033"
     },
     {
       "id": "HS034",
@@ -951,7 +1017,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs034",
+      "uid": "uid_hs034"
     },
     {
       "id": "HS035",
@@ -979,7 +1047,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L3A"
+      "classId": "L3A",
+      "firebaseUid": "uid_hs035",
+      "uid": "uid_hs035"
     },
     {
       "id": "HS041",
@@ -1007,7 +1077,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L4B"
+      "classId": "L4B",
+      "firebaseUid": "uid_hs041",
+      "uid": "uid_hs041"
     },
     {
       "id": "HS042",
@@ -1035,7 +1107,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L4B"
+      "classId": "L4B",
+      "firebaseUid": "uid_hs042",
+      "uid": "uid_hs042"
     },
     {
       "id": "HS043",
@@ -1063,7 +1137,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L4B"
+      "classId": "L4B",
+      "firebaseUid": "uid_hs043",
+      "uid": "uid_hs043"
     },
     {
       "id": "HS044",
@@ -1091,7 +1167,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L4B"
+      "classId": "L4B",
+      "firebaseUid": "uid_hs044",
+      "uid": "uid_hs044"
     },
     {
       "id": "HS045",
@@ -1119,7 +1197,9 @@
         }
       ],
       "inviteCodes": [],
-      "classId": "L4B"
+      "classId": "L4B",
+      "firebaseUid": "uid_hs045",
+      "uid": "uid_hs045"
     }
   ],
   "submissions": [

@@ -141,6 +141,8 @@ export const LoginView: React.FC<LoginViewProps> = ({
     setIsLoading(true);
     playPop(settings.soundEnabled);
 
+    let authUser: AuthUser | null = null;
+
     try {
       // 1. Authenticate via backend /api/auth
       const res = await fetch('/api/auth', {
@@ -155,48 +157,100 @@ export const LoginView: React.FC<LoginViewProps> = ({
         })
       });
 
-      const data = await res.json();
-
-      if (res.ok && data.success) {
-        playChime(settings.soundEnabled);
-        let authUser: AuthUser;
-
-        if (role === 'teacher') {
-          authUser = {
-            role: 'teacher',
-            teacherId: data.teacherId || 'GV001',
-            teacherRole: data.teacherRole || 'SUPER_ADMIN',
-            teacherName: data.teacherName || 'Cô Nguyễn Thị Hải Duyên',
-            assignedClassIds: data.assignedClassIds || ['L3A'],
-            teacherProfile: data.teacherProfile,
-            token: data.token
-          };
-        } else if (role === 'student') {
-          authUser = {
-            role: 'student',
-            student: data.student
-          };
-        } else {
-          authUser = {
-            role: 'family',
-            student: data.student,
-            caregiver: data.caregiver,
-            parentName: data.caregiver?.name || (data.student ? `Phụ huynh em ${data.student.name.split(' ').slice(-1)[0]}` : undefined),
-            parentRelation: data.caregiver?.relation || 'Phụ huynh',
-            parentCode: data.caregiver?.code || data.student?.parentCode
-          };
+      let data: any = null;
+      const contentType = res.headers.get('content-type') || '';
+      if (contentType.includes('application/json')) {
+        try {
+          data = await res.json();
+        } catch {
+          throw new Error('Dữ liệu từ máy chủ không đúng định dạng JSON.');
         }
+      } else {
+        const text = await res.text();
+        throw new Error(`Máy chủ phản hồi định dạng không hợp lệ (${res.status}): ${text.slice(0, 100)}`);
+      }
 
-        onLoginSuccess(authUser);
+      if (!res.ok || !data?.success) {
+        // Specific error message based on HTTP status code and server response
+        if (res.status === 401) {
+          setErrorMsg(data?.message || 'Mật khẩu hoặc thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
+        } else if (res.status === 403) {
+          setErrorMsg(data?.message || 'Tài khoản đang bị khóa hoặc ngưng sử dụng. Vui lòng liên hệ giáo viên.');
+        } else if (res.status === 404) {
+          setErrorMsg(data?.message || 'Không tìm thấy tài khoản tương ứng với thông tin vừa nhập.');
+        } else if (res.status >= 500) {
+          setErrorMsg(data?.message || `Máy chủ gặp sự cố nội bộ (${res.status}). Vui lòng thử lại sau giây lát.`);
+        } else {
+          setErrorMsg(data?.message || 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
+        }
+        setIsLoading(false);
         return;
       }
 
-      setErrorMsg(data.message || 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.');
-    } catch (err) {
-      console.warn('Network auth error, falling back locally:', err);
-      setErrorMsg('Không thể kết nối đến máy chủ. Vui lòng kiểm tra lại kết nối mạng hoặc thử lại sau.');
-    } finally {
+      // Successful auth - build authUser
+      if (role === 'teacher') {
+        authUser = {
+          role: 'teacher',
+          teacherId: data.teacherId || 'GV001',
+          teacherRole: data.teacherRole || 'SUPER_ADMIN',
+          teacherName: data.teacherName || 'Cô Nguyễn Thị Hải Duyên',
+          assignedClassIds: data.assignedClassIds || ['L3A'],
+          teacherProfile: data.teacherProfile,
+          token: data.token
+        };
+      } else if (role === 'student') {
+        if (!data.student || !data.student.id) {
+          setErrorMsg('Lỗi tải hồ sơ học sinh: Dữ liệu hồ sơ học sinh không hợp lệ hoặc thiếu thông tin định danh.');
+          setIsLoading(false);
+          return;
+        }
+        authUser = {
+          role: 'student',
+          student: data.student
+        };
+      } else {
+        if (!data.student && !data.caregiver) {
+          setErrorMsg('Lỗi tải hồ sơ gia đình: Không tìm thấy thông tin liên kết.');
+          setIsLoading(false);
+          return;
+        }
+        authUser = {
+          role: 'family',
+          student: data.student,
+          caregiver: data.caregiver,
+          parentName: data.caregiver?.name || (data.student ? `Phụ huynh em ${data.student.name.split(' ').slice(-1)[0]}` : undefined),
+          parentRelation: data.caregiver?.relation || 'Phụ huynh',
+          parentCode: data.caregiver?.code || data.student?.parentCode
+        };
+      }
+    } catch (err: any) {
+      console.error('Lỗi trong quá trình đăng nhập:', err);
+      // Strictly diagnose error cause - DO NOT blindly report "Không thể kết nối máy chủ"
+      const isNetworkFail = err instanceof TypeError && (
+        err.message.includes('fetch') || 
+        err.message.includes('NetworkError') || 
+        err.message.includes('Failed to fetch')
+      );
+      if (isNetworkFail) {
+        setErrorMsg('Không thể kết nối đến máy chủ mạng. Vui lòng kiểm tra đường truyền Internet của em.');
+      } else {
+        setErrorMsg(err.message || 'Có lỗi xảy ra khi xác thực tài khoản. Vui lòng thử lại.');
+      }
       setIsLoading(false);
+      return;
+    }
+
+    // Call onLoginSuccess outside the network catch block
+    if (authUser) {
+      playChime(settings.soundEnabled);
+      try {
+        onLoginSuccess(authUser);
+      } catch (renderErr: any) {
+        console.error('Lỗi giao diện sau đăng nhập:', renderErr);
+        setErrorMsg(`Lỗi hiển thị sau đăng nhập: ${renderErr.message || 'Vui lòng tải lại trang.'}`);
+      } finally {
+        setIsLoading(false);
+      }
     }
   };
 

@@ -1,7 +1,7 @@
 import type { Student } from '../types/index.ts';
 
 export const INITIAL_STUDENTS: Student[] = [
-  { id: 'HS001', name: 'Phạm Đăng Tuệ An', demoName: 'Tuệ An', avatar: '🌸', pin: '2016', parentCode: 'PH001', treeLevel: 3, flowersEarned: 8, starsEarned: 24, classId: 'L3A', className: 'Lớp 3A – Trường TH Lê Đức Thọ' },
+  { id: 'HS001', name: 'Phạm Đăng Tuệ An', demoName: 'Tuệ An', avatar: '🌸', pin: '2016', username: 'hs001', firebaseUid: 'uid_hs001', uid: 'uid_hs001', parentCode: 'PH001', treeLevel: 3, flowersEarned: 8, starsEarned: 24, classId: 'L3A', className: 'Lớp 3A – Trường TH Lê Đức Thọ' },
   { id: 'HS002', name: 'Trần Lưu Bảo An', demoName: 'Bảo An', avatar: '🌻', pin: '2016', parentCode: 'PH002', treeLevel: 4, flowersEarned: 12, starsEarned: 35, classId: 'L3A', className: 'Lớp 3A – Trường TH Lê Đức Thọ' },
   { id: 'HS003', name: 'Lưu Cát Vy Anh', demoName: 'Vy Anh', avatar: '🌷', pin: '2016', parentCode: 'PH003', treeLevel: 2, flowersEarned: 5, starsEarned: 15, classId: 'L3A', className: 'Lớp 3A – Trường TH Lê Đức Thọ' },
   { id: 'HS004', name: 'Nguyễn Hoàng Phương Anh', demoName: 'Phương Anh', avatar: '🌼', pin: '2016', parentCode: 'PH004', treeLevel: 3, flowersEarned: 9, starsEarned: 26, classId: 'L3A', className: 'Lớp 3A – Trường TH Lê Đức Thọ' },

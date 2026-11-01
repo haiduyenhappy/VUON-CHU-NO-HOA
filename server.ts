@@ -993,6 +993,8 @@ function loadDatabase(): DatabaseStructure {
           classId: s.classId || 'L3A',
           className: s.className || (s.classId === 'L4B' ? 'Lớp 4B – Trường TH Lê Đức Thọ' : 'Lớp 3 – Trường TH Lê Đức Thọ'),
           username: s.username || studentId.toLowerCase(),
+          firebaseUid: s.firebaseUid || s.uid || `uid_${studentId.toLowerCase()}`,
+          uid: s.uid || s.firebaseUid || `uid_${studentId.toLowerCase()}`,
           accountStatus: s.accountStatus || 'active',
           lastLogin: s.lastLogin || (idx === 0 ? 'Hôm nay 08:15' : idx === 1 ? 'Hôm qua 15:30' : 'Chưa đăng nhập'),
           linkedCaregivers: caregivers,
@@ -1001,6 +1003,11 @@ function loadDatabase(): DatabaseStructure {
 
         if (studentObj.id === 'HS001') {
           studentObj.pin = '2016';
+          studentObj.username = 'hs001';
+          studentObj.name = 'Phạm Đăng Tuệ An';
+          studentObj.classId = 'L3A';
+          studentObj.parentCode = 'PH001';
+          studentObj.accountStatus = 'active';
           if (studentObj.temporaryPassword === 'HoaNho2026' || studentObj.temporaryPassword === '2026') {
             studentObj.temporaryPassword = '2016';
           }
@@ -1208,6 +1215,55 @@ app.get('/api/students', (req, res) => {
   res.json({ students: db.students });
 });
 
+// 2b. Get student profile by query or header
+app.get('/api/student/profile', (req, res) => {
+  const studentId = (req.query.studentId || req.query.id || req.query.username || req.query.uid || req.headers['x-student-id'] || '').toString().trim();
+  if (!studentId) {
+    return res.status(400).json({ success: false, message: 'Thiếu mã học sinh hoặc định danh học sinh.' });
+  }
+  const db = loadDatabase();
+  const clean = studentId.toLowerCase();
+  const numMatch = clean.replace(/[^0-9]/g, '');
+  const paddedId = numMatch ? `HS${numMatch.padStart(3, '0')}` : '';
+
+  const student = db.students?.find((s: any) => 
+    s.id.toLowerCase() === clean ||
+    (s.username && s.username.toLowerCase() === clean) ||
+    (paddedId && s.id.toLowerCase() === paddedId.toLowerCase()) ||
+    (s.firebaseUid && s.firebaseUid.toLowerCase() === clean) ||
+    (s.uid && s.uid.toLowerCase() === clean)
+  );
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: `Không tìm thấy hồ sơ học sinh với mã ${studentId}.` });
+  }
+
+  return res.json({ success: true, student });
+});
+
+// 2c. Get individual student by ID or username parameter
+app.get('/api/students/:id', (req, res) => {
+  const studentId = (req.params.id || '').trim();
+  const db = loadDatabase();
+  const clean = studentId.toLowerCase();
+  const numMatch = clean.replace(/[^0-9]/g, '');
+  const paddedId = numMatch ? `HS${numMatch.padStart(3, '0')}` : '';
+
+  const student = db.students?.find((s: any) => 
+    s.id.toLowerCase() === clean ||
+    (s.username && s.username.toLowerCase() === clean) ||
+    (paddedId && s.id.toLowerCase() === paddedId.toLowerCase()) ||
+    (s.firebaseUid && s.firebaseUid.toLowerCase() === clean) ||
+    (s.uid && s.uid.toLowerCase() === clean)
+  );
+
+  if (!student) {
+    return res.status(404).json({ success: false, message: `Không tìm thấy học sinh với mã ${studentId}.` });
+  }
+
+  return res.json({ success: true, student });
+});
+
 // 3. Authenticate with flexible username/password/code support
 app.post('/api/auth', (req, res) => {
   const { role, code, studentId, username, identifier, password } = req.body;
@@ -1383,16 +1439,18 @@ app.post('/api/auth', (req, res) => {
     const numMatch = cleanInput.replace(/[^0-9]/g, '');
     const paddedId = numMatch ? `HS${numMatch.padStart(3, '0')}` : '';
 
-    // First try exact matches (username, ID, padded ID)
-    let student = db.students.find(s => 
+    // First try exact matches (username, ID, padded ID, firebaseUid, uid)
+    let student = db.students?.find((s: any) => 
       s.id.toLowerCase() === cleanInput ||
       (s.username && s.username.toLowerCase() === cleanInput) ||
-      (paddedId && s.id.toLowerCase() === paddedId.toLowerCase())
+      (paddedId && s.id.toLowerCase() === paddedId.toLowerCase()) ||
+      (s.firebaseUid && s.firebaseUid.toLowerCase() === cleanInput) ||
+      (s.uid && s.uid.toLowerCase() === cleanInput)
     );
 
     // If still not found and input has at least 2 letters, check name search
     if (!student && cleanInput.length >= 2) {
-      const matchedByName = db.students.filter(s => 
+      const matchedByName = (db.students || []).filter((s: any) => 
         s.name.toLowerCase() === cleanInput ||
         s.name.toLowerCase().includes(cleanInput) ||
         s.demoName.toLowerCase() === cleanInput ||
@@ -1402,7 +1460,7 @@ app.post('/api/auth', (req, res) => {
       if (matchedByName.length > 1) {
         return res.status(400).json({ 
           success: false, 
-          message: 'Có nhiều học sinh trùng tên này. Em hãy nhập chính xác Mã học sinh (ví dụ: HS001) nhé!' 
+          message: 'Có nhiều học sinh trùng tên này. Em hãy nhập chính xác Mã học sinh (ví dụ: HS001 hoặc hs001) nhé!' 
         });
       } else if (matchedByName.length === 1) {
         student = matchedByName[0];
@@ -1410,7 +1468,7 @@ app.post('/api/auth', (req, res) => {
     }
 
     if (!student) {
-      return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
+      return res.status(404).json({ success: false, message: 'Không tìm thấy tài khoản học sinh tương ứng với thông tin vừa nhập. Em hãy kiểm tra lại mã học sinh (ví dụ: HS001 hoặc hs001) nhé!' });
     }
 
     if (student.accountStatus === 'deleted') {
@@ -1421,12 +1479,19 @@ app.post('/api/auth', (req, res) => {
       return res.status(403).json({ success: false, message: 'Tài khoản của em hiện đang tạm khóa. Em hãy liên hệ giáo viên để được mở khóa nhé!' });
     }
 
-    if (rawPass && (rawPass === student.temporaryPassword || rawPass === student.pin || rawPass === '2016' || rawPass === '123456')) {
+    const isPasswordValid = rawPass && (
+      rawPass === student.temporaryPassword ||
+      rawPass === student.pin ||
+      rawPass === '2016' ||
+      rawPass === '123456'
+    );
+
+    if (isPasswordValid) {
       student.lastLogin = new Date().toLocaleString('vi-VN');
       saveDatabase(db);
       return res.json({ success: true, role: 'student', student });
     }
-    return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
+    return res.status(401).json({ success: false, message: 'Mật khẩu chưa chính xác. Em hãy kiểm tra lại mật khẩu (mã PIN) nhé!' });
   }
 
   res.status(400).json({ success: false, message: 'Yêu cầu không hợp lệ.' });
