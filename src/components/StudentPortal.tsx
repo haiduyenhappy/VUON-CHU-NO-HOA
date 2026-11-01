@@ -774,250 +774,244 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             )}
           </div>
 
-          {/* Intro instruction from Hoa Nho */}
-          <div className="bg-amber-50 border-2 border-amber-300 rounded-3xl p-4 sm:p-5 flex items-center gap-4">
-            <HoaNhoMascot mood="happy" size="sm" reducedMotion={settings.reducedMotion} />
-            <div>
-              <h3 className="font-bold text-amber-950 text-base sm:text-lg font-display">
-                {activeMainTab === 'teacher_assignments'
-                  ? 'Bài tập thầy cô giao riêng cho con!'
-                  : activeMainTab === 'other_topics'
-                  ? 'Khám phá 24 chủ đề sáng tạo mở rộng!'
-                  : 'Em chọn bài viết hôm nay nhé!'}
-              </h3>
-              <p className="text-xs sm:text-sm text-stone-700 font-medium">
-                {activeMainTab === 'teacher_assignments'
-                  ? 'Hãy chọn bài tập con muốn làm và bấm "Bắt đầu làm bài" để cùng Hoa Nhỏ gieo hạt ý tưởng nhé!'
-                  : activeMainTab === 'other_topics'
-                  ? 'Bấm "🌸 Luyện viết với Hoa Nhỏ" để lập tức mở Bản đồ ý tưởng (Trang 1) với dàn ý chi tiết và ngân hàng từ ngữ sinh động!'
-                  : 'Em có thể chọn "🌸 Luyện viết với Hoa Nhỏ" để bắt đầu tìm ý và lập dàn ý 3 phần, hoặc chọn "⭐ Em tự thử sức" để tự mình viết độc lập.'}
-              </p>
+          {/* Intro instruction from Hoa Nho (Chỉ hiển thị cho các tab tự chọn: Tập 1, Tập 2, Chủ đề khác) */}
+          {activeMainTab !== 'teacher_assignments' && activeMainTab !== 'my_submissions' && (
+            <div className="bg-amber-50 border-2 border-amber-300 rounded-3xl p-4 sm:p-5 flex items-center gap-4">
+              <HoaNhoMascot mood="happy" size="sm" reducedMotion={settings.reducedMotion} />
+              <div>
+                <h3 className="font-bold text-amber-950 text-base sm:text-lg font-display">
+                  {activeMainTab === 'other_topics'
+                    ? 'Khám phá 24 chủ đề sáng tạo mở rộng!'
+                    : 'Em chọn bài viết hôm nay nhé!'}
+                </h3>
+                <p className="text-xs sm:text-sm text-stone-700 font-medium">
+                  {activeMainTab === 'other_topics'
+                    ? 'Bấm "🌸 Luyện viết với Hoa Nhỏ" để lập tức mở Bản đồ ý tưởng (Trang 1) với dàn ý chi tiết và ngân hàng từ ngữ sinh động!'
+                    : 'Em có thể chọn "🌸 Luyện viết với Hoa Nhỏ" để bắt đầu tìm ý và lập dàn ý 3 phần, hoặc chọn "⭐ Em tự thử sức" để tự mình viết độc lập.'}
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {/* TASKS GRID: Teacher Assignments, Curriculum Tasks, Other Creative Topics, or My Submissions */}
           {activeMainTab === 'teacher_assignments' ? (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {assignedTasks.map((item) => {
-                  const studentStatus = item.studentStatus || 'not_started';
-                  const isDone = studentStatus === 'reviewed';
-                  const isSubmitted = studentStatus === 'submitted';
-                  const isInProgress = studentStatus === 'in_progress';
-
-                  return (
-                    <div
-                      key={item.id}
-                      className="bg-white rounded-3xl border-2 border-emerald-200 hover:border-emerald-400 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3"
-                    >
-                      <div className="space-y-2.5">
-                        <div className="flex items-center justify-between gap-2 flex-wrap">
-                          <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                            Khối {item.grade} • {item.genre}
-                          </span>
-
-                          <div>
-                            {isDone ? (
-                              <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-600 text-white flex items-center gap-1">
-                                <span>🌸</span>
-                                <span>Đã nhận xét {item.submission?.score !== undefined ? `(${item.submission.score}/10)` : ''}</span>
-                              </span>
-                            ) : isSubmitted ? (
-                              <span className="text-xs font-black px-3 py-1 rounded-full bg-amber-500 text-white flex items-center gap-1">
-                                <span>📤</span>
-                                <span>Đã nộp bài</span>
-                              </span>
-                            ) : isInProgress ? (
-                              <span className="text-xs font-black px-3 py-1 rounded-full bg-sky-500 text-white flex items-center gap-1">
-                                <span>📝</span>
-                                <span>Đang viết dở</span>
-                              </span>
-                            ) : (
-                              <span className="text-xs font-black px-3 py-1 rounded-full bg-stone-200 text-stone-700 flex items-center gap-1">
-                                <span>⏳</span>
-                                <span>Chưa làm</span>
-                              </span>
-                            )}
-                          </div>
-                        </div>
-
-                        <h4 className="text-base sm:text-lg font-bold text-stone-900 font-display">
-                          {item.title}
-                        </h4>
-
-                        <p className="text-xs sm:text-sm text-stone-600 line-clamp-3 leading-relaxed font-medium bg-stone-50/80 p-3 rounded-2xl border border-stone-100 italic">
-                          "{item.prompt}"
-                        </p>
-
-                        <div className="flex flex-wrap items-center justify-between text-xs text-stone-500 font-medium pt-1">
-                          <span>Giáo viên giao: <strong className="text-stone-800">{item.teacherName}</strong></span>
-                          {item.dueDate && (
-                            <span className="text-rose-600 font-bold">
-                              Hạn nộp: {new Date(item.dueDate).toLocaleDateString('vi-VN')}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Action buttons based on student status */}
-                      <div className="pt-3 border-t border-emerald-100 flex items-center gap-2">
-                        {isDone ? (
-                          <button
-                            onClick={() => {
-                              playPop(settings.soundEnabled);
-                              setActiveMainTab('my_submissions');
-                            }}
-                            className="w-full py-2.5 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <span>🌸 Xem lời cô nhận xét & Bông hoa khen tặng</span>
-                          </button>
-                        ) : isSubmitted ? (
-                          <div className="w-full p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900 font-bold">
-                            Bài của em đã được gửi an toàn cho thầy/cô. Đang chờ cô đọc và nhận xét!
-                          </div>
-                        ) : isInProgress ? (
-                          <button
-                            onClick={() => handleStartAssignedTask(item)}
-                            className="w-full py-2.5 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Pencil className="w-4 h-4" />
-                            <span>✏️ Viết tiếp bài tập này</span>
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => handleStartAssignedTask(item)}
-                            className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Sparkles className="w-4 h-4 text-yellow-200" />
-                            <span>🚀 Bắt đầu làm bài</span>
-                          </button>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Khi ĐÃ CÓ bài cô giao: Hiển thị thêm mục Bài luyện cùng Hoa Nhỏ để học sinh rèn luyện thêm */}
-              {assignedTasks.length > 0 && recommendedPracticeTasks.length > 0 && (
-                <div className="pt-6 border-t border-emerald-100 space-y-3">
+            <div className="space-y-6">
+              {/* TRƯỜNG HỢP 1 – CÓ BÀI TẬP GIÁO VIÊN GIAO */}
+              {assignedTasks.length > 0 ? (
+                <div className="space-y-4">
+                  {/* Tiêu đề ngắn gọn, rõ ràng */}
                   <div className="flex items-center justify-between">
-                    <h4 className="text-sm sm:text-base font-bold text-stone-900 flex items-center gap-1.5">
-                      <span>🌸</span>
-                      <span>Bài luyện cùng Hoa Nhỏ (Gợi ý thêm cho con):</span>
-                    </h4>
-                    <span className="text-xs text-stone-500 font-medium">Tự do sáng tạo</span>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {recommendedPracticeTasks.map((recTask) => (
-                      <div
-                        key={recTask.id}
-                        className="bg-white rounded-3xl border-2 border-pink-200 hover:border-pink-300 p-5 shadow-xs transition-all flex flex-col justify-between space-y-3"
-                      >
-                        <div className="space-y-2">
-                          <div className="flex items-center justify-between gap-2">
-                            <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-pink-100 text-pink-800">
-                              Lớp {recTask.grade || activeGrade} • {recTask.volume === 2 ? 'Tập 2' : 'Tập 1'}
-                            </span>
-                            <span className="text-xs font-medium text-stone-500">
-                              Tuần {recTask.week}
-                            </span>
-                          </div>
-
-                          <h5 className="text-sm sm:text-base font-bold text-stone-900 font-display">
-                            {recTask.title}
-                          </h5>
-
-                          <p className="text-xs sm:text-sm text-stone-600 line-clamp-2 italic bg-stone-50 p-2.5 rounded-xl border border-stone-100">
-                            "{recTask.prompt}"
-                          </p>
-                        </div>
-
-                        <div className="pt-2 border-t border-pink-100">
-                          <button
-                            onClick={() => handlePracticeWithHoaNho(recTask.prompt, (recTask.genre as any) || 'ke_su_viec', recTask)}
-                            className="w-full py-2 px-3 rounded-2xl bg-gradient-to-r from-pink-500 to-purple-600 hover:from-pink-600 hover:to-purple-700 text-white font-extrabold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
-                          >
-                            <Sparkles className="w-3.5 h-3.5 text-yellow-200" />
-                            <span>🌸 Luyện viết bài này</span>
-                          </button>
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              {/* Khi CHƯA CÓ bài cô giao: Banner Hoa Nhỏ Mời Con Khám Phá & 1-2 bài luyện */}
-              {assignedTasks.length === 0 && (
-                <div className="space-y-6">
-                  {/* Banner khám phá mới */}
-                  <div className="bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50 rounded-3xl border-2 border-pink-200 p-6 sm:p-8 text-center space-y-3 shadow-xs">
-                    <span className="text-4xl inline-block animate-bounce">🌸</span>
-                    <h3 className="text-lg sm:text-xl font-black text-rose-900 font-display">
-                      🌸 HOA NHỎ MỜI CON KHÁM PHÁ!
+                    <h3 className="text-base sm:text-lg font-bold text-stone-900 font-display flex items-center gap-2">
+                      <span>📚</span>
+                      <span>Bài cô giao cho con</span>
+                      <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                        {assignedTasks.length} bài
+                      </span>
                     </h3>
-                    <p className="text-sm sm:text-base text-stone-700 max-w-xl mx-auto font-medium leading-relaxed">
-                      Hôm nay, chúng mình cùng gieo những ý tưởng thật xinh nhé! Hoa Nhỏ đã chọn sẵn những bài luyện viết phù hợp với con. Hãy chọn một bài yêu thích và bắt đầu hành trình sáng tạo nào!
-                    </p>
-                    <div className="inline-flex items-center gap-2 px-3.5 py-1 bg-white/90 rounded-full border border-pink-200 text-xs text-rose-700 font-bold shadow-2xs">
-                      <span>🌱</span>
-                      <span>Gợi ý chuẩn GDPT 2018 dành riêng cho con ({student.className || `Lớp ${activeGrade}`})</span>
-                    </div>
                   </div>
 
-                  {/* 1–2 Thẻ bài luyện với nút Bắt đầu luyện viết */}
-                  <div className="space-y-3">
-                    <div className="flex items-center justify-between">
-                      <h4 className="text-sm sm:text-base font-bold text-stone-900 flex items-center gap-1.5">
-                        <span>✨</span>
-                        <span>Bài luyện cùng Hoa Nhỏ:</span>
-                      </h4>
-                      <span className="text-xs text-stone-500 font-medium">Bấm để viết ngay cùng Hoa Nhỏ</span>
-                    </div>
+                  {/* Danh sách bài tập thực tế */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {assignedTasks.map((item) => {
+                      const studentStatus = item.studentStatus || 'not_started';
+                      const isDone = studentStatus === 'reviewed';
+                      const isSubmitted = studentStatus === 'submitted';
+                      const isInProgress = studentStatus === 'in_progress';
 
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {recommendedPracticeTasks.map((recTask) => (
+                      return (
                         <div
-                          key={recTask.id}
+                          key={item.id}
                           className="bg-white rounded-3xl border-2 border-emerald-200 hover:border-emerald-400 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3"
                         >
                           <div className="space-y-2.5">
                             <div className="flex items-center justify-between gap-2 flex-wrap">
                               <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
-                                Lớp {recTask.grade || activeGrade} • {recTask.volume === 2 ? 'Tập 2' : 'Tập 1'} • Tuần {recTask.week}
+                                Khối {item.grade} • {item.genre}
                               </span>
-                              <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
-                                {recTask.expectedLength || 'Bài luyện viết'}
-                              </span>
+
+                              <div>
+                                {isDone ? (
+                                  <span className="text-xs font-black px-3 py-1 rounded-full bg-emerald-600 text-white flex items-center gap-1">
+                                    <span>🌸</span>
+                                    <span>Đã nhận xét {item.submission?.score !== undefined ? `(${item.submission.score}/10)` : ''}</span>
+                                  </span>
+                                ) : isSubmitted ? (
+                                  <span className="text-xs font-black px-3 py-1 rounded-full bg-amber-500 text-white flex items-center gap-1">
+                                    <span>📤</span>
+                                    <span>Đã nộp bài</span>
+                                  </span>
+                                ) : isInProgress ? (
+                                  <span className="text-xs font-black px-3 py-1 rounded-full bg-sky-500 text-white flex items-center gap-1">
+                                    <span>📝</span>
+                                    <span>Đang viết dở</span>
+                                  </span>
+                                ) : (
+                                  <span className="text-xs font-black px-3 py-1 rounded-full bg-stone-200 text-stone-700 flex items-center gap-1">
+                                    <span>⏳</span>
+                                    <span>Chưa làm</span>
+                                  </span>
+                                )}
+                              </div>
                             </div>
 
                             <h4 className="text-base sm:text-lg font-bold text-stone-900 font-display">
-                              {recTask.title}
+                              {item.title}
                             </h4>
 
                             <p className="text-xs sm:text-sm text-stone-600 line-clamp-3 leading-relaxed font-medium bg-stone-50/80 p-3 rounded-2xl border border-stone-100 italic">
-                              "{recTask.prompt}"
+                              "{item.prompt}"
                             </p>
 
-                            <div className="text-[11px] text-stone-500 font-medium">
-                              Mục tiêu: <strong className="text-stone-700">{recTask.gradeMission || 'Tập viết câu & ý tưởng'}</strong>
+                            <div className="flex flex-wrap items-center justify-between text-xs text-stone-500 font-medium pt-1">
+                              <span>Giáo viên giao: <strong className="text-stone-800">{item.teacherName}</strong></span>
+                              {item.dueDate && (
+                                <span className="text-rose-600 font-bold">
+                                  Hạn nộp: {new Date(item.dueDate).toLocaleDateString('vi-VN')}
+                                </span>
+                              )}
                             </div>
                           </div>
 
-                          <div className="pt-3 border-t border-emerald-100">
-                            <button
-                              onClick={() => handlePracticeWithHoaNho(recTask.prompt, (recTask.genre as any) || 'ke_su_viec', recTask)}
-                              className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center justify-center gap-2 cursor-pointer"
-                            >
-                              <Sparkles className="w-4 h-4 text-yellow-200" />
-                              <span>🚀 Bắt đầu luyện viết</span>
-                            </button>
+                          {/* Action buttons based on student status */}
+                          <div className="pt-3 border-t border-emerald-100 flex items-center gap-2">
+                            {isDone ? (
+                              <button
+                                onClick={() => {
+                                  playPop(settings.soundEnabled);
+                                  setActiveMainTab('my_submissions');
+                                }}
+                                className="w-full py-2.5 px-3 rounded-2xl bg-emerald-600 hover:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <span>🌸 Xem lời cô nhận xét & Bông hoa khen tặng</span>
+                              </button>
+                            ) : isSubmitted ? (
+                              <div className="w-full p-2.5 rounded-2xl bg-amber-50 border border-amber-200 text-center text-xs text-amber-900 font-bold">
+                                Bài của em đã được gửi an toàn cho thầy/cô. Đang chờ cô đọc và nhận xét!
+                              </div>
+                            ) : isInProgress ? (
+                              <button
+                                onClick={() => handleStartAssignedTask(item)}
+                                className="w-full py-2.5 px-3 rounded-2xl bg-sky-500 hover:bg-sky-600 text-white font-extrabold text-xs sm:text-sm shadow-xs transition-colors flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Pencil className="w-4 h-4" />
+                                <span>✏️ Viết tiếp bài tập này</span>
+                              </button>
+                            ) : (
+                              <button
+                                onClick={() => handleStartAssignedTask(item)}
+                                className="w-full py-2.5 px-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Sparkles className="w-4 h-4 text-yellow-200" />
+                                <span>🚀 Bắt đầu làm bài</span>
+                              </button>
+                            )}
                           </div>
                         </div>
-                      ))}
+                      );
+                    })}
+                  </div>
+
+                  {/* Khu vực bài tự luyện ở phía dưới, không lặp lời chào hay mascot */}
+                  {recommendedPracticeTasks.length > 0 && (
+                    <div className="pt-6 border-t border-stone-200 space-y-3">
+                      <div className="flex items-center justify-between">
+                        <h4 className="text-sm sm:text-base font-bold text-stone-900 flex items-center gap-1.5 font-display">
+                          <span>✨</span>
+                          <span>Bài tự luyện cùng Hoa Nhỏ:</span>
+                        </h4>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {recommendedPracticeTasks.map((recTask) => (
+                          <div
+                            key={recTask.id}
+                            className="bg-white rounded-3xl border-2 border-stone-200 hover:border-emerald-300 p-5 shadow-xs transition-all flex flex-col justify-between space-y-3"
+                          >
+                            <div className="space-y-2">
+                              <div className="flex items-center justify-between gap-2">
+                                <span className="text-xs font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800">
+                                  Lớp {recTask.grade || activeGrade} • {recTask.volume === 2 ? 'Tập 2' : 'Tập 1'}
+                                </span>
+                                <span className="text-xs font-medium text-stone-500">
+                                  Tuần {recTask.week}
+                                </span>
+                              </div>
+
+                              <h5 className="text-sm sm:text-base font-bold text-stone-900 font-display">
+                                {recTask.title}
+                              </h5>
+
+                              <p className="text-xs sm:text-sm text-stone-600 line-clamp-2 italic bg-stone-50 p-2.5 rounded-xl border border-stone-100">
+                                "{recTask.prompt}"
+                              </p>
+                            </div>
+
+                            <div className="pt-2 border-t border-stone-100">
+                              <button
+                                onClick={() => handlePracticeWithHoaNho(recTask.prompt, (recTask.genre as any) || 'ke_su_viec', recTask)}
+                                className="w-full py-2 px-3 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs shadow-xs transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                              >
+                                <Sparkles className="w-3.5 h-3.5 text-yellow-200" />
+                                <span>Bắt đầu luyện viết</span>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
                     </div>
+                  )}
+                </div>
+              ) : (
+                /* TRƯỜNG HỢP 2 – CHƯA CÓ BÀI TẬP GIÁO VIÊN GIAO */
+                <div className="space-y-4">
+                  {/* Khung duy nhất: 🌸 Hoa Nhỏ mời con luyện viết! */}
+                  <div className="bg-gradient-to-br from-pink-50 via-rose-50 to-amber-50 rounded-3xl border-2 border-pink-200 p-5 sm:p-6 text-center space-y-2 shadow-xs">
+                    <span className="text-3xl inline-block">🌸</span>
+                    <h3 className="text-base sm:text-lg font-black text-rose-950 font-display">
+                      🌸 Hoa Nhỏ mời con luyện viết!
+                    </h3>
+                    <p className="text-xs sm:text-sm text-stone-700 max-w-lg mx-auto font-medium leading-relaxed">
+                      Hoa Nhỏ đã chọn sẵn những bài viết thú vị dành cho con. Chọn một bài và cùng bắt đầu nhé!
+                    </p>
+                  </div>
+
+                  {/* 1–2 Bài luyện phù hợp với khối lớp và bộ sách Kết nối tri thức */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {recommendedPracticeTasks.map((recTask) => (
+                      <div
+                        key={recTask.id}
+                        className="bg-white rounded-3xl border-2 border-emerald-200 hover:border-emerald-400 p-5 shadow-xs hover:shadow-md transition-all flex flex-col justify-between space-y-3"
+                      >
+                        <div className="space-y-2.5">
+                          <div className="flex items-center justify-between gap-2 flex-wrap">
+                            <span className="text-xs font-black px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-900 border border-emerald-300">
+                              Lớp {recTask.grade || activeGrade} • {recTask.volume === 2 ? 'Tập 2' : 'Tập 1'} • Tuần {recTask.week}
+                            </span>
+                            <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-stone-100 text-stone-600">
+                              {recTask.expectedLength || 'Bài luyện viết'}
+                            </span>
+                          </div>
+
+                          <h4 className="text-base sm:text-lg font-bold text-stone-900 font-display">
+                            {recTask.title}
+                          </h4>
+
+                          <p className="text-xs sm:text-sm text-stone-600 line-clamp-3 leading-relaxed font-medium bg-stone-50/80 p-3 rounded-2xl border border-stone-100 italic">
+                            "{recTask.prompt}"
+                          </p>
+                        </div>
+
+                        <div className="pt-3 border-t border-emerald-100">
+                          <button
+                            onClick={() => handlePracticeWithHoaNho(recTask.prompt, (recTask.genre as any) || 'ke_su_viec', recTask)}
+                            className="w-full py-2.5 px-4 rounded-2xl bg-gradient-to-r from-emerald-600 to-teal-700 hover:from-emerald-700 hover:to-teal-800 text-white font-extrabold text-xs sm:text-sm shadow-md transition-all hover:scale-102 flex items-center justify-center gap-2 cursor-pointer"
+                          >
+                            <Sparkles className="w-4 h-4 text-yellow-200" />
+                            <span>Bắt đầu luyện viết</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               )}
