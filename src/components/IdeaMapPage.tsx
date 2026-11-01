@@ -190,7 +190,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   }, [initialGrade]);
 
-  const [specialWishes, setSpecialWishes] = useState<string>('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
+  const [specialWishes, setSpecialWishes] = useState<string>('');
 
   // AI Understanding state ("HOA NHỎ CÙNG CON HIỂU ĐỀ")
   const [isUnderstandingLoading, setIsUnderstandingLoading] = useState(false);
@@ -1886,9 +1886,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           </h3>
         </div>
 
-        <p className="text-sm text-stone-600 font-medium">
-          Gợi ý dưới đây đã được điều chỉnh theo đề bài và lớp của con. Con có thể tự gõ mong muốn riêng hoặc bấm chọn nhanh những gợi ý đáng yêu dưới đây:
-        </p>
+        <p className="text-sm text-stone-600 font-medium">Con muốn kể thêm điều gì? Hãy chọn ý con thích nhé!</p>
 
         {/* Quick wish pills */}
         <div className="flex flex-wrap gap-2">
@@ -1933,18 +1931,18 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               <span>Mức độ thử thách rèn luyện:</span>
             </label>
             <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-              {difficultyLevel === 'co_ban' && '🌱 Cơ bản: Nắm chắc kết cấu chuẩn SGK'}
-              {difficultyLevel === 'mo_rong' && '🌿 Mở rộng: Quan sát phong phú, liên tưởng mở rộng'}
-              {difficultyLevel === 'nang_cao' && '⭐ Nâng cao: Vận dụng so sánh, nhân hóa & từ ngữ gợi cảm'}
-              {difficultyLevel === 'sang_tao' && '✨ Sáng tạo: Góc nhìn mới mẻ, bất ngờ, cảm xúc lắng đọng'}
+              {difficultyLevel === 'co_ban' && '🌱 Cơ bản: Kể đủ những điều đề yêu cầu'}
+              {difficultyLevel === 'mo_rong' && '🌿 Mở rộng: Thêm một chi tiết con nhớ rõ'}
+              {difficultyLevel === 'nang_cao' && '⭐ Nâng cao: Nói vì sao con thích điều ấy'}
+              {difficultyLevel === 'sang_tao' && '✨ Sáng tạo: Kể bằng nét riêng của con'}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: 'Chuẩn SGK' },
-              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: 'Thêm quan sát' },
-              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: 'Từ ngữ gợi cảm' },
-              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: 'Ý tưởng mới lạ' }
+              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: 'Đủ ý của đề' },
+              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: 'Thêm chi tiết' },
+              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: 'Nêu lí do' },
+              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: 'Nét riêng của con' }
             ].map((dl) => (
               <button
                 key={dl.id}
