@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   Student, 
   WritingTask, 
@@ -58,8 +58,8 @@ import {
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
-import { isFamilyLoveGrade1Prompt, isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
-import { analyzePromptRequirements, purgeIncompatibleWishes } from '../utils/promptRequirementAnalyzer';
+import { getWritingWishes } from '../utils/writingWishEngine';
+import { isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
 
 interface DirectionDraft {
   mindMapBranches: MindMapBranch[];
@@ -163,6 +163,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   useEffect(() => {
     if (initialPrompt) {
       setPromptText(initialPrompt);
+      setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
     }
   }, [initialPrompt]);
 
@@ -189,7 +190,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   }, [initialGrade]);
 
-  const [specialWishes, setSpecialWishes] = useState<string>('Lời văn tự nhiên, có cảm xúc thật từ trải nghiệm của em');
+  const [specialWishes, setSpecialWishes] = useState<string>('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
 
   // AI Understanding state ("HOA NHỎ CÙNG CON HIỂU ĐỀ")
   const [isUnderstandingLoading, setIsUnderstandingLoading] = useState(false);
@@ -272,17 +273,113 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     { value: 'khac', label: 'Dạng bài khác', icon: '📝' }
   ];
 
-  // Phân tích đề bài, trích xuất yêu cầu số câu, khối lớp và tạo bộ gợi ý Phần 3 phụ thuộc 100% vào Phần 1
-  const promptRequirement = useMemo(() => {
-    return analyzePromptRequirements(promptText, grade, genre);
-  }, [promptText, grade, genre]);
+  // Quick special wish tags tailored to genre
+  const normalQuickWishes = [
+    'Viết khoảng 4–6 câu',
+    'Viết khoảng 7–9 câu',
+    'Có sử dụng từ láy',
+    'Có hình ảnh so sánh',
+    'Có hình ảnh nhân hóa',
+    'Thể hiện cảm xúc chân thật',
+    'Có mở bài hấp dẫn',
+    'Có câu kết ấn tượng',
+    'Có chi tiết từ trải nghiệm của em'
+  ];
 
-  const quickWishes = promptRequirement.quickWishes;
+  const letterQuickWishes = [
+    'Thư ngắn (khoảng 80–120 chữ)',
+    'Đủ 5 phần chuẩn mực của thư',
+    'Lời xưng hô thân mật, lễ phép',
+    'Thăm hỏi sức khỏe và sinh hoạt',
+    'Kể chuyện trường lớp, học tập',
+    'Bày tỏ tình cảm gắn bó, nhớ thương',
+    'Lời chúc ấm áp và lời hứa chăm ngoan'
+  ];
 
-  // Tự động thanh lọc các lựa chọn cũ không còn phù hợp khi học sinh đổi đề, đổi lớp hoặc nhập tay
-  useEffect(() => {
-    setSpecialWishes(prev => purgeIncompatibleWishes(prev, promptRequirement));
-  }, [promptRequirement]);
+  const noteQuickWishes = [
+    'Lời nhắn ngắn gọn, súc tích (3–5 câu)',
+    'Ghi rõ người nhận lời nhắn',
+    'Nội dung dặn dò hoặc hẹn giờ rõ ràng',
+    'Lời nhắn lễ phép, chân thành',
+    'Ghi rõ người để lại lời nhắn & thời gian'
+  ];
+
+  const opinionQuickWishes = [
+    'Nêu rõ ý kiến đồng tình / ủng hộ',
+    'Lý lẽ xác đáng, thuyết phục',
+    'Có dẫn chứng từ thực tế cuộc sống',
+    'Từ ngữ lập luận mạch lạc, tự nhiên',
+    'Thông điệp ý nghĩa gửi tới mọi người'
+  ];
+
+  const emotionQuickWishes = [
+    'Kể một kỷ niệm ấm áp với người thân',
+    'Bộc lộ lòng biết ơn và yêu kính',
+    'Dùng từ ngữ gợi cảm xúc chân thành',
+    'Có câu văn so sánh giàu cảm xúc',
+    'Có lời hứa chăm ngoan, tiến bộ'
+  ];
+
+  const sentenceQuickWishes = [
+    'Viết đúng 2–3 câu theo yêu cầu',
+    'Đầu câu viết hoa, cuối câu có dấu chấm',
+    'Các câu liên kết tự nhiên, mạch lạc',
+    'Từ ngữ trong sáng, giàu cảm xúc'
+  ];
+
+  const grade1ItemQuickWishes = [
+    'Viết đúng 1–2 câu hoàn chỉnh',
+    'Đầu câu viết hoa, cuối câu có dấu chấm',
+    'Tả một đặc điểm nổi bật hoặc công dụng',
+    'Dùng từ ngữ sinh động (xinh xắn, thon dài, gọn gàng)'
+  ];
+
+  const grade2ItemQuickWishes = [
+    'Đoạn văn ngắn 3–5 câu',
+    'Tả hình dáng và màu sắc nổi bật',
+    'Nêu đặc điểm em thích nhất và ích lợi',
+    'Tình cảm gắn bó và lời hứa giữ gìn',
+    'Đầu câu viết hoa, cuối câu có dấu chấm'
+  ];
+
+  // Độ dài câu ưu tiên yêu cầu ghi ngay trong đề; không lấy độ khó để tăng số câu.
+  const sentenceRequirement = (() => {
+    const m = promptText.match(/(?:viết|khoảng|từ|độ dài)?\s*(\d+)\s*[-–—]\s*(\d+)\s*câu/i)
+      || promptText.match(/(?:viết|khoảng|từ)\s*(\d+)\s*câu/i);
+    if (!m) return null;
+    const min = Number(m[1]);
+    const max = m[2] ? Number(m[2]) : min;
+    return min > 0 && max >= min && max <= 30 ? { min, max } : null;
+  })();
+  const sentenceWish = sentenceRequirement
+    ? `Viết đúng ${sentenceRequirement.min === sentenceRequirement.max ? sentenceRequirement.min : `${sentenceRequirement.min}–${sentenceRequirement.max}`} câu theo đề bài`
+    : grade === 1 ? 'Viết khoảng 1–2 câu' : grade === 2 ? 'Viết khoảng 2–3 câu' : null;
+  const ageAppropriateWishes = grade === 1
+    ? [sentenceWish, 'Đầu câu viết hoa, cuối câu có dấu chấm',
+       'Nói đúng điều đề bài yêu cầu', 'Dùng từ ngữ gần gũi, dễ hiểu']
+    : grade === 2
+    ? [sentenceWish, 'Nêu một hoặc hai chi tiết đúng chủ đề',
+       'Các câu rõ ý, dễ hiểu', 'Bày tỏ tình cảm chân thật']
+    : null;
+  const sourceWishes = isItemGrade1Prompt
+    ? grade1ItemQuickWishes
+    : isItemGrade2Prompt
+    ? grade2ItemQuickWishes
+    : isLetterPrompt
+    ? letterQuickWishes
+    : isNotePrompt
+    ? noteQuickWishes
+    : isOpinionPrompt
+    ? opinionQuickWishes
+    : isEmotionPrompt
+    ? emotionQuickWishes
+    : isSentencePrompt
+    ? sentenceQuickWishes
+    : normalQuickWishes;
+  // Gợi ý được sinh từ đề đang hiển thị và đối tượng học sinh đã chọn.
+  // Không dùng danh sách chung theo thể loại vì dễ lạc đề ở lớp 1–5.
+  const quickWishes = getWritingWishes({ prompt: promptText, grade, selectedObject: selectedObjectName });
+
 
   // Image Rotation (Canvas-based)
   const rotateImage = (dataUrl: string, degrees: 90 | 180 | 270): Promise<string> => {
@@ -500,7 +597,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     ]);
 
     if (isShort23) {
-      setSpecialWishes('Viết 2–3 câu theo đúng yêu cầu đề bài; lời văn tự nhiên, chân thật.');
+      setSpecialWishes('Viết đúng 2–3 câu theo đề bài; lời văn tự nhiên, chân thật.');
       setDetailedOutline({
         moDoan: ['Câu 1: Giới thiệu người bạn em yêu quý và cảm xúc ấm áp.'],
         phatTrienDoan: ['Câu 2: Kể một nét đáng yêu hoặc việc bạn làm khiến em xúc động.'],
@@ -689,8 +786,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 ? `Chào con! Lời nhắn của con gửi tới ${deepData.coreSubject || 'người nhận'} cần ngắn gọn và rõ ràng. Con có muốn Hoa Nhỏ gợi ý thêm cách dặn dò hay hẹn giờ không?`
                 : (detectedWType === 'neu_y_kien')
                 ? `Chào con! Nêu ý kiến về "${deepData.coreSubject || promptText}" cần lý lẽ và dẫn chứng thuyết phục. Con hãy chia sẻ lý do của mình để Hoa Nhỏ cùng con rèn giũa nhé!`
-                : isFamilyLoveGrade1Prompt(promptText, grade)
-                ? `Hoa Nhỏ đã chuẩn bị ý tưởng cho ${deepData.selectedObjectName || 'người thân con chọn'}. Con có thể viết một câu thật lòng, hoặc kể thêm một việc làm hay kỷ niệm trong câu thứ hai. Con muốn kể điều gì?`
                 : deepData.choiceType === 'object_selection'
                 ? deepData.selectedObjectId
                   ? `Hoa Nhỏ đã chuẩn bị xong các nhánh ý tưởng và từ ngữ hay để con miêu tả "${deepData.selectedObjectName || 'đồ vật'}". Con hãy quan sát kỹ từng chi tiết để viết bài thật sinh động nhé!`
@@ -1791,8 +1886,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           </h3>
         </div>
 
-        <p className="text-xs text-stone-600 font-medium">
-          Con có thể tự gõ mong muốn riêng hoặc bấm chọn nhanh những gợi ý đáng yêu dưới đây:
+        <p className="text-sm text-stone-600 font-medium">
+          Gợi ý dưới đây đã được điều chỉnh theo đề bài và lớp của con. Con có thể tự gõ mong muốn riêng hoặc bấm chọn nhanh những gợi ý đáng yêu dưới đây:
         </p>
 
         {/* Quick wish pills */}
@@ -1826,7 +1921,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           type="text"
           value={specialWishes}
           onChange={(e) => setSpecialWishes(e.target.value)}
-          placeholder="Nhập mong muốn riêng của con (ví dụ: Tả thật sinh động, có câu văn cảm xúc về mẹ...)"
+          placeholder="Con có thể viết thêm một mong muốn phù hợp với đề bài..."
           className="w-full px-4 py-2.5 rounded-2xl border-2 border-pink-100 focus:border-pink-300 focus:outline-hidden text-sm"
         />
 
@@ -1835,14 +1930,22 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           <div className="flex flex-wrap items-center justify-between gap-1.5">
             <label className="text-xs font-bold text-stone-800 flex items-center gap-1.5">
               <span>🎯</span>
-              <span>Mức độ thử thách rèn luyện (Lớp {grade}):</span>
+              <span>Mức độ thử thách rèn luyện:</span>
             </label>
             <span className="text-[11px] text-purple-700 font-semibold bg-purple-50 px-2 py-0.5 rounded-md border border-purple-200">
-              {promptRequirement.difficultyLevels.find(d => d.id === difficultyLevel)?.badgeText || '🌱 Cơ bản: Nắm chắc kết cấu chuẩn SGK'}
+              {difficultyLevel === 'co_ban' && '🌱 Cơ bản: Nắm chắc kết cấu chuẩn SGK'}
+              {difficultyLevel === 'mo_rong' && '🌿 Mở rộng: Quan sát phong phú, liên tưởng mở rộng'}
+              {difficultyLevel === 'nang_cao' && '⭐ Nâng cao: Vận dụng so sánh, nhân hóa & từ ngữ gợi cảm'}
+              {difficultyLevel === 'sang_tao' && '✨ Sáng tạo: Góc nhìn mới mẻ, bất ngờ, cảm xúc lắng đọng'}
             </span>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-            {promptRequirement.difficultyLevels.map((dl) => (
+            {[
+              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: 'Chuẩn SGK' },
+              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: 'Thêm quan sát' },
+              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: 'Từ ngữ gợi cảm' },
+              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: 'Ý tưởng mới lạ' }
+            ].map((dl) => (
               <button
                 key={dl.id}
                 type="button"
@@ -1860,7 +1963,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   <span>{dl.icon}</span>
                   <span>{dl.label}</span>
                 </div>
-                <span className="text-[10px] text-stone-500 block mt-0.5">{dl.shortDesc}</span>
+                <span className="text-[10px] text-stone-500 block mt-0.5">{dl.desc}</span>
               </button>
             ))}
           </div>
@@ -3256,6 +3359,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         soundEnabled={settings.soundEnabled}
         onSelectTopic={(topic) => {
           setPromptText(topic.prompt);
+          setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
           if (topic.grade && topic.grade >= 1 && topic.grade <= 5) {
             setGrade(topic.grade);
           }
