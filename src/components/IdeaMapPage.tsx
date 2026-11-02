@@ -69,42 +69,55 @@ const validSuggestion = (value: unknown): value is string =>
 const isPetPrompt = (prompt: string) =>
   /(?:chú cún|chú mèo|chú thỏ)/iu.test(prompt) && /(?:miêu tả|tả )/iu.test(prompt);
 
-const petVocabularyBank = (prompt: string): VocabularyImageryBank => {
-  const pet = /chú mèo/iu.test(prompt) && !/chú cún/iu.test(prompt) ? 'chú mèo' :
-    /chú thỏ/iu.test(prompt) && !/chú cún|chú mèo/iu.test(prompt) ? 'chú thỏ' : 'con vật em chọn';
+// Kho gợi ý CD07: lựa chọn hiện hành quyết định nội dung, không dùng chung ba con vật.
+const petVocabularyBank = (choice: string): VocabularyImageryBank => {
+  const isCat = /mèo/iu.test(choice);
+  const isRabbit = /thỏ/iu.test(choice);
+  const pet = isCat ? 'mèo con' : isRabbit ? 'thỏ' : 'cún';
+  const words = isCat
+    ? [['mềm mượt', 'Tả bộ lông của mèo.'], ['long lanh', 'Tả đôi mắt của mèo.'], ['rón rén', 'Tả bước chân nhẹ của mèo.'], ['tinh nghịch', 'Tả lúc mèo chơi đùa.'], ['ngoan ngoãn', 'Tả lúc mèo nằm yên bên em.']]
+    : isRabbit
+    ? [['trắng muốt', 'Tả bộ lông thỏ màu trắng, nếu đúng với con thỏ em quan sát.'], ['mềm mại', 'Tả bộ lông của thỏ.'], ['dài dài', 'Tả đôi tai thỏ.'], ['nhanh nhẹn', 'Tả lúc thỏ nhảy.'], ['chăm chú', 'Tả lúc thỏ gặm rau.']]
+    : [['mềm mượt', 'Tả bộ lông của cún.'], ['long lanh', 'Tả đôi mắt của cún.'], ['tinh nghịch', 'Tả lúc cún vui chơi.'], ['nhanh nhẹn', 'Tả lúc cún chạy.'], ['quấn quýt', 'Tả lúc cún ở gần người chăm sóc.']];
+  const imageries = isCat ? [
+    ['So sánh', 'Bộ lông mèo mềm như bông.', 'Giúp hình dung bộ lông mềm mại.'],
+    ['Hình ảnh gợi tả', 'Chú mèo bước nhẹ trên nền nhà.', 'Gợi dáng đi đặc trưng của mèo.'],
+    ['Nhân hóa', 'Chú mèo lim dim mắt như đang mơ một giấc mơ đẹp.', 'Gợi dáng vẻ thư thái; chỉ dùng nếu con quan sát thấy.']
+  ] : isRabbit ? [
+    ['So sánh', 'Bộ lông thỏ mềm như bông.', 'Gợi cảm giác mềm mại của bộ lông.'],
+    ['Hình ảnh gợi tả', 'Đôi tai dài của chú thỏ khẽ động đậy.', 'Gợi nét riêng của thỏ.'],
+    ['Hình ảnh gợi tả', 'Chú thỏ nhảy từng bước ngắn rồi dừng lại gặm rau.', 'Miêu tả hoạt động phù hợp với thỏ.']
+  ] : [
+    ['So sánh', 'Bộ lông cún mềm như bông.', 'Giúp hình dung độ mềm của bộ lông.'],
+    ['Hình ảnh gợi tả', 'Chiếc đuôi chú cún vẫy liên hồi.', 'Gợi niềm vui qua cử động của cún.'],
+    ['Nhân hóa', 'Chú cún nghiêng đầu như đang nghe em trò chuyện.', 'Gợi dáng vẻ đáng yêu; chỉ dùng nếu con quan sát thấy.']
+  ];
+  const sentences = isCat ? [
+    ['Gợi ý tả đặc điểm', 'Chú mèo con có bộ lông mềm mượt và đôi mắt sáng long lanh.', 'Nêu hai đặc điểm dễ quan sát.'],
+    ['Gợi ý tả hoạt động', 'Chú mèo con rón rén bước đi rồi cuộn tròn ngủ trên chiếc đệm nhỏ.', 'Miêu tả hành động phù hợp với mèo.']
+  ] : isRabbit ? [
+    ['Gợi ý tả đặc điểm', 'Chú thỏ có đôi tai dài và bộ lông mềm mại.', 'Nêu hai nét riêng dễ quan sát.'],
+    ['Gợi ý tả hoạt động', 'Chú thỏ nhảy từng bước ngắn rồi thích thú gặm lá rau xanh.', 'Miêu tả hành động phù hợp với thỏ.']
+  ] : [
+    ['Gợi ý tả đặc điểm', 'Chú cún có bộ lông mềm mượt và đôi mắt tròn long lanh.', 'Nêu hai đặc điểm dễ quan sát.'],
+    ['Gợi ý tả hoạt động', 'Mỗi khi em đi học về, chú cún chạy ra đón và vẫy đuôi mừng rỡ.', 'Miêu tả hoạt động phù hợp với cún.']
+  ];
   return {
-    goodWords: [
-      { word: 'mềm mượt', meaningAndUsage: 'Tả bộ lông sạch, mềm khi vuốt ve.' },
-      { word: 'long lanh', meaningAndUsage: 'Tả đôi mắt sáng và đáng yêu.' },
-      { word: 'tinh nghịch', meaningAndUsage: 'Tả dáng vẻ thích chạy nhảy, vui đùa.' },
-      { word: 'nhanh nhẹn', meaningAndUsage: 'Tả bước chạy hoặc cử động linh hoạt.' },
-      { word: 'quấn quýt', meaningAndUsage: 'Tả con vật thích ở gần người chăm sóc.' }
-    ],
-    imageries: [
-      { type: 'So sánh', example: 'Bộ lông của chú mềm như bông.', explanation: 'Giúp người đọc hình dung độ mềm của bộ lông.' },
-      { type: 'So sánh', example: 'Đôi mắt chú tròn như hai hòn bi ve.', explanation: 'Gợi hình dáng đôi mắt một cách gần gũi.' },
-      { type: 'Nhân hóa', example: 'Chú nghiêng đầu như đang lắng nghe em kể chuyện.', explanation: 'Làm nổi bật dáng vẻ đáng yêu qua quan sát thực tế.' }
-    ],
-    sampleSentences: [
-      { type: 'mieu_ta', label: 'Gợi ý tả đặc điểm', sentence: 'Chú có bộ lông mềm mượt và đôi mắt tròn long lanh.', whyItIsGood: 'Nêu hai đặc điểm nổi bật bằng từ gợi tả dễ hiểu.' },
-      { type: 'mieu_ta', label: 'Gợi ý tả hoạt động', sentence: 'Mỗi khi em đến gần, chú lại chạy tới quấn quýt bên chân.', whyItIsGood: 'Miêu tả một hành động cụ thể, thể hiện sự gần gũi.' }
-    ],
-    creativeIdeas: ['Chỉ chọn một con vật để tả.', 'Quan sát đúng đặc điểm và thói quen của con vật em chọn.']
+    goodWords: words.map(([word, meaningAndUsage]) => ({word, meaningAndUsage})),
+    imageries: imageries.map(([type, example, explanation]) => ({type, example, explanation})),
+    sampleSentences: sentences.map(([label, sentence, whyItIsGood]) => ({type: 'mieu_ta', label, sentence, whyItIsGood})),
+    creativeIdeas: [`Chỉ miêu tả một chú ${pet} mà con đã quan sát.`, 'Con có thể sửa mọi gợi ý theo con vật thật của mình.']
   };
 };
 
-const cleanVocabularyBank = (raw: unknown, prompt: string): VocabularyImageryBank | null => {
+const cleanVocabularyBank = (raw: unknown, prompt: string, selectedPet = ''): VocabularyImageryBank | null => {
   const obj = raw && typeof raw === 'object' ? raw as Record<string, unknown> : {};
   const words = Array.isArray(obj.goodWords) ? obj.goodWords.filter((x: any) => validSuggestion(x?.word) && validSuggestion(x?.meaningAndUsage)) : [];
   const images = Array.isArray(obj.imageries) ? obj.imageries.filter((x: any) => validSuggestion(x?.type) && validSuggestion(x?.example) && validSuggestion(x?.explanation)) : [];
   const sentences = Array.isArray(obj.sampleSentences) ? obj.sampleSentences.filter((x: any) => validSuggestion(x?.label) && validSuggestion(x?.sentence) && validSuggestion(x?.whyItIsGood)) : [];
-  if (isPetPrompt(prompt)) {
-    const fallback = petVocabularyBank(prompt);
-    return { ...fallback,
-      goodWords: words.length >= 5 ? words : fallback.goodWords,
-      imageries: images.length >= 3 ? images : fallback.imageries,
-      sampleSentences: sentences.length >= 2 ? sentences : fallback.sampleSentences
-    };
+  if (isPetPrompt(prompt) && /(?:cún|mèo|thỏ)/iu.test(selectedPet)) {
+    // Luôn theo hướng viết đang chọn, không nhận lại câu chung từ AI hoặc bản nháp cũ.
+    return petVocabularyBank(selectedPet);
   }
   if (!words.length && !images.length && !sentences.length) return null;
   return { goodWords: words, imageries: images, sampleSentences: sentences,
@@ -819,7 +832,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             setInitialOutlineBackup(newActive);
           }
           if (deepData.vocabularySuggestions) {
-            setVocabBank(cleanVocabularyBank(deepData.vocabularySuggestions, promptText));
+            setVocabBank(cleanVocabularyBank(deepData.vocabularySuggestions, promptText, deepData.selectedDirectionTitle || deepData.selectedObjectName || ''));
           }
           if (deepData.socraticQuestions && deepData.socraticQuestions.length > 0) {
             setSocraticQuestion(deepData.socraticQuestions[0]);
@@ -920,7 +933,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         setMindMapBranches(cached.mindMapBranches);
         setDetailedOutline(cached.detailedOutline);
         setActiveOutline(cached.activeOutline);
-        setVocabBank(cleanVocabularyBank(cached.vocabBank, promptText));
+        setVocabBank(cleanVocabularyBank(cached.vocabBank, promptText, selectedDirectionTitle || selectedObjectName || ''));
         setUnderstanding(cached.understanding);
         setSocraticQuestion(cached.socraticQuestion);
         return;
@@ -1006,7 +1019,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         setMindMapBranches(cached.mindMapBranches);
         setDetailedOutline(cached.detailedOutline);
         setActiveOutline(cached.activeOutline);
-        setVocabBank(cleanVocabularyBank(cached.vocabBank, promptText));
+        setVocabBank(cleanVocabularyBank(cached.vocabBank, promptText, selectedDirectionTitle || selectedObjectName || ''));
         setUnderstanding(cached.understanding);
         setSocraticQuestion(cached.socraticQuestion);
         return;
@@ -3267,7 +3280,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       )}
 
       {/* SECTION 6: KHO TỪ NGỮ VÀ HÌNH ẢNH SÁNG TẠO (Từ hay – Hình ảnh – Câu mẫu ngữ cảnh hóa) */}
-      {vocabBank && cleanVocabularyBank(vocabBank, promptText) && (
+      {vocabBank && cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '') && (
         <div className="bg-white rounded-3xl border-2 border-pink-200 p-5 sm:p-6 shadow-sm space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-pink-100 pb-3">
             <div className="flex items-center gap-2">
@@ -3285,7 +3298,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   activeVocabTab === 'words' ? 'bg-pink-500 text-white shadow-2xs' : 'text-pink-900 hover:bg-pink-100'
                 }`}
               >
-                Từ hay ({cleanVocabularyBank(vocabBank, promptText)!.goodWords.length})
+                Từ hay ({cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '')!.goodWords.length})
               </button>
               <button
                 onClick={() => { playPop(settings.soundEnabled); setActiveVocabTab('images'); }}
@@ -3293,7 +3306,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   activeVocabTab === 'images' ? 'bg-purple-500 text-white shadow-2xs' : 'text-purple-900 hover:bg-purple-100'
                 }`}
               >
-                Hình ảnh ({cleanVocabularyBank(vocabBank, promptText)!.imageries.length})
+                Hình ảnh ({cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '')!.imageries.length})
               </button>
               <button
                 onClick={() => { playPop(settings.soundEnabled); setActiveVocabTab('sentences'); }}
@@ -3301,7 +3314,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                   activeVocabTab === 'sentences' ? 'bg-sky-500 text-white shadow-2xs' : 'text-sky-900 hover:bg-sky-100'
                 }`}
               >
-                Câu mẫu ({cleanVocabularyBank(vocabBank, promptText)!.sampleSentences.length})
+                Câu mẫu ({cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '')!.sampleSentences.length})
               </button>
             </div>
           </div>
@@ -3309,7 +3322,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           {/* TAB 1: TỪ HAY */}
           {activeVocabTab === 'words' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 animate-fade-in">
-              {cleanVocabularyBank(vocabBank, promptText)!.goodWords.map((item, idx) => (
+              {cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '')!.goodWords.map((item, idx) => (
                 <div key={idx} className="p-3 rounded-2xl bg-pink-50/50 border border-pink-200 space-y-1">
                   <span className="font-extrabold text-sm text-pink-800 block">
                     "{item.word}"
@@ -3325,7 +3338,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           {/* TAB 2: HÌNH ẢNH (So sánh, nhân hóa) */}
           {activeVocabTab === 'images' && (
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 animate-fade-in">
-              {cleanVocabularyBank(vocabBank, promptText)!.imageries.map((item, idx) => (
+              {cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '')!.imageries.map((item, idx) => (
                 <div key={idx} className="p-3.5 rounded-2xl bg-purple-50/50 border border-purple-200 space-y-1">
                   <div className="flex items-center gap-1.5 font-bold text-xs text-purple-900">
                     <span className="px-2 py-0.5 rounded-full bg-purple-200 text-purple-900 font-extrabold text-[10px]">
@@ -3347,7 +3360,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           {/* TAB 3: CÂU MẪU (Kèm lý giải tại sao hay) */}
           {activeVocabTab === 'sentences' && (
             <div className="space-y-3 animate-fade-in">
-              {cleanVocabularyBank(vocabBank, promptText)!.sampleSentences.map((item, idx) => (
+              {cleanVocabularyBank(vocabBank, promptText, selectedDirectionTitle || selectedObjectName || '')!.sampleSentences.map((item, idx) => (
                 <div key={idx} className="p-3.5 rounded-2xl bg-sky-50/50 border border-sky-200 space-y-1.5">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-extrabold text-sky-800 uppercase tracking-wide">
