@@ -24,6 +24,8 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   // Ước mơ nghề nghiệp phải được nhận diện trước nhánh tả người (ví dụ 'cô giáo').
   if (has(/ước mơ|ước mong|nghề nghiệp tương lai|muốn trở thành|sẽ trở thành|biến ước mơ thành hiện thực/u)) {
     ideas.push('Nêu rõ ước mơ hoặc nghề nghiệp tương lai của con', 'Chia sẻ lí do con yêu thích ước mơ ấy', 'Nói những việc con sẽ làm để thực hiện ước mơ');
+  } else if (has(/(?:nêu cảm nghĩ|nêu cảm nhận|cảm nghĩ của em|cảm nhận của em)/u) && has(/bài thơ|bài tập đọc/u) && has(/non sông|đất nước|quê hương|tổ quốc/u)) {
+    ideas.push('Nêu tên bài thơ hoặc bài tập đọc con đã đọc', 'Chọn một hình ảnh hoặc chi tiết có thật trong tác phẩm', 'Bày tỏ cảm nghĩ về vẻ đẹp đất nước qua chi tiết ấy');
   } else if (has(/tin nhắn|nhắn tin|lời nhắn/u)) {
     const thanks = has(/cảm ơn/u), sorry = has(/xin lỗi/u);
     if (thanks && sorry && !object) ideas.push('Chọn cảm ơn hay xin lỗi bạn');
