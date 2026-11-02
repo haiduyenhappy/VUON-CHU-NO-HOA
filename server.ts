@@ -3581,6 +3581,51 @@ Mức độ: ${diffLevel}`;
       }
     }
 
+    // CD: Kể lại một việc tốt em đã làm — giữ kho từ ngữ đúng đề,
+    // không để kết quả làm giàu từ AI thay bằng nội dung về gia đình.
+    if (/việc tốt em đã làm|một việc tốt (?:mà )?em đã làm|kể lại một việc tốt/i.test(prompt)) {
+      finalResult.vocabularySuggestions = goodDeedVocabularyBank(prompt);
+    }
+
+    // CD02: Khóa kết quả chuyên biệt ở tầng API sau bước làm giàu AI.
+    if (isSummerFamilyJoyPrompt(prompt)) {
+      finalResult.writingType = 'ke_chuyen';
+      finalResult.writingFormat = 'Đoạn văn 3–5 câu';
+      finalResult.coreSubject = 'Niềm vui trong những ngày nghỉ hè bên gia đình';
+      finalResult.hoaNhoUnderstand = 'Con hãy chọn một kỷ niệm vui có thật trong kỳ nghỉ hè cùng gia đình. Nhớ lại con đã làm gì, cùng ai, điều gì vui nhất và cảm xúc của con. Viết một đoạn 3–5 câu, không cần chia thành bài văn ba phần.';
+      finalResult.specificRequirements = [
+        'Kể một kỷ niệm vui trong kỳ nghỉ hè bên gia đình do chính con trải nghiệm',
+        'Nêu được hoạt động con tham gia cùng người thân',
+        'Kể điều vui hoặc thú vị nhất và cảm xúc của con',
+        'Viết một đoạn văn từ 3 đến 5 câu hoàn chỉnh'
+      ];
+      finalResult.socraticQuestions = [
+        'Con nhớ nhất hoạt động nào trong kỳ nghỉ hè cùng gia đình?',
+        'Khi đó con ở đâu và có những ai cùng tham gia?',
+        'Điều gì khiến con vui nhất?',
+        'Con cảm thấy thế nào khi nhớ lại kỷ niệm ấy?'
+      ];
+      finalResult.branches = [
+        { id: 'br-1', title: '🌞 Kỷ niệm vui', icon: '🌞', color: 'emerald', points: ['Con nhớ nhất hoạt động nào trong kỳ nghỉ hè?', 'Con đã làm gì cùng gia đình?'] },
+        { id: 'br-2', title: '📍 Thời gian – Địa điểm', icon: '📍', color: 'amber', points: ['Kỷ niệm xảy ra khi nào?', 'Gia đình con ở đâu lúc ấy?'] },
+        { id: 'br-3', title: '👨‍👩‍👧 Người cùng tham gia', icon: '👨‍👩‍👧', color: 'purple', points: ['Ai đã cùng con tham gia?', 'Mọi người đã cùng làm gì?'] },
+        { id: 'br-4', title: '✨ Điều vui nhất', icon: '✨', color: 'sky', points: ['Khoảnh khắc nào làm con vui hoặc bật cười?', 'Điều gì khiến con nhớ mãi?'] },
+        { id: 'br-5', title: '💗 Cảm xúc', icon: '💗', color: 'rose', points: ['Lúc đó con cảm thấy thế nào?', 'Bây giờ nhớ lại con thấy ra sao?'] }
+      ];
+      const hints = [
+        'Câu 1: Giới thiệu một kỷ niệm vui trong kỳ nghỉ hè bên gia đình.',
+        'Câu 2: Kể hoạt động con đã tham gia cùng người thân.',
+        'Câu 3: Kể điều thú vị hoặc đáng nhớ nhất.',
+        'Câu 4–5 (nếu viết): Bổ sung chi tiết và bày tỏ cảm xúc thật của con.'
+      ];
+      finalResult.outline = {
+        moDoan: [hints[0]], phatTrienDoan: [hints[1], hints[2]], ketDoan: [hints[3]],
+        genre: 'ke_chuyen',
+        sections: [{ id: 'sec-1', title: 'Gợi ý viết một đoạn 3–5 câu', icon: '📝', guideNote: 'Chọn một kỷ niệm vui thật, không cần viết thành bài văn ba phần', bulletPoints: hints }]
+      };
+      finalResult.vocabularySuggestions = summerFamilyVocabularyBank();
+    }
+
     // 5. Kiểm định tự động 20 tiêu chuẩn GDPT 2018 (Section XV)
     const validationReport = validatePromptAnalysisResult(prompt, finalResult, semantics);
     finalResult.validationChecks = validationReport.checks;
@@ -3625,6 +3670,9 @@ Mức độ: ${diffLevel}`;
 app.post('/api/ai/understand-prompt', async (req, res) => {
   const { prompt, grade = 3, genre, specialWishes } = req.body;
   const isLetterPrompt = genre === 'viet_thu' || detectGenre(prompt || '') === 'viet_thu';
+  if (/việc tốt em đã làm|một việc tốt (?:mà )?em đã làm|kể lại một việc tốt/i.test(prompt)) {
+    return res.json(goodDeedVocabularyBank(prompt));
+  }
 
   const defaultUnderstanding = isLetterPrompt ? {
     target: 'Viết một bức thư ngắn để thăm hỏi, chia sẻ tin tức và thể hiện tình cảm chân thành.',
@@ -3722,9 +3770,67 @@ Hãy trả về JSON theo cấu trúc:
 });
 
 // Dynamic Contextual Vocabulary & Imagery Bank ("Từ hay – Hình ảnh – Câu mẫu")
+// Gợi ý cho bài kể việc tốt: dùng một nguồn dữ liệu nhất quán cho cả hai API.
+function goodDeedVocabularyBank(prompt: string) {
+  const text = String(prompt || '').toLowerCase();
+  // Đề liệt kê nhiều việc tốt chỉ là ví dụ, không tự chọn thay học sinh.
+  const isFound = /nhặt được của rơi|trả lại của rơi/.test(text) && !/\bhoặc\b|\.\.\./.test(text);
+  const isClean = /nhặt rác|giữ vệ sinh/.test(text) && !/\bhoặc\b|\.\.\./.test(text);
+  const isHelp = /dắt em nhỏ|giúp đỡ người/.test(text) && !/\bhoặc\b|\.\.\./.test(text);
+  const action = isFound ? 'trả lại đồ đánh rơi' : isClean ? 'nhặt rác giữ vệ sinh' : isHelp ? 'giúp đỡ người khác' : 'làm một việc tốt';
+  return {
+    goodWords: [
+      { word: 'giúp đỡ', meaningAndUsage: 'Làm một việc để người khác bớt khó khăn.' },
+      { word: 'nhanh nhẹn', meaningAndUsage: 'Hành động mau lẹ, tích cực khi cần giúp.' },
+      { word: 'cẩn thận', meaningAndUsage: 'Làm việc chu đáo, tránh gây hỏng hoặc nguy hiểm.' },
+      { word: 'vui vẻ', meaningAndUsage: 'Cảm giác vui khi làm được điều có ích.' },
+      { word: 'cảm ơn', meaningAndUsage: 'Lời nói thể hiện sự biết ơn khi nhận giúp đỡ.' }
+    ],
+    imageries: [
+      { type: 'Hình ảnh thực tế', example: 'Em cúi xuống nhặt món đồ rồi tìm người đánh rơi.', explanation: 'Chỉ dùng khi con thực sự chọn việc trả lại của rơi.' },
+      { type: 'Hình ảnh thực tế', example: 'Em nhặt những mẩu rác và bỏ vào thùng rác.', explanation: 'Chỉ dùng khi con thực sự chọn việc giữ vệ sinh.' }
+    ],
+    sampleSentences: [
+      { type: 'mo_bai', label: 'Gợi ý câu mở đầu', sentence: 'Hôm ấy, em đã … ở …', whyItIsGood: 'Con tự điền việc tốt và địa điểm thật, không chép nguyên câu mẫu.' },
+      { type: 'mieu_ta', label: 'Gợi ý kể hành động', sentence: 'Em liền … để giúp …', whyItIsGood: 'Nêu rõ chính con đã làm gì và giúp ai; không kể việc của người khác.' },
+      { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Sau khi ' + action + ', em cảm thấy …', whyItIsGood: 'Kết lại bằng cảm xúc thật của con; có thể viết cách khác.' }
+    ],
+    creativeIdeas: ['Chọn một việc tốt con đã thực sự làm.', 'Kể đúng thứ tự: việc xảy ra – con làm gì – kết quả – cảm xúc.']
+  };
+}
+
+
+// CD02: Đoạn văn 3–5 câu về niềm vui nghỉ hè bên gia đình.
+// Ưu tiên trải nghiệm thực tế, không bắt buộc bài văn ba phần hoặc bài học đạo đức.
+function isSummerFamilyJoyPrompt(prompt: string): boolean {
+  return /nghỉ hè/i.test(prompt) && /gia đình/i.test(prompt) && /niềm vui/i.test(prompt) && /3\s*(?:đến|[-–—])\s*5\s*câu/i.test(prompt);
+}
+function summerFamilyVocabularyBank() {
+  return {
+    goodWords: [
+      { word: 'háo hức', meaningAndUsage: 'Mong chờ một chuyến đi hoặc hoạt động vui cùng gia đình.' },
+      { word: 'rộn ràng', meaningAndUsage: 'Không khí vui tươi, có nhiều tiếng nói cười.' },
+      { word: 'thích thú', meaningAndUsage: 'Cảm giác vui khi được trải nghiệm điều mình thích.' },
+      { word: 'quây quần', meaningAndUsage: 'Các thành viên trong gia đình cùng ở bên nhau.' },
+      { word: 'đáng nhớ', meaningAndUsage: 'Một khoảnh khắc vui khiến con nhớ mãi.' }
+    ],
+    imageries: [
+      { type: 'Hình ảnh thực tế', example: 'Cả nhà cùng cười vui khi tham gia một hoạt động trong kỳ nghỉ hè.', explanation: 'Con thay bằng hoạt động có thật của gia đình mình.' },
+      { type: 'Âm thanh và cảm xúc', example: 'Tiếng cười của mọi người làm buổi vui chơi thêm rộn ràng.', explanation: 'Chỉ sử dụng nếu đúng với kỷ niệm con muốn kể.' }
+    ],
+    sampleSentences: [
+      { type: 'mo_bai', label: 'Gợi ý giới thiệu kỷ niệm', sentence: 'Trong kỳ nghỉ hè, em vui nhất khi được … cùng gia đình.', whyItIsGood: 'Nêu ngay hoạt động vui thực sự của con.' },
+      { type: 'mieu_ta', label: 'Gợi ý kể điều thú vị', sentence: 'Điều khiến em thích thú nhất là …', whyItIsGood: 'Con tự kể khoảnh khắc đáng nhớ, không sao chép câu có sẵn.' },
+      { type: 'ket_bai', label: 'Gợi ý bày tỏ cảm xúc', sentence: 'Em cảm thấy … và rất nhớ buổi … ấy.', whyItIsGood: 'Khép lại bằng cảm xúc thật của con.' }
+    ],
+    creativeIdeas: ['Chọn một kỷ niệm vui cụ thể trong kỳ nghỉ hè.', 'Viết một đoạn 3–5 câu theo thứ tự: kỷ niệm – hoạt động – điều vui nhất – cảm xúc.']
+  };
+}
+
 app.post('/api/ai/vocabulary-imagery', async (req, res) => {
   const { prompt = '', genre, grade = 3, studentIdeas } = req.body;
   const pLower = (prompt || '').toLowerCase();
+  if (isSummerFamilyJoyPrompt(prompt)) return res.json(summerFamilyVocabularyBank());
   const isLetterPrompt = genre === 'viet_thu' || detectGenre(prompt || '') === 'viet_thu';
 
   // Smart topic-based default bank fallback
@@ -3764,51 +3870,6 @@ app.post('/api/ai/vocabulary-imagery', async (req, res) => {
       'Nhớ lại một khoảnh khắc yên bình nhất mà em từng trải qua'
     ]
   };
-
-  // CD: Kể lại một việc tốt do chính học sinh thực hiện (3–5 câu).
-  // Dùng ngân hàng xác định để không bị AI hoặc mẫu gia đình ghi đè.
-  const isGoodDeedPrompt = /việc tốt/i.test(prompt) && /(em đã làm|em làm|con đã làm|mình đã làm)/i.test(prompt);
-  if (isGoodDeedPrompt) {
-    const ideaText = `${studentIdeas || ''}`.toLowerCase();
-    const context = `${pLower} ${ideaText}`;
-    const deed = /của rơi|nhặt được|trả lại|đánh rơi/.test(context) ? 'found'
-      : /nhặt rác|rác|sạch sân|vệ sinh/.test(context) ? 'clean'
-      : /dắt em|em nhỏ|giúp đỡ|giúp bạn|giúp người/.test(context) ? 'help' : 'other';
-    const details = deed === 'found' ? {
-      words: ['nhặt được', 'đánh rơi', 'trả lại', 'vui mừng', 'thật thà'],
-      action: 'Em nhặt được … và tìm cách trả lại cho người đánh rơi.',
-      outcome: 'Người nhận lại đồ đã …',
-      imagery: 'Em nhìn thấy món đồ nằm trên sân và cúi xuống nhặt lên.'
-    } : deed === 'clean' ? {
-      words: ['nhặt rác', 'bỏ vào thùng', 'sạch sẽ', 'gọn gàng', 'vui vẻ'],
-      action: 'Em nhặt những mẩu rác và bỏ vào thùng đúng nơi quy định.',
-      outcome: 'Sân trường sau đó …',
-      imagery: 'Em thấy vài mẩu giấy trên sân nên nhặt chúng bỏ vào thùng rác.'
-    } : deed === 'help' ? {
-      words: ['giúp đỡ', 'dìu', 'dắt', 'cẩn thận', 'biết ơn'],
-      action: 'Thấy … cần giúp đỡ, em liền …',
-      outcome: 'Người được giúp đã …',
-      imagery: 'Em nhìn thấy một người đang cần giúp đỡ nên bước đến hỏi thăm.'
-    } : {
-      words: ['giúp đỡ', 'tự giác', 'lễ phép', 'vui vẻ', 'tốt bụng'],
-      action: 'Em đã … để giúp …',
-      outcome: 'Sau khi em làm việc ấy, …',
-      imagery: 'Em nhận ra có người cần giúp đỡ nên chủ động làm một việc tốt.'
-    };
-    return res.json({
-      goodWords: details.words.map(word => ({ word, meaningAndUsage: 'Chọn từ phù hợp với việc tốt con thực sự đã làm; không cần dùng hết các từ.' })),
-      imageries: [
-        { type: 'Chi tiết quan sát', example: details.imagery, explanation: 'Nhớ lại điều con thực sự nhìn thấy trước khi hành động.' },
-        { type: 'Hành động cụ thể', example: details.action, explanation: 'Thay dấu … bằng hành động thật của con, không bịa thêm chi tiết.' }
-      ],
-      sampleSentences: [
-        { type: 'mo_bai', label: 'Gợi ý câu mở đầu', sentence: 'Một hôm, em đã làm được một việc tốt ở …', whyItIsGood: 'Nêu sự việc và nơi xảy ra bằng lời kể đơn giản.' },
-        { type: 'mieu_ta', label: 'Gợi ý câu kể việc làm', sentence: details.action, whyItIsGood: 'Kể rõ hành động của chính em, theo đúng việc đã chọn.' },
-        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Sau việc làm ấy, em cảm thấy …', whyItIsGood: 'Bày tỏ cảm xúc thật; không bắt buộc rút ra bài học.' }
-      ],
-      creativeIdeas: [details.outcome, 'Con có thể thêm một lời nói hoặc chi tiết con nhớ rõ, nhưng vẫn giữ đoạn văn trong 3–5 câu.']
-    });
-  }
 
   // Specific fallback for Letter writing
   if (isLetterPrompt) {
