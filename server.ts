@@ -3409,7 +3409,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       };
     }
 
-    // CD13: Kể một việc tốt chính em đã làm (3–5 câu). Không dùng dàn ý bài văn ba phần.
+    // CD13: Kể một việc tốt chính em đã làm (3–5 câu). Dàn ý 3 phần trong MỘT đoạn 3–5 câu.
     const isPersonalGoodDeed = /việc tốt/i.test(prompt) &&
       /(?:em đã làm|con đã làm)/i.test(prompt) &&
       /3\s*[-–—]\s*5\s*câu/i.test(prompt);
@@ -3418,7 +3418,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       finalResult.writingFormat = 'Đoạn văn 3–5 câu';
       finalResult.coreSubject = 'Kể lại một việc tốt do chính em thực hiện';
       finalResult.mainObject = 'Việc tốt em đã làm';
-      finalResult.hoaNhoUnderstand = 'Con hãy chọn một việc tốt có thật mà chính con đã làm. Nhớ lại con đã giúp ai hoặc làm gì, kết quả ra sao và con cảm thấy thế nào. Con viết một đoạn 3–5 câu, không cần chia thành ba phần.';
+      finalResult.hoaNhoUnderstand = 'Con hãy chọn một việc tốt có thật mà chính con đã làm. Nhớ lại con đã giúp ai hoặc làm gì, kết quả ra sao và con cảm thấy thế nào. Con viết một đoạn 3–5 câu theo ba phần gợi ý: Mở đầu, Diễn biến và Kết thúc. Không cần xuống dòng thành ba đoạn.';
       finalResult.suggestedLength = '3–5 câu';
       finalResult.specificRequirements = [
         'Chọn một việc tốt do chính em đã làm, không kể việc của người khác',
@@ -3438,16 +3438,24 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         { id: 'br-4', title: '🌟 Kết quả', icon: '🌟', color: 'sky', points: ['Việc tốt mang lại kết quả gì?', 'Người được giúp đỡ phản ứng ra sao?'] },
         { id: 'br-5', title: '❤️ Cảm xúc', icon: '❤️', color: 'rose', points: ['Sau đó con cảm thấy thế nào?', 'Điều gì làm con nhớ nhất?'] }
       ];
-      const bullets = [
-        'Câu 1: Nêu một việc tốt con đã làm, có thể cho biết thời gian hoặc địa điểm.',
+      // Ba PHẦN DÀN Ý, không phải ba đoạn văn; tổng số câu từ 3 đến 5.
+      // Mỗi phần được hiển thị riêng trong mục “Dàn ý chi tiết các phần của bài”.
+      const opening = 'Câu 1: Giới thiệu việc tốt con đã làm; có thể nêu thời gian hoặc địa điểm.';
+      const development = [
         'Câu 2: Kể con đã thực hiện việc tốt ấy như thế nào.',
-        'Câu 3: Nêu kết quả của việc làm.',
-        'Câu 4–5 (nếu viết): Thêm chi tiết đáng nhớ hoặc nói cảm xúc của con.'
+        'Câu 3 (hoặc thêm chi tiết nếu viết 4–5 câu): Kể việc xảy ra tiếp theo và kết quả của việc làm.'
       ];
+      const ending = 'Câu cuối: Nêu cảm xúc của con sau khi làm việc tốt (không bắt buộc rút ra bài học).';
       finalResult.outline = {
-        moDoan: [bullets[0]], phatTrienDoan: [bullets[1], bullets[2]], ketDoan: [bullets[3]],
+        moDoan: [opening],
+        phatTrienDoan: development,
+        ketDoan: [ending],
         genre: 'ke_chuyen',
-        sections: [{ id: 'sec-1', title: 'Gợi ý viết một đoạn 3–5 câu', icon: '📝', guideNote: 'Chọn ý phù hợp với việc tốt con đã thực hiện; không phải bài văn ba phần', bulletPoints: bullets }]
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đầu', icon: '📝', guideNote: '1 câu – Giới thiệu việc tốt chính con đã làm', bulletPoints: [opening] },
+          { id: 'sec-2', title: 'Phần 2. Diễn biến', icon: '🙌', guideNote: '1–3 câu – Con đã làm gì, sự việc diễn ra và kết quả ra sao', bulletPoints: development },
+          { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '❤️', guideNote: '1 câu – Cảm xúc của con sau việc tốt', bulletPoints: [ending] }
+        ]
       };
     }
 
