@@ -3276,6 +3276,56 @@ function outdoorActivityVocabularyBank(activity: string) {
   };
 }
 
+// CD09: Three distinct nature scenes. Keep the chosen scene throughout every learning stage.
+function natureEmotionScene(prompt: string, direction: string = ''): 'binh_minh' | 'hoang_hon' | 'dem_trang' | null {
+  const normalized = (prompt || '').toLowerCase();
+  if (!/bình minh|hoàng hôn|đêm trăng/.test(normalized) || !/xúc động|tình yêu|cảm xúc|bày tỏ/.test(normalized)) return null;
+  const d = (direction || '').toLowerCase();
+  if (/hoàng hôn|hoang_hon|sunset/.test(d)) return 'hoang_hon';
+  if (/trăng|dem_trang|moon/.test(d)) return 'dem_trang';
+  if (/bình minh|binh_minh|sunrise/.test(d)) return 'binh_minh';
+  if (/đêm trăng/.test(normalized) && !/bình minh|hoàng hôn/.test(normalized)) return 'dem_trang';
+  if (/hoàng hôn/.test(normalized) && !/bình minh|đêm trăng/.test(normalized)) return 'hoang_hon';
+  if (/bình minh/.test(normalized) && !/hoàng hôn|đêm trăng/.test(normalized)) return 'binh_minh';
+  return null;
+}
+function natureEmotionDirections() {
+  return [
+    { id:'binh_minh', title:'Cảnh bình minh', mainObject:'Cảnh bình minh' },
+    { id:'hoang_hon', title:'Cảnh hoàng hôn', mainObject:'Cảnh hoàng hôn' },
+    { id:'dem_trang', title:'Một đêm trăng đẹp', mainObject:'Một đêm trăng đẹp' }
+  ];
+}
+function natureEmotionContent(scene: 'binh_minh'|'hoang_hon'|'dem_trang') {
+  const data = {
+    binh_minh: { title:'Cảnh bình minh', light:'Mặt trời nhô lên, bầu trời sáng dần', surroundings:'Cây lá đẫm sương, những tia nắng đầu tiên', sound:'Tiếng chim hót, không khí trong lành', feeling:'Háo hức, vui tươi, yêu đời', words:['rạng đông','ửng hồng','long lanh','dịu nhẹ','trong trẻo'], image:'Những tia nắng đầu ngày như sợi tơ vàng trải trên ngọn cỏ.', sample:'Nhìn bầu trời sáng dần trong nắng sớm, em thấy lòng mình tràn đầy niềm vui.' },
+    hoang_hon: { title:'Cảnh hoàng hôn', light:'Mặt trời dần khuất, mây hồng cam', surroundings:'Ánh chiều phủ lên mái nhà, hàng cây', sound:'Tiếng chim về tổ, không khí yên ả', feeling:'Bình yên, bâng khuâng, lưu luyến', words:['đỏ rực','hồng cam','dịu êm','bảng lảng','yên ả'], image:'Những đám mây như được nhuộm màu hồng cam trong ánh chiều.', sample:'Ngắm mặt trời từ từ khuất sau hàng cây, em cảm thấy bình yên và lưu luyến.' },
+    dem_trang: { title:'Một đêm trăng đẹp', light:'Vầng trăng sáng, bầu trời đêm trong xanh', surroundings:'Ánh trăng trải trên sân, bóng cây in trên mặt đất', sound:'Tiếng dế gáy, gió đêm mát lành', feeling:'Say mê, xúc động, yêu vẻ đẹp yên bình', words:['vằng vặc','bàng bạc','lung linh','êm đềm','dịu mát'], image:'Ánh trăng bàng bạc như tấm lụa mỏng phủ lên sân nhà.', sample:'Dưới ánh trăng dịu dàng, em thấy cảnh vật thật yên bình và đáng yêu.' }
+  }[scene];
+  const branches = [
+    {title:'🌄 Cảnh em chọn',icon:'🌄',color:'emerald',points:[`Con chọn ${data.title.toLowerCase()} ở đâu?`,'Con quan sát cảnh ấy vào lúc nào?']},
+    {title:'☀️ Bầu trời và ánh sáng',icon:'☀️',color:'amber',points:[data.light,'Màu sắc nào làm con ấn tượng?']},
+    {title:'🌿 Cảnh vật xung quanh',icon:'🌿',color:'purple',points:[data.surroundings,'Con nhìn thấy chi tiết nào đẹp nhất?']},
+    {title:'🎵 Âm thanh và không khí',icon:'🎵',color:'sky',points:[data.sound,'Không gian khi ấy gợi cảm giác gì?']},
+    {title:'💗 Cảm xúc của em',icon:'💗',color:'rose',points:[data.feeling,'Vì sao con yêu cảnh đẹp ấy?']}
+  ].map((b,i)=>({id:`nature-${i+1}`,...b}));
+  const moDoan=[`Giới thiệu ${data.title.toLowerCase()} mà con đã ngắm và cảm xúc ban đầu của con.`];
+  const phatTrienDoan=[`Miêu tả bầu trời, ánh sáng: ${data.light.toLowerCase()}.`,`Chọn thêm một hoặc hai chi tiết về cảnh vật, âm thanh: ${data.surroundings.toLowerCase()}; ${data.sound.toLowerCase()}.`,'Nói rõ điều gì ở cảnh ấy khiến con xúc động hoặc yêu thích.'];
+  const ketDoan=[`Bày tỏ tình yêu, niềm xúc động của con trước ${data.title.toLowerCase()}; không bắt buộc kể kỷ niệm hay nêu bài học.`];
+  const outline={moDoan,phatTrienDoan,ketDoan,genre:'bieu_cam',sections:[
+    {id:'sec-1',title:'Phần 1. Mở đoạn – Giới thiệu cảnh',icon:'🌄',guideNote:'Nêu cảnh được chọn và cảm xúc ban đầu',bulletPoints:moDoan},
+    {id:'sec-2',title:'Phần 2. Phát triển đoạn – Vẻ đẹp và cảm xúc',icon:'🌿',guideNote:'Quan sát nét đẹp cụ thể, kết hợp cảm nhận',bulletPoints:phatTrienDoan},
+    {id:'sec-3',title:'Phần 3. Kết đoạn – Tình yêu thiên nhiên',icon:'💗',guideNote:'Khép lại bằng cảm xúc chân thành',bulletPoints:ketDoan}
+  ]};
+  const vocabularySuggestions={
+    goodWords:data.words.map(word=>({word,meaningAndUsage:`Gợi tả ${data.title.toLowerCase()} khi phù hợp với cảnh con quan sát.`})),
+    imageries:[{type:'So sánh',example:data.image,explanation:'Gợi hình ảnh cụ thể về ánh sáng và cảnh vật; con có thể viết theo cách riêng.'},{type:'Gợi tả',example:`${data.light}. ${data.surroundings}.`,explanation:'Chọn nét cảnh con thực sự nhìn thấy, không cần dùng hết.'}],
+    sampleSentences:[{type:'mo_bai',label:'Gợi ý mở đoạn',sentence:`Em rất thích ngắm ${data.title.toLowerCase()} ở nơi em sống.`,whyItIsGood:'Giới thiệu đúng cảnh được chọn.'},{type:'mieu_ta',label:'Gợi ý tả cảnh',sentence:data.image,whyItIsGood:'Làm nổi bật một nét đẹp riêng của cảnh.'},{type:'ket_bai',label:'Gợi ý bày tỏ cảm xúc',sentence:data.sample,whyItIsGood:'Gắn cảm xúc với cảnh vật cụ thể.'}],
+    creativeIdeas:[`Quan sát màu sắc của ${data.title.toLowerCase()}.`,'Chọn một âm thanh hoặc chi tiết khiến con xúc động.','Dùng lời văn tự nhiên, không cần kể chuyện về người thân.']
+  };
+  return {data,branches,outline,vocabularySuggestions};
+}
+
 app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
   try {
     const { 
@@ -3305,6 +3355,14 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       customObjectName,
       selectedFormatId
     );
+
+    // CD09 nature-emotion prompt: three independent writing directions, not generic family/person templates.
+    const natureTopic = /bình minh|hoàng hôn|đêm trăng/i.test(prompt) && /xúc động|tình yêu|cảm xúc|bày tỏ/i.test(prompt);
+    const natureSelected = natureEmotionScene(prompt, String(selectedDirectionId || selectedObjectName || customObjectName || ''));
+    if (natureTopic && !natureSelected) {
+      const detectedDirections = natureEmotionDirections();
+      return res.json({originalPrompt:prompt,grade:numGrade,difficultyLevel:diffLevel,topicCode:'CD09',topicName:'Thiên nhiên',writingType:'bieu_cam',writingFormat:'Đoạn văn',choiceType:'direction_selection',hasMultipleDirections:true,detectedDirections,selectedDirectionId:null,selectedDirectionTitle:'',coreSubject:'Bày tỏ cảm xúc trước một cảnh thiên nhiên',mainObject:'Một cảnh thiên nhiên được chọn',hoaNhoUnderstand:'Con chọn một trong ba cảnh: bình minh, hoàng hôn hoặc đêm trăng đẹp. Sau đó quan sát nét đẹp riêng và bày tỏ cảm xúc thật của mình.',specificRequirements:['Chọn đúng một cảnh thiên nhiên để viết','Nêu nét đẹp cụ thể của cảnh và tình cảm, niềm xúc động của con','Viết một đoạn văn; không chuyển sang kể chuyện về người thân'],suggestedLength:'Một đoạn văn theo yêu cầu của giáo viên',socraticQuestions:['Con muốn viết về cảnh nào trong ba cảnh?'],branches:[],outline:{moDoan:[],phatTrienDoan:[],ketDoan:[]},vocabularySuggestions:{goodWords:[],imageries:[],sampleSentences:[],creativeIdeas:[]},allChecksPassed:true,validationChecks:[]});
+    }
 
     // 2. Nếu đề có nhiều hướng viết (LOẠI B hoặc LOẠI C) và học sinh chưa chọn:
     if (semantics.hasMultipleDirections && !selectedDirectionId) {
@@ -3870,6 +3928,27 @@ Mức độ: ${diffLevel}`;
       finalResult.vocabularySuggestions = summerFamilyVocabularyBank();
     }
 
+    if (natureSelected) {
+      const content = natureEmotionContent(natureSelected);
+      finalResult.topicCode = 'CD09';
+      finalResult.topicName = 'Thiên nhiên';
+      finalResult.writingType = 'bieu_cam';
+      finalResult.writingFormat = 'Đoạn văn';
+      finalResult.hasMultipleDirections = true;
+      finalResult.detectedDirections = natureEmotionDirections();
+      finalResult.selectedDirectionId = natureSelected;
+      finalResult.selectedDirectionTitle = content.data.title;
+      finalResult.coreSubject = content.data.title;
+      finalResult.mainObject = content.data.title;
+      finalResult.hoaNhoUnderstand = `Con hãy quan sát ${content.data.title.toLowerCase()}, chọn những nét đẹp làm con xúc động và bày tỏ tình yêu thiên nhiên bằng lời văn của chính mình.`;
+      finalResult.specificRequirements = [`Chỉ viết về ${content.data.title.toLowerCase()}, không lẫn sang hai cảnh còn lại`,'Nêu những nét đẹp cụ thể về ánh sáng, màu sắc và cảnh vật','Bày tỏ niềm xúc động và tình yêu trước cảnh thiên nhiên','Viết thành một đoạn văn, không biến thành bài kể chuyện'];
+      finalResult.suggestedLength = 'Một đoạn văn (theo yêu cầu của giáo viên)';
+      finalResult.socraticQuestions = [`Con đã ngắm ${content.data.title.toLowerCase()} ở đâu?`,`Con thấy bầu trời và ánh sáng như thế nào?`,'Điều gì ở cảnh ấy khiến con xúc động nhất?'];
+      finalResult.branches = content.branches;
+      finalResult.outline = content.outline;
+      finalResult.vocabularySuggestions = content.vocabularySuggestions;
+    }
+
     // 5. Kiểm định tự động 20 tiêu chuẩn GDPT 2018 (Section XV)
     const validationReport = validatePromptAnalysisResult(prompt, finalResult, semantics);
     finalResult.validationChecks = validationReport.checks;
@@ -4075,6 +4154,8 @@ app.post('/api/ai/vocabulary-imagery', async (req, res) => {
   const { prompt = '', genre, grade = 3, studentIdeas } = req.body;
   const pLower = (prompt || '').toLowerCase();
   if (isSummerFamilyJoyPrompt(prompt)) return res.json(summerFamilyVocabularyBank());
+  const natureScene = natureEmotionScene(prompt, String(req.body?.selectedDirectionId || req.body?.selectedDirectionTitle || req.body?.selectedObjectName || req.body?.studentIdeas?.selectedDirectionId || ''));
+  if (natureScene) return res.json(natureEmotionContent(natureScene).vocabularySuggestions);
   const isLetterPrompt = genre === 'viet_thu' || detectGenre(prompt || '') === 'viet_thu';
 
   // Smart topic-based default bank fallback
@@ -4351,6 +4432,11 @@ Hãy trả về JSON:
 // "Làm mới dàn ý từ ý tưởng của em" (Refresh Outline with bulleted Mở đoạn, Phát triển đoạn, Kết đoạn)
 app.post('/api/ai/refresh-outline', async (req, res) => {
   const { prompt, grade = 3, genre, previousOutline, studentStory } = req.body;
+  const natureScene = natureEmotionScene(prompt || '', String(req.body?.selectedDirectionId || req.body?.selectedDirectionTitle || ''));
+  if (natureScene) {
+    const content = natureEmotionContent(natureScene);
+    return res.json({initialIdeas:[content.data.title],newDetails:studentStory?[studentStory]:[],newOutline:content.outline.sections.map((section:any,i:number)=>({id:String(i+1),section:section.title,content:section.bulletPoints.join('\n')})),detailedOutline:content.outline,comparisonNote:'Dàn ý được điều chỉnh theo đúng cảnh thiên nhiên đã chọn.',adherenceNote:'Chỉ tả cảnh đã chọn và bày tỏ cảm xúc; không chuyển sang kể người thân.'});
+  }
   const isLetter = genre === 'viet_thu' || detectGenre(prompt || '') === 'viet_thu';
 
   if (/3\s*[-–—]\s*5\s*câu/u.test(prompt || '') && /chú cún/u.test(prompt || '') && /chú mèo/u.test(prompt || '') && /chú thỏ/u.test(prompt || '')) {
@@ -4919,6 +5005,11 @@ app.post('/api/ai/synthesize-outline', async (req, res) => {
   const { taskTitle, prompt: rawPrompt, expectedLength, gardenType, chatHistory, grade = 3, genre } = req.body;
   const targetPrompt = (rawPrompt || taskTitle || '').trim();
   const pLower = targetPrompt.toLowerCase();
+  const natureScene = natureEmotionScene(targetPrompt, String(req.body?.selectedDirectionId || req.body?.selectedDirectionTitle || ''));
+  if (natureScene) {
+    const content = natureEmotionContent(natureScene);
+    return res.json({outline:content.outline.sections.map((section:any,i:number)=>({id:String(i+1),section:section.title,content:section.bulletPoints.join('\n')})),detailedOutline:content.outline});
+  }
 
   const isShort23 = (expectedLength && (expectedLength.includes('2–3') || expectedLength.includes('2-3'))) ||
                     targetPrompt.includes('2–3 câu') || targetPrompt.includes('2-3 câu') || targetPrompt.includes('3–4 câu');
