@@ -3326,6 +3326,61 @@ function natureEmotionContent(scene: 'binh_minh'|'hoang_hon'|'dem_trang') {
   return {data,branches,outline,vocabularySuggestions};
 }
 
+
+// Bộ kiểm soát chung: áp dụng cho mọi đề, không gắn với mã CD cụ thể.
+// Giữ dữ liệu đặc thù đã đúng; chỉ thay trường rỗng hoặc bị nhiễm hướng viết khác.
+function normalizeWritingAnalysis(result: PromptAnalysisData, baseline: PromptAnalysisData,
+  prompt: string, selectedLabel: string, directions: Array<{title?: string; mainObject?: string}> = []): PromptAnalysisData {
+  const out = result as any;
+  const base = baseline as any;
+  const normalize = (value: unknown): string => String(value ?? '').normalize('NFC').toLocaleLowerCase('vi');
+  const chosen = normalize(selectedLabel).trim();
+  const otherDirections = directions
+    .map(d => normalize(d.mainObject || d.title).trim())
+    .filter(t => t.length >= 5 && t !== chosen && !chosen.includes(t) && !t.includes(chosen));
+  const invalid = (value: unknown): boolean => {
+    if (typeof value === 'string') {
+      const v = normalize(value).trim();
+      return !v || otherDirections.some(t => v.includes(t));
+    }
+    if (Array.isArray(value)) return !value.length || value.some(invalid);
+    if (value && typeof value === 'object') return Object.values(value).some(invalid);
+    return value == null;
+  };
+  for (const field of ['hoaNhoUnderstand', 'specificRequirements', 'socraticQuestions']) {
+    if (invalid(out[field]) && !invalid(base[field])) out[field] = base[field];
+  }
+  if (!Array.isArray(out.branches) || out.branches.length !== 5 || out.branches.some((b:any) =>
+    !b || !(b.title || b.name) || !((Array.isArray(b.points) && b.points.length) || (Array.isArray(b.items) && b.items.length))
+  )) {
+    if (Array.isArray(base.branches) && base.branches.length === 5) out.branches = base.branches;
+  }
+  // Kho từ ngữ: không cho AI trả chuỗi trống hoặc dữ liệu của lựa chọn khác.
+  const keys = ['goodWords','imageries','sampleSentences','creativeIdeas'];
+  if (!out.vocabularySuggestions) out.vocabularySuggestions = {};
+  for (const key of keys) {
+    const current = out.vocabularySuggestions[key];
+    const safe = base.vocabularySuggestions?.[key];
+    if ((!Array.isArray(current) || !current.length || current.some(invalid)) &&
+        Array.isArray(safe) && safe.length && !safe.some(invalid)) {
+      out.vocabularySuggestions[key] = safe;
+    } else if (Array.isArray(current)) {
+      out.vocabularySuggestions[key] = current.filter((v:unknown) => !invalid(v));
+    }
+  }
+  // Chỉ ràng buộc độ dài khi đề thực sự nêu số câu; không tự áp số câu theo lớp.
+  const lengthMatch = prompt.match(/(?:từ\s*)?(\d{1,2})\s*(?:[-–—]|đến|tới)\s*(\d{1,2})\s*câu/i)
+    || prompt.match(/(\d{1,2})\s*câu/i);
+  if (lengthMatch) {
+    const min = Number(lengthMatch[1]);
+    const max = Number(lengthMatch[2] || lengthMatch[1]);
+    if (min > 0 && max >= min && max <= 30) out.suggestedLength = min === max ? `${min} câu` : `${min}–${max} câu`;
+  } else if (/đoạn văn/i.test(prompt)) {
+    out.suggestedLength = 'Một đoạn văn (đề không quy định số câu)';
+  }
+  return result;
+}
+
 app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
   try {
     const { 
@@ -3948,6 +4003,94 @@ Mức độ: ${diffLevel}`;
       finalResult.outline = content.outline;
       finalResult.vocabularySuggestions = content.vocabularySuggestions;
     }
+
+    // Bài chia sẻ ước mơ tương lai: sửa thống nhất dữ liệu trước khi trả về UI.
+    // Áp dụng theo ý nghĩa đề, không phụ thuộc mã chủ đề CD hoặc lớp học.
+    const isFutureDreamPrompt = /ước mơ/i.test(prompt) &&
+      /tương lai|lớn lên|trở thành|hiện thực/i.test(prompt) &&
+      /sẽ làm|thực hiện|biến ước mơ|nghề nghiệp|bác sĩ|phi công|họa sĩ|cô giáo/i.test(prompt);
+    if (isFutureDreamPrompt) {
+      const selectedDream = String(selectedObjectName || customObjectName ||
+        semantics.selectedObjectName || semantics.selectedDirection?.title || '').trim();
+      const profession = /^(bác sĩ|phi công|cô giáo|thầy giáo|giáo viên|họa sĩ|kĩ sư|kỹ sư|đầu bếp|nhà khoa học|công an|bộ đội|ca sĩ|vận động viên)$/i.test(selectedDream)
+        ? selectedDream : '';
+      const subject = profession ? `Ước mơ trở thành ${profession}` : 'Ước mơ tương lai của em';
+      const examples: Record<string, string[]> = {
+        'bác sĩ': ['học tập chăm chỉ, tìm hiểu cách chăm sóc sức khỏe', 'rèn lòng nhân ái và biết quan tâm người khác'],
+        'phi công': ['học tập chăm chỉ, tìm hiểu về máy bay', 'rèn luyện sức khỏe và tính kỉ luật'],
+        'cô giáo': ['chăm học và tập giải thích bài cho bạn', 'rèn sự kiên nhẫn và lòng yêu thương'],
+        'giáo viên': ['chăm học và tập giải thích bài cho bạn', 'rèn sự kiên nhẫn và lòng yêu thương'],
+        'họa sĩ': ['luyện vẽ và quan sát màu sắc mỗi ngày', 'rèn óc sáng tạo và sự kiên trì']
+      };
+      const actions = examples[profession.toLocaleLowerCase('vi')] ||
+        ['học tập và tìm hiểu những điều liên quan đến ước mơ', 'rèn luyện kĩ năng, phẩm chất phù hợp mỗi ngày'];
+      const mo = [`Nêu rõ ${subject.toLowerCase()} bằng lời của em.`, 'Có thể chia sẻ khi nào em bắt đầu có ước mơ ấy.'];
+      const than = ['Giải thích vì sao em yêu thích ước mơ này.', 'Nói về công việc hoặc điều có ích em muốn làm khi ước mơ thành hiện thực.', `Nêu việc em sẽ làm từ hôm nay: ${actions.join('; ')}.`];
+      const ket = ['Bày tỏ cảm xúc khi nghĩ đến tương lai.', 'Nói quyết tâm cố gắng từng ngày để thực hiện ước mơ.'];
+      finalResult.writingType = 'chia_se_uoc_mo' as any;
+      finalResult.writingFormat = 'Đoạn văn';
+      finalResult.coreSubject = subject;
+      finalResult.mainObject = subject;
+      finalResult.hoaNhoUnderstand = `Con hãy giới thiệu ${subject.toLowerCase()}, nói lí do con yêu thích và những việc cụ thể con sẽ làm để biến ước mơ thành hiện thực.`;
+      finalResult.specificRequirements = [
+        'Nêu rõ ước mơ hoặc nghề nghiệp em mong muốn trong tương lai.',
+        'Giải thích lí do em có ước mơ ấy.',
+        'Nêu những việc cụ thể em sẽ làm để thực hiện ước mơ.'
+      ];
+      finalResult.suggestedLength = 'Một đoạn văn (đề không quy định số câu)';
+      finalResult.socraticQuestions = [
+        'Lớn lên con muốn trở thành ai hoặc làm điều gì?',
+        'Vì sao con yêu thích ước mơ đó?',
+        'Từ hôm nay con sẽ làm những việc gì để tiến gần hơn đến ước mơ?'
+      ];
+      finalResult.branches = [
+        {id:'dream-1',title:'🌟 Ước mơ của em',icon:'🌟',color:'amber',points:[`Con mong muốn điều gì? ${profession || 'Con muốn làm nghề gì?'}`,'Con bắt đầu có ước mơ ấy khi nào?']},
+        {id:'dream-2',title:'💖 Lí do yêu thích',icon:'💖',color:'rose',points:['Điều gì khiến con yêu thích ước mơ này?','Con ngưỡng mộ ai hoặc điều gì ở công việc đó?']},
+        {id:'dream-3',title:'🛠️ Công việc mong muốn',icon:'🛠️',color:'sky',points:['Khi lớn lên con muốn làm những công việc gì?','Công việc ấy có ích như thế nào?']},
+        {id:'dream-4',title:'📚 Việc làm từ hôm nay',icon:'📚',color:'emerald',points:actions},
+        {id:'dream-5',title:'🌈 Cảm xúc và quyết tâm',icon:'🌈',color:'violet',points:['Con cảm thấy thế nào khi nghĩ về tương lai?','Con sẽ cố gắng ra sao để đạt được ước mơ?']}
+      ];
+      finalResult.outline = {
+        moDoan:mo,phatTrienDoan:than,ketDoan:ket,genre:'chia_se_uoc_mo',
+        sections:[
+          {id:'sec-1',title:'Phần 1. Mở đoạn – Giới thiệu ước mơ',icon:'🌟',guideNote:'Nêu ước mơ của em',bulletPoints:mo},
+          {id:'sec-2',title:'Phần 2. Phát triển đoạn – Lí do và hành động',icon:'📚',guideNote:'Nói vì sao em yêu thích và sẽ làm gì từ hôm nay',bulletPoints:than},
+          {id:'sec-3',title:'Phần 3. Kết đoạn – Cảm xúc và quyết tâm',icon:'💖',guideNote:'Nêu cảm xúc, quyết tâm thực hiện ước mơ',bulletPoints:ket}
+        ]
+      } as any;
+      finalResult.vocabularySuggestions = {
+        goodWords:[
+          {word:'ước mơ',meaningAndUsage:'Điều em mong muốn đạt được trong tương lai.'},
+          {word:'đam mê',meaningAndUsage:'Sự yêu thích và say mê một công việc.'},
+          {word:'quyết tâm',meaningAndUsage:'Ý chí cố gắng thực hiện mục tiêu.'},
+          {word:'kiên trì',meaningAndUsage:'Không bỏ cuộc khi gặp khó khăn.'},
+          {word:'nỗ lực',meaningAndUsage:'Cố gắng bằng những việc làm cụ thể.'}
+        ],
+        imageries:[
+          {type:'So sánh',example:'Ước mơ như một ngôi sao dẫn đường cho em cố gắng.',explanation:'Gợi hình ảnh mục tiêu soi sáng hành trình học tập.'},
+          {type:'Hình ảnh',example:'Mỗi ngày học tập là một bước nhỏ tiến gần hơn đến ước mơ.',explanation:'Nhấn mạnh những hành động nhỏ nhưng thiết thực.'}
+        ],
+        sampleSentences:[
+          {type:'mo_bai',label:'Gợi ý mở đoạn',sentence:`Trong tương lai, em ước mơ ${profession ? `trở thành ${profession}` : 'trở thành ...'} vì ...`,whyItIsGood:'Giới thiệu đúng ước mơ và lí do.'},
+          {type:'than_bai',label:'Gợi ý việc làm',sentence:'Để thực hiện ước mơ ấy, ngay từ hôm nay em sẽ ...',whyItIsGood:'Nêu hành động cụ thể.'},
+          {type:'ket_bai',label:'Gợi ý kết đoạn',sentence:'Em tin rằng nếu luôn cố gắng và kiên trì, em sẽ từng bước tiến gần hơn đến ước mơ của mình.',whyItIsGood:'Bày tỏ quyết tâm.'}
+        ],
+        creativeIdeas:[`Chọn một việc nhỏ con có thể làm ngay hôm nay: ${actions[0]}.`,'Giải thích bằng lời của mình vì sao ước mơ ấy có ý nghĩa.','Không cần kể chuyện về người thân nếu đề không yêu cầu.']
+      } as any;
+    }
+
+    // Kiểm soát chung sau tất cả xử lý chuyên biệt; không ghi đè các bài đã đạt.
+    const baselineForGuard: PromptAnalysisData = {
+      ...finalResult,
+      hoaNhoUnderstand: isFutureDreamPrompt ? finalResult.hoaNhoUnderstand : baseAnalysis.hoaNhoUnderstand,
+      specificRequirements: isFutureDreamPrompt ? finalResult.specificRequirements : baseAnalysis.specificRequirements,
+      socraticQuestions: isFutureDreamPrompt ? finalResult.socraticQuestions : baseAnalysis.socraticQuestions,
+      branches: isFutureDreamPrompt ? finalResult.branches : baseAnalysis.branches,
+      vocabularySuggestions: isFutureDreamPrompt ? finalResult.vocabularySuggestions : baseAnalysis.vocabularySuggestions
+    };
+    finalResult = normalizeWritingAnalysis(finalResult, baselineForGuard, prompt,
+      String(semantics.selectedDirection?.mainObject || semantics.selectedDirection?.title || semantics.selectedObjectName || ''),
+      semantics.detectedDirections || []);
 
     // 5. Kiểm định tự động 20 tiêu chuẩn GDPT 2018 (Section XV)
     const validationReport = validatePromptAnalysisResult(prompt, finalResult, semantics);
