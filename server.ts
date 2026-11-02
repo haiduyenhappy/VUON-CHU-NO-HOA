@@ -3381,6 +3381,48 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       };
     }
 
+    // CD13: Kể một việc tốt chính em đã làm (3–5 câu). Không dùng dàn ý bài văn ba phần.
+    const isPersonalGoodDeed = /việc tốt/i.test(prompt) &&
+      /(?:em đã làm|con đã làm)/i.test(prompt) &&
+      /3\s*[-–—]\s*5\s*câu/i.test(prompt);
+    if (isPersonalGoodDeed) {
+      finalResult.writingType = 'ke_chuyen';
+      finalResult.writingFormat = 'Đoạn văn 3–5 câu';
+      finalResult.coreSubject = 'Kể lại một việc tốt do chính em thực hiện';
+      finalResult.mainObject = 'Việc tốt em đã làm';
+      finalResult.hoaNhoUnderstand = 'Con hãy chọn một việc tốt có thật mà chính con đã làm. Nhớ lại con đã giúp ai hoặc làm gì, kết quả ra sao và con cảm thấy thế nào. Con viết một đoạn 3–5 câu, không cần chia thành ba phần.';
+      finalResult.suggestedLength = '3–5 câu';
+      finalResult.specificRequirements = [
+        'Chọn một việc tốt do chính em đã làm, không kể việc của người khác',
+        'Nêu việc tốt xảy ra khi nào, ở đâu nếu con nhớ',
+        'Kể con đã làm gì và kết quả của việc làm',
+        'Viết một đoạn 3–5 câu, có thể nêu cảm xúc; không bắt buộc rút ra bài học'
+      ];
+      finalResult.socraticQuestions = [
+        'Con đã nhặt được của rơi trả lại, giúp em nhỏ, nhặt rác hay làm một việc tốt nào khác?',
+        'Khi đó con đã làm gì trước, rồi làm gì tiếp?',
+        'Sau việc tốt ấy, điều gì xảy ra và con cảm thấy thế nào?'
+      ];
+      finalResult.branches = [
+        { id: 'br-1', title: '💝 Việc tốt của con', icon: '💝', color: 'emerald', points: ['Con đã làm việc tốt nào?', 'Con giúp ai hoặc giúp điều gì?'] },
+        { id: 'br-2', title: '🕒 Khi nào, ở đâu?', icon: '🕒', color: 'purple', points: ['Việc xảy ra lúc nào?', 'Con đang ở đâu khi ấy?'] },
+        { id: 'br-3', title: '🙌 Con đã làm gì?', icon: '🙌', color: 'amber', points: ['Con đã bắt đầu làm thế nào?', 'Con làm gì tiếp theo?'] },
+        { id: 'br-4', title: '🌟 Kết quả', icon: '🌟', color: 'sky', points: ['Việc tốt mang lại kết quả gì?', 'Người được giúp đỡ phản ứng ra sao?'] },
+        { id: 'br-5', title: '❤️ Cảm xúc', icon: '❤️', color: 'rose', points: ['Sau đó con cảm thấy thế nào?', 'Điều gì làm con nhớ nhất?'] }
+      ];
+      const bullets = [
+        'Câu 1: Nêu một việc tốt con đã làm, có thể cho biết thời gian hoặc địa điểm.',
+        'Câu 2: Kể con đã thực hiện việc tốt ấy như thế nào.',
+        'Câu 3: Nêu kết quả của việc làm.',
+        'Câu 4–5 (nếu viết): Thêm chi tiết đáng nhớ hoặc nói cảm xúc của con.'
+      ];
+      finalResult.outline = {
+        moDoan: [bullets[0]], phatTrienDoan: [bullets[1], bullets[2]], ketDoan: [bullets[3]],
+        genre: 'ke_chuyen',
+        sections: [{ id: 'sec-1', title: 'Gợi ý viết một đoạn 3–5 câu', icon: '📝', guideNote: 'Chọn ý phù hợp với việc tốt con đã thực hiện; không phải bài văn ba phần', bulletPoints: bullets }]
+      };
+    }
+
     // 4. Nếu có Gemini AI, làm giàu thêm ý tưởng sinh động nhưng KHÔNG ĐƯỢC LÀM SAI LỆCH cấu trúc và đối tượng
     // Nếu là LOẠI A khi chưa chọn đồ vật: giữ nguyên bản phân tích chuẩn sư phạm không để AI đoán mò đối tượng
     const isCD07ThreePets = /3\s*[-–—]\s*5\s*câu/u.test(prompt) &&
@@ -3411,7 +3453,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         /Trò chơi|Loài hoa|Tên hoa|Nghề con mơ ước|Người con muốn cảm ơn|Lời cảm ơn|Thầy cô dạy chữ/i.test(branch.title || '')
       );
 
-    if (ai && !isCD07ThreePets && !isCD05Playtime && !isSpecialPedagogicalPrompt && !hasDedicatedGrade1Structure && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
+    if (ai && !isPersonalGoodDeed && !isCD07ThreePets && !isCD05Playtime && !isSpecialPedagogicalPrompt && !hasDedicatedGrade1Structure && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
       try {
         const directionInstruction = semantics.selectedDirection ? `
 CHÚ Ý ĐẶC BIỆT VỀ HƯỚNG VIẾT ĐÃ CHỌN:
