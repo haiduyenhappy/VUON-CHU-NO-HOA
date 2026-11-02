@@ -3381,6 +3381,49 @@ function normalizeWritingAnalysis(result: PromptAnalysisData, baseline: PromptAn
   return result;
 }
 
+// Reading-response task: distinguish poem and prose; never invent a work or quotations.
+function isHomelandReadingResponse(prompt: string): boolean {
+  return /(?:nêu cảm nghĩ|nêu cảm nhận|cảm nghĩ của em|cảm nhận của em)/iu.test(prompt) && /(?:bài thơ|bài tập đọc)/iu.test(prompt) && /(?:non sông|đất nước|quê hương|tổ quốc)/iu.test(prompt);
+}
+function homelandReadingDirections() {
+  return [
+    {id:'cam_nghi_bai_tho',title:'Bài thơ ca ngợi vẻ đẹp non sông, đất nước',mainObject:'Một bài thơ về vẻ đẹp đất nước'},
+    {id:'cam_nghi_bai_tap_doc',title:'Bài tập đọc ca ngợi vẻ đẹp non sông, đất nước',mainObject:'Một bài tập đọc về vẻ đẹp đất nước'}
+  ];
+}
+function homelandReadingContent(prompt:string, grade:number, direction:string) {
+  const prose=/tap_doc|tập đọc|bai_tap_doc|bài tập đọc/iu.test(direction);
+  const label=prose?'bài tập đọc':'bài thơ';
+  const title=prose?'Bài tập đọc ca ngợi vẻ đẹp non sông, đất nước':'Bài thơ ca ngợi vẻ đẹp non sông, đất nước';
+  const directions=homelandReadingDirections();
+  const selectedDirectionId=prose?'cam_nghi_bai_tap_doc':'cam_nghi_bai_tho';
+  const reqs=[`Nêu tên ${label} đã đọc (nếu nhớ) và cảm nghĩ ban đầu.`,`Chọn một hình ảnh hoặc chi tiết có thật trong ${label} khiến con ấn tượng.`,`Nói rõ vì sao hình ảnh hoặc chi tiết đó khiến con yêu quý, tự hào về đất nước.`];
+  const pts=[
+    {title:'📖 Tác phẩm em đọc',icon:'📖',color:'emerald',points:[`Con đọc ${label} nào?`,'Tác phẩm gợi lên cảnh đẹp nào của đất nước?']},
+    {title:'🏞️ Hình ảnh đất nước',icon:'🏞️',color:'purple',points:['Cảnh vật hoặc địa danh nào được nhắc đến?','Hình ảnh nào làm con hình dung rõ vẻ đẹp non sông?']},
+    {title:'✨ Chi tiết ấn tượng',icon:'✨',color:'amber',points:[prose?'Chi tiết hoặc câu văn nào làm con nhớ nhất?':'Câu thơ hoặc hình ảnh thơ nào làm con nhớ nhất?','Vì sao chi tiết ấy gây ấn tượng?']},
+    {title:'💗 Cảm nghĩ của em',icon:'💗',color:'sky',points:['Khi đọc, con cảm thấy vui, xúc động hay tự hào?','Điều gì trong tác phẩm tạo nên cảm xúc ấy?']},
+    {title:'🇻🇳 Tình yêu đất nước',icon:'🇻🇳',color:'rose',points:['Tác phẩm giúp con thêm yêu điều gì ở quê hương, đất nước?','Con muốn chia sẻ điều gì sau khi đọc?']}
+  ].map((b,i)=>({id:`reading-${i+1}`,...b}));
+  const mo=[`Giới thiệu ${label} con đã đọc (nếu nhớ tên) và cảm xúc ban đầu; không tự đặt tên tác phẩm.`];
+  const than=[`Nêu một hoặc hai hình ảnh, câu ${prose?'văn hoặc chi tiết':'thơ hoặc hình ảnh thơ'} có thật trong tác phẩm mà con nhớ nhất.`,`Giải thích vì sao những hình ảnh ấy giúp con cảm nhận vẻ đẹp của non sông, đất nước.`,`Bày tỏ cảm nghĩ của con gắn với chi tiết cụ thể trong tác phẩm; không chuyển thành kể kỉ niệm cá nhân.`];
+  const ket=['Nói tình yêu, niềm tự hào hoặc suy nghĩ đọng lại sau khi đọc tác phẩm.'];
+  const outline={moDoan:mo,phatTrienDoan:than,ketDoan:ket,genre:'bieu_cam',sections:[
+    {id:'sec-1',title:'Phần 1. Mở đoạn – Tác phẩm và cảm xúc ban đầu',icon:'📖',guideNote:'Giới thiệu tác phẩm đã đọc',bulletPoints:mo},
+    {id:'sec-2',title:'Phần 2. Phát triển đoạn – Hình ảnh và cảm nghĩ',icon:'🏞️',guideNote:'Cảm nhận vẻ đẹp qua chi tiết có thật trong tác phẩm',bulletPoints:than},
+    {id:'sec-3',title:'Phần 3. Kết đoạn – Tình yêu đất nước',icon:'💗',guideNote:'Nêu cảm nghĩ đọng lại',bulletPoints:ket}
+  ]};
+  const words=[['hùng vĩ','Gợi vẻ đẹp rộng lớn, mạnh mẽ của cảnh vật trong tác phẩm.'],['tươi đẹp','Nói về vẻ đẹp của quê hương, đất nước.'],['thanh bình','Gợi không gian yên ả nếu tác phẩm có chi tiết phù hợp.'],['tự hào','Diễn tả cảm xúc trước vẻ đẹp non sông.'],['tha thiết','Diễn tả tình yêu sâu đậm dành cho quê hương.']];
+  const vocabularySuggestions={goodWords:words.map(([word,meaningAndUsage])=>({word,meaningAndUsage})),imageries:[
+    {type:'Hình ảnh trong tác phẩm',example:'Một dòng sông, ngọn núi hoặc cánh đồng được tác phẩm nhắc tới (chỉ chọn nếu có thật).',explanation:'Không tự bịa chi tiết của tác phẩm.'},
+    {type:'Cảm xúc',example:'Hình ảnh ấy khiến em thêm yêu và tự hào về vẻ đẹp của đất nước.',explanation:'Gắn cảm xúc với chi tiết vừa nêu.'}
+  ],sampleSentences:[
+    {type:'mo_bai',label:'Gợi ý mở đoạn',sentence:`Sau khi đọc ${label} về vẻ đẹp đất nước, em cảm thấy rất ấn tượng.`,whyItIsGood:'Nêu đúng hoạt động đọc và cảm nghĩ ban đầu.'},
+    {type:'than_bai',label:'Gợi ý phát triển',sentence:'Hình ảnh ... trong tác phẩm khiến em hình dung ... và cảm thấy ...',whyItIsGood:'Để học sinh tự điền chi tiết có thật và cảm xúc của mình.'},
+    {type:'ket_bai',label:'Gợi ý kết đoạn',sentence:'Tác phẩm giúp em thêm yêu vẻ đẹp của non sông, đất nước.',whyItIsGood:'Khép lại đúng trọng tâm cảm nghĩ sau khi đọc.'}
+  ],creativeIdeas:['Không bịa tên tác phẩm hoặc câu thơ, câu văn.','Chọn hình ảnh thực sự xuất hiện trong tác phẩm đã đọc.']};
+  return {originalPrompt:prompt,grade,difficultyLevel:'co_ban',topicCode:'CD25',topicName:'Chủ đề tự do',writingType:'bieu_cam',writingFormat:'Đoạn văn',choiceType:'direction_selection',hasMultipleDirections:true,detectedDirections:directions,selectedDirectionId,selectedDirectionTitle:title,coreSubject:`Cảm nghĩ sau khi đọc ${label} về vẻ đẹp đất nước`,mainObject:`${label} đã đọc`,hoaNhoUnderstand:`Con hãy nhớ lại ${label} đã đọc, chọn hình ảnh hoặc chi tiết có thật khiến con ấn tượng và chia sẻ cảm xúc của mình về vẻ đẹp non sông, đất nước.`,specificRequirements:reqs,suggestedLength:'Một đoạn văn (đề không quy định số câu)',socraticQuestions:[`Con đã đọc ${label} nào?`,'Hình ảnh nào khiến con nhớ nhất?','Vì sao con xúc động hoặc tự hào?'],branches:pts,outline,vocabularySuggestions,allChecksPassed:true,validationChecks:[]};
+}
 app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
   try {
     const { 
@@ -3395,6 +3438,14 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       selectedFormatId = null
     } = req.body;
 
+    if (isHomelandReadingResponse(prompt)) {
+      const direction=String(selectedDirectionId || selectedObjectName || customObjectName || '');
+      if (!direction) {
+        const base=homelandReadingContent(prompt,Number(grade)||3,'cam_nghi_bai_tho');
+        return res.json({...base,selectedDirectionId:null,selectedDirectionTitle:'',mainObject:'Bài thơ hoặc bài tập đọc học sinh sẽ chọn',coreSubject:'Chọn loại tác phẩm đã đọc',branches:[],outline:{moDoan:[],phatTrienDoan:[],ketDoan:[]},vocabularySuggestions:{goodWords:[],imageries:[],sampleSentences:[],creativeIdeas:[]}});
+      }
+      return res.json(homelandReadingContent(prompt,Number(grade)||3,direction));
+    }
     const numGrade = Number(grade) || 3;
     const diffLevel = (['co_ban', 'mo_rong', 'nang_cao', 'sang_tao'].includes(difficultyLevel) 
       ? difficultyLevel 
