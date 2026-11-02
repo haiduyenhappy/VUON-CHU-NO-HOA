@@ -3359,7 +3359,16 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         (/ước mơ/i.test(prompt) && /lớn lên/i.test(prompt) && /nghề gì/i.test(prompt))
       ));
 
-    if (ai && !isSpecialPedagogicalPrompt && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
+    // Không cho Gemini ghi đè sơ đồ/giàn ý đã được bộ sư phạm chuyên biệt tạo ra.
+    // Nhận diện theo cấu trúc kết quả thay vì chỉ dựa vào từ khóa đề.
+    const hasDedicatedGrade1Structure = numGrade === 1 &&
+      Array.isArray(baseAnalysis.branches) &&
+      baseAnalysis.branches.length === 5 &&
+      baseAnalysis.branches.some((branch) =>
+        /Trò chơi|Loài hoa|Tên hoa|Nghề con mơ ước|Người con muốn cảm ơn|Lời cảm ơn|Thầy cô dạy chữ/i.test(branch.title || '')
+      );
+
+    if (ai && !isSpecialPedagogicalPrompt && !hasDedicatedGrade1Structure && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
       try {
         const directionInstruction = semantics.selectedDirection ? `
 CHÚ Ý ĐẶC BIỆT VỀ HƯỚNG VIẾT ĐÃ CHỌN:
