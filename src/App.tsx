@@ -35,7 +35,9 @@ export default function App() {
       const saved = localStorage.getItem('vuonchu_auth_session');
       if (saved) {
         const parsed = JSON.parse(saved);
-        if (parsed?.role) return parsed.role;
+        if (parsed?.role === 'teacher') return 'teacher';
+        if (parsed?.role === 'student') return 'student';
+        if (parsed?.role === 'family') return 'family';
       }
     } catch (e) {}
     return 'home';
@@ -138,11 +140,9 @@ export default function App() {
       setActiveStudent(user.student);
       setCurrentView('student');
     } else if (user.role === 'teacher') {
-      if (user.teacherRole === 'SUPER_ADMIN') {
-        setCurrentView('admin_system');
-      } else {
-        setCurrentView('teacher');
-      }
+      // All teacher accounts, including SUPER_ADMIN, land in 'Lớp học của tôi'.
+      // SUPER_ADMIN can still open the administration page from the menu.
+      setCurrentView('teacher');
     } else if (user.role === 'family') {
       if (user.student) {
         setActiveStudent(user.student);
