@@ -20,37 +20,10 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
-  // CD07 – Con vật nuôi: không dùng gợi ý miêu tả đồ vật hay lẫn các con vật.
-  if (has(/3\s*[-–—]\s*5\s*câu/u) && has(/chú cún/u) && has(/chú mèo/u) && has(/chú thỏ/u)) {
-    const animal = /thỏ/u.test(object) ? 'chú thỏ' : /mèo/u.test(object) ? 'chú mèo' : /cún|chó/u.test(object) ? 'chú cún' : '';
-    const hints = animal
-      ? [`Nhớ bộ lông và dáng vẻ của ${animal}`, `Kể một hoạt động đáng yêu của ${animal}`, `Nói tình cảm của con với ${animal}`]
-      : ['Chọn miêu tả chú cún, chú mèo hoặc chú thỏ', 'Nhớ ngoại hình nổi bật của con vật con chọn', 'Kể một hoạt động đáng yêu', 'Nói tình cảm của con'];
-    return ['Viết đoạn văn 3–5 câu', ...hints];
-  }
-
-  // Lớp 1: ước mơ nghề nghiệp – ưu tiên nhiệm vụ nói về nghề, không tả người.
-  if (grade === 1 && has(/ước mơ/u) && has(/lớn lên/u) && has(/làm nghề gì|muốn làm nghề|bác sĩ|phi công/u)) {
-    ideas.push('Chọn nghề con muốn làm khi lớn lên', 'Nói điều con thích ở nghề ấy', 'Kể một việc tốt con muốn làm với nghề đó');
-    const count = lengthHint(text);
-    return [...new Set(count ? [count, ...ideas] : ideas)].slice(0, 5);
-  }
-
-  // Bài lớp 1: cảm ơn cô giáo hoặc thầy giáo đã dạy những nét chữ đầu đời.
-  if (grade === 1 && has(/cảm ơn/u) && has(/nét chữ đầu đời/u) && has(/cô giáo/u) && has(/thầy giáo/u)) {
-    const isMale = /thầy giáo|thay_giao/u.test(object) && !/cô giáo|co_giao/u.test(object);
-    const person = isMale ? 'thầy' : 'cô';
-    if (!object) ideas.push('Chọn cảm ơn cô giáo hoặc thầy giáo');
-    ideas.push(`Nhớ lúc ${person} dạy con tập viết`, `Kể một điều ${person} đã tận tình chỉ bảo`, `Nói lời cảm ơn ${person} bằng lời của con`);
-    const count = lengthHint(text);
-    return [...new Set(count ? [count, ...ideas] : ideas)].slice(0, 5);
-  }
-
-  // Hai bài lớp 1 cần gợi ý riêng theo nhiệm vụ chính.
-  if (grade === 1 && has(/giờ ra chơi/u) && has(/niềm vui/u) && has(/sân trường/u)) {
-    ideas.push('Nhớ trò chơi con và các bạn cùng chơi', 'Kể một việc vui xảy ra khi chơi', 'Nói điều làm con vui nhất');
-  } else if (grade === 1 && has(/sắc hoa rực rỡ/u) && has(/bông hoa/u) && has(/trong vườn/u)) {
-    ideas.push('Chọn sắc hoa ngày Tết hoặc bông hoa trong vườn', 'Nhớ màu hoa con thấy đẹp nhất', 'Nói một nét đẹp con chú ý', 'Chia sẻ cảm xúc khi ngắm hoa');
+  // Xác định hành động giao tiếp trước khi xét những danh từ xuất hiện trong đề.
+  // Ước mơ nghề nghiệp phải được nhận diện trước nhánh tả người (ví dụ 'cô giáo').
+  if (has(/ước mơ|ước mong|nghề nghiệp tương lai|muốn trở thành|sẽ trở thành|biến ước mơ thành hiện thực/u)) {
+    ideas.push('Nêu rõ ước mơ hoặc nghề nghiệp tương lai của con', 'Chia sẻ lí do con yêu thích ước mơ ấy', 'Nói những việc con sẽ làm để thực hiện ước mơ');
   } else if (has(/tin nhắn|nhắn tin|lời nhắn/u)) {
     const thanks = has(/cảm ơn/u), sorry = has(/xin lỗi/u);
     if (thanks && sorry && !object) ideas.push('Chọn cảm ơn hay xin lỗi bạn');
@@ -61,21 +34,8 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   } else if (has(/giới thiệu.*bản thân|giới thiệu.*về em|họ tên.*sở thích|sở thích.*ước mơ/u)) {
     ideas.push('Kể một sở thích con yêu nhất', 'Chia sẻ ước mơ của con', 'Nói một điều đặc biệt về chính mình', 'Kể vì sao con thích điều ấy');
   } else if (has(/tình cảm|yêu mến|kính trọng|biết ơn|yêu thương/u) && has(/ông|bà|bố|mẹ|cha|người thân|thầy|cô|bạn/u)) {
-    // Ưu tiên đúng toàn bộ đối tượng có trong đề, không thu hẹp thành "ông/bà".
-    const familyOptions: string[] = [];
-    if (has(/\bbố\b|\bcha\b/u)) familyOptions.push('bố');
-    if (has(/\bmẹ\b/u)) familyOptions.push('mẹ');
-    if (has(/\bông\b/u)) familyOptions.push('ông');
-    if (has(/\bbà\b/u)) familyOptions.push('bà');
-    const chosen = familyOptions.find(person => object.includes(person));
-    if (familyOptions.length > 1 && !chosen) {
-      const names = familyOptions.length === 2
-        ? familyOptions.join(' hoặc ')
-        : `${familyOptions.slice(0, -1).join(', ')} hoặc ${familyOptions[familyOptions.length - 1]}`;
-      ideas.push(`Chọn kể về ${names}`);
-    }
-    const person = chosen || (familyOptions.length === 1 ? familyOptions[0] : 'người thân con chọn');
-    ideas.push(`Nhớ một việc ${person} làm cho con`, `Kể một kỉ niệm ấm áp cùng ${person}`, `Nói điều khiến con yêu quý ${person}`);
+    if (has(/ông hoặc bà|ông hay bà/u) && !object) ideas.push('Chọn kể về ông hay bà');
+    ideas.push('Nhớ một việc ông/bà làm cho con', 'Kể một kỉ niệm ấm áp cùng người ấy', 'Nói điều khiến con yêu quý, kính trọng');
   } else if (has(/nêu ý kiến|ý kiến của em|đồng tình|không đồng tình/u)) {
     ideas.push('Con nghĩ gì về vấn đề này?', 'Điều gì khiến con nghĩ như vậy?', 'Kể một ví dụ con từng thấy');
   } else if (has(/kỉ niệm|kỷ niệm|trải nghiệm|việc tốt|kể lại|kể về|chuyến đi/u)) {
