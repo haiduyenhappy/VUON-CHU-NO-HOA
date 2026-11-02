@@ -20,6 +20,23 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
+  // Lớp 1: ước mơ nghề nghiệp – ưu tiên nhiệm vụ nói về nghề, không tả người.
+  if (grade === 1 && has(/ước mơ/u) && has(/lớn lên/u) && has(/làm nghề gì|muốn làm nghề|bác sĩ|phi công/u)) {
+    ideas.push('Chọn nghề con muốn làm khi lớn lên', 'Nói điều con thích ở nghề ấy', 'Kể một việc tốt con muốn làm với nghề đó');
+    const count = lengthHint(text);
+    return [...new Set(count ? [count, ...ideas] : ideas)].slice(0, 5);
+  }
+
+  // Bài lớp 1: cảm ơn cô giáo hoặc thầy giáo đã dạy những nét chữ đầu đời.
+  if (grade === 1 && has(/cảm ơn/u) && has(/nét chữ đầu đời/u) && has(/cô giáo/u) && has(/thầy giáo/u)) {
+    const isMale = /thầy giáo|thay_giao/u.test(object) && !/cô giáo|co_giao/u.test(object);
+    const person = isMale ? 'thầy' : 'cô';
+    if (!object) ideas.push('Chọn cảm ơn cô giáo hoặc thầy giáo');
+    ideas.push(`Nhớ lúc ${person} dạy con tập viết`, `Kể một điều ${person} đã tận tình chỉ bảo`, `Nói lời cảm ơn ${person} bằng lời của con`);
+    const count = lengthHint(text);
+    return [...new Set(count ? [count, ...ideas] : ideas)].slice(0, 5);
+  }
+
   // Hai bài lớp 1 cần gợi ý riêng theo nhiệm vụ chính.
   if (grade === 1 && has(/giờ ra chơi/u) && has(/niềm vui/u) && has(/sân trường/u)) {
     ideas.push('Nhớ trò chơi con và các bạn cùng chơi', 'Kể một việc vui xảy ra khi chơi', 'Nói điều làm con vui nhất');
