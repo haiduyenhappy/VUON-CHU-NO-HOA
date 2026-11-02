@@ -589,7 +589,24 @@ export function analyzePromptSemantics(
   let hasMultipleDirections = false;
   const detectedDirections: PromptDirection[] = [];
 
-  // 1. Phân nhánh BÀI 1 LỚP 1: Lựa chọn người thân (Bố, Mẹ, Ông, Bà)
+  // CD07: ba lựa chọn rõ ràng, không cắt đề thành tên con vật.
+  const isThreePetsPrompt = /3\s*[-–—]\s*5\s*câu/u.test(p) &&
+    /chú cún/u.test(p) && /chú mèo/u.test(p) && /chú thỏ/u.test(p);
+  if (isThreePetsPrompt) {
+    choiceType = 'direction_selection';
+    hasMultipleDirections = true;
+    for (const [id, title, icon] of [
+      ['ta_chu_cun', 'Chú cún đáng yêu trong nhà', '🐶'],
+      ['ta_chu_meo', 'Chú mèo đáng yêu trong nhà', '🐱'],
+      ['ta_chu_tho', 'Chú thỏ đáng yêu trong nhà', '🐰']
+    ]) {
+      detectedDirections.push({ id, title, icon, mainObject: title,
+        scope: 'Viết một đoạn 3–5 câu tả ngoại hình, hoạt động và tình cảm với con vật đã chọn',
+        recipient: 'Người đọc', purpose: 'Miêu tả một con vật nuôi đáng yêu', pointOfView: 'Em',
+        topicCode: 'CD07', topicName: 'Động vật' });
+    }
+  }
+  else   // 1. Phân nhánh BÀI 1 LỚP 1: Lựa chọn người thân (Bố, Mẹ, Ông, Bà)
   if (isFamilyLoveGrade1Prompt) {
     choiceType = 'object_selection';
     hasMultipleDirections = false;
@@ -1701,6 +1718,50 @@ export function buildGenreStructure(
 
   const promptRaw = semantics.taskAnalysis?.originalPrompt || semantics.coreSubject || '';
   const pLower = promptRaw.toLowerCase();
+
+  // CD07 – Miêu tả một con vật trong nhà (3–5 câu): ba hướng, một đoạn văn.
+  const isThreePets = /3\s*[-–—]\s*5\s*câu/u.test(promptRaw) &&
+    /chú cún/u.test(promptRaw) && /chú mèo/u.test(promptRaw) && /chú thỏ/u.test(promptRaw);
+  if (isThreePets) {
+    const selected = `${semantics.selectedDirectionId || ''} ${semantics.selectedDirection?.title || ''} ${semantics.selectedObjectId || ''} ${semantics.selectedObjectName || ''}`.toLocaleLowerCase('vi-VN');
+    const animal = /thỏ|tho\b/u.test(selected) ? 'thỏ' : /mèo|meo\b/u.test(selected) ? 'mèo' : 'cún';
+    const name = animal === 'thỏ' ? 'chú thỏ' : animal === 'mèo' ? 'chú mèo' : 'chú cún';
+    const fur = animal === 'thỏ' ? 'Bộ lông mềm mại, thân hình nhỏ nhắn' : animal === 'mèo' ? 'Bộ lông, thân hình nhỏ nhắn' : 'Bộ lông, dáng đi và chiếc đuôi';
+    const special = animal === 'thỏ' ? 'Đôi tai dài, đôi mắt, chiếc đuôi ngắn' : animal === 'mèo' ? 'Đôi mắt, bộ ria, đôi tai' : 'Đôi tai, đôi mắt, chiếc mũi';
+    const activity = animal === 'thỏ' ? 'Nhảy nhót, gặm rau, cử động mũi' : animal === 'mèo' ? 'Đi nhẹ, nằm cuộn tròn, chơi đùa' : 'Chạy nhảy, vẫy đuôi, chơi đùa';
+    const items: [string, string, string, string[]][] = [
+      ['🐾 Con vật em chọn', '🐾', 'emerald', [`Con chọn miêu tả ${name} nào?`, `${name} sống ở đâu trong nhà con?`]],
+      ['🎨 Ngoại hình', '🎨', 'amber', [fur, 'Màu lông con quan sát thấy là gì?']],
+      ['🔍 Nét đáng yêu', '🔍', 'purple', [special, `Con thấy điểm nào của ${name} đáng yêu nhất?`]],
+      ['🏃 Hoạt động', '🏃', 'sky', [activity, `Con từng nhìn thấy ${name} làm gì?`]],
+      ['💗 Tình cảm', '💗', 'rose', [`Con yêu quý ${name} như thế nào?`, `Con chăm sóc ${name} ra sao?`]]
+    ];
+    branches = items.map(([title, icon, color, points], i) => ({ id: `br-${i + 1}`, title, icon, color, points }));
+    hoaNhoUnderstand = `Con chọn miêu tả ${name} trong nhà. Hãy quan sát đặc điểm thật của con vật, kể một hoạt động đáng yêu và nói tình cảm của mình trong một đoạn 3–5 câu.`;
+    specificRequirements = [
+      `Nhiệm vụ: Viết một đoạn văn 3–5 câu miêu tả ${name} trong nhà`,
+      `Đối tượng: ${name}; không trộn đặc điểm của các con vật khác`,
+      'Nội dung: Ngoại hình, một nét đáng yêu hoặc hoạt động, tình cảm của em',
+      'Hình thức: Một đoạn văn liền mạch 3–5 câu, không bắt buộc chia mở bài – thân bài – kết bài'
+    ];
+    socraticQuestions = [`Con chọn ${name} nào?`, `Bộ lông và hình dáng của ${name} ra sao?`, `Điều gì ở ${name} khiến con thích nhất?`, `Con cảm thấy thế nào về ${name}?`];
+    const sentences = [
+      `Câu 1: Giới thiệu ${name} mà con muốn miêu tả.`,
+      'Câu 2: Nêu màu lông, hình dáng hoặc một bộ phận nổi bật mà con quan sát được.',
+      `Câu 3: Kể một hoạt động hoặc thói quen đáng yêu của ${name}.`,
+      'Câu 4 (nếu viết): Kể thêm một nét đáng yêu khác.',
+      `Câu 5 (nếu viết): Nói tình cảm của con dành cho ${name}.`
+    ];
+    outline = {
+      moDoan: [sentences[0]], phatTrienDoan: sentences.slice(1, 4), ketDoan: [sentences[4]], genre: 'mieu_ta',
+      sections: [
+        { id: 'sec-1', title: 'Gợi ý viết đoạn văn 3 câu', icon: '✏️', guideNote: 'Giới thiệu – miêu tả – tình cảm', bulletPoints: [sentences[0], sentences[1], `Câu 3: Kể một hoạt động đáng yêu hoặc nói tình cảm của con với ${name}.`] },
+        { id: 'sec-2', title: 'Gợi ý viết đoạn văn 4–5 câu', icon: '📝', guideNote: 'Thêm một hoặc hai chi tiết quan sát thật', bulletPoints: sentences }
+      ]
+    };
+    vocabularySuggestions = { goodWords: [], imageries: [], sampleSentences: [], creativeIdeas: [`Con chỉ chọn chi tiết đúng với ${name} mà con đã quan sát.`] };
+    return { branches, outline, socraticQuestions, hoaNhoUnderstand, specificRequirements, vocabularySuggestions };
+  }
 
   // LỚP 1 – ƯỚC MƠ NGHỀ NGHIỆP: KHÔNG DÙNG MẪU MIÊU TẢ ĐỐI TƯỢNG.
   const isCareerDreamGrade1 = grade === 1 && /ước mơ/u.test(promptRaw) &&
