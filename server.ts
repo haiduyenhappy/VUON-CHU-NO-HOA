@@ -3592,7 +3592,7 @@ Mức độ: ${diffLevel}`;
       finalResult.writingType = 'ke_chuyen';
       finalResult.writingFormat = 'Đoạn văn 3–5 câu';
       finalResult.coreSubject = 'Niềm vui trong những ngày nghỉ hè bên gia đình';
-      finalResult.hoaNhoUnderstand = 'Con hãy chọn một kỷ niệm vui có thật trong kỳ nghỉ hè cùng gia đình. Nhớ lại con đã làm gì, cùng ai, điều gì vui nhất và cảm xúc của con. Viết một đoạn 3–5 câu, không cần chia thành bài văn ba phần.';
+      finalResult.hoaNhoUnderstand = 'Con hãy chọn một kỷ niệm vui có thật trong kỳ nghỉ hè cùng gia đình. Nhớ lại con đã làm gì, cùng ai, điều gì vui nhất và cảm xúc của con. Viết một đoạn 3–5 câu theo dàn ý ba phần: Mở đầu, Diễn biến, Kết thúc.';
       finalResult.specificRequirements = [
         'Kể một kỷ niệm vui trong kỳ nghỉ hè bên gia đình do chính con trải nghiệm',
         'Nêu được hoạt động con tham gia cùng người thân',
@@ -3612,16 +3612,28 @@ Mức độ: ${diffLevel}`;
         { id: 'br-4', title: '✨ Điều vui nhất', icon: '✨', color: 'sky', points: ['Khoảnh khắc nào làm con vui hoặc bật cười?', 'Điều gì khiến con nhớ mãi?'] },
         { id: 'br-5', title: '💗 Cảm xúc', icon: '💗', color: 'rose', points: ['Lúc đó con cảm thấy thế nào?', 'Bây giờ nhớ lại con thấy ra sao?'] }
       ];
-      const hints = [
-        'Câu 1: Giới thiệu một kỷ niệm vui trong kỳ nghỉ hè bên gia đình.',
-        'Câu 2: Kể hoạt động con đã tham gia cùng người thân.',
-        'Câu 3: Kể điều thú vị hoặc đáng nhớ nhất.',
-        'Câu 4–5 (nếu viết): Bổ sung chi tiết và bày tỏ cảm xúc thật của con.'
+      // Ba phần này chỉ thuộc mục “Dàn ý chi tiết các phần của bài”.
+      // Sơ đồ tư duy 5 nhánh ở trên được giữ nguyên.
+      const moDau = [
+        'Câu 1: Giới thiệu một kỷ niệm vui có thật trong kỳ nghỉ hè bên gia đình; có thể nói nơi diễn ra.'
+      ];
+      const dienBien = [
+        'Câu 2: Kể con đã làm gì và cùng những người thân nào.',
+        'Nếu viết 4–5 câu, kể thêm một hoặc hai chi tiết về diễn biến và khoảnh khắc khiến con vui nhất.'
+      ];
+      const ketThuc = [
+        'Câu cuối: Nói cảm xúc của con hoặc điều con nhớ nhất về kỷ niệm ấy.'
       ];
       finalResult.outline = {
-        moDoan: [hints[0]], phatTrienDoan: [hints[1], hints[2]], ketDoan: [hints[3]],
+        moDoan: moDau,
+        phatTrienDoan: dienBien,
+        ketDoan: ketThuc,
         genre: 'ke_chuyen',
-        sections: [{ id: 'sec-1', title: 'Gợi ý viết một đoạn 3–5 câu', icon: '📝', guideNote: 'Chọn một kỷ niệm vui thật, không cần viết thành bài văn ba phần', bulletPoints: hints }]
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đầu', icon: '🌞', guideNote: '1 câu – Giới thiệu kỷ niệm vui trong kỳ nghỉ hè', bulletPoints: moDau },
+          { id: 'sec-2', title: 'Phần 2. Diễn biến', icon: '🎈', guideNote: '1–3 câu – Kể hoạt động cùng gia đình và điều vui nhất', bulletPoints: dienBien },
+          { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '💗', guideNote: '1 câu – Bày tỏ cảm xúc hoặc điều nhớ nhất', bulletPoints: ketThuc }
+        ]
       };
       finalResult.vocabularySuggestions = summerFamilyVocabularyBank();
     }
@@ -4108,6 +4120,31 @@ Hãy trả về JSON:
 app.post('/api/ai/refresh-outline', async (req, res) => {
   const { prompt, grade = 3, genre, previousOutline, studentStory } = req.body;
   const isLetter = genre === 'viet_thu' || detectGenre(prompt || '') === 'viet_thu';
+
+  if (isSummerFamilyJoyPrompt(prompt || '')) {
+    const moDau = ['Câu 1: Giới thiệu một kỷ niệm vui trong kỳ nghỉ hè bên gia đình.'];
+    const dienBien = [
+      'Câu 2: Kể con đã làm gì và cùng những ai.',
+      studentStory
+        ? `Nếu phù hợp với đề, con có thể đưa chi tiết con vừa kể vào diễn biến: ${studentStory}`
+        : 'Nếu viết 4–5 câu, kể thêm một hoặc hai chi tiết về diễn biến và điều vui nhất.'
+    ];
+    const ketThuc = ['Câu cuối: Nêu cảm xúc hoặc điều con nhớ nhất.'];
+    const sections = [
+      { id: 'sec-1', title: 'Phần 1. Mở đầu', icon: '🌞', guideNote: '1 câu', bulletPoints: moDau },
+      { id: 'sec-2', title: 'Phần 2. Diễn biến', icon: '🎈', guideNote: '1–3 câu', bulletPoints: dienBien },
+      { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '💗', guideNote: '1 câu', bulletPoints: ketThuc }
+    ];
+    return res.json({
+      initialIdeas: ['Kỷ niệm vui trong kỳ nghỉ hè bên gia đình'],
+      newDetails: studentStory ? [studentStory] : [],
+      newOutline: sections.map((section, i) => ({ id: String(i + 1), section: section.title, content: section.bulletPoints.join('\n') })),
+      detailedOutline: { moDoan: moDau, phatTrienDoan: dienBien, ketDoan: ketThuc, sections, genre: 'ke_chuyen' },
+      comparisonNote: 'Dàn ý đã được cập nhật, vẫn đủ ba phần Mở đầu – Diễn biến – Kết thúc trong 3–5 câu.',
+      adherenceNote: 'Giữ đúng yêu cầu đề bài và kỷ niệm có thật của con.'
+    });
+  }
+
 
   if (isLetter) {
     const isGrandparents = (prompt || '').toLowerCase().includes('ông') || (prompt || '').toLowerCase().includes('bà');
