@@ -20,6 +20,15 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
+  // CD07 – Con vật nuôi: không dùng gợi ý miêu tả đồ vật hay lẫn các con vật.
+  if (has(/3\s*[-–—]\s*5\s*câu/u) && has(/chú cún/u) && has(/chú mèo/u) && has(/chú thỏ/u)) {
+    const animal = /thỏ/u.test(object) ? 'chú thỏ' : /mèo/u.test(object) ? 'chú mèo' : /cún|chó/u.test(object) ? 'chú cún' : '';
+    const hints = animal
+      ? [`Nhớ bộ lông và dáng vẻ của ${animal}`, `Kể một hoạt động đáng yêu của ${animal}`, `Nói tình cảm của con với ${animal}`]
+      : ['Chọn miêu tả chú cún, chú mèo hoặc chú thỏ', 'Nhớ ngoại hình nổi bật của con vật con chọn', 'Kể một hoạt động đáng yêu', 'Nói tình cảm của con'];
+    return ['Viết đoạn văn 3–5 câu', ...hints];
+  }
+
   // Lớp 1: ước mơ nghề nghiệp – ưu tiên nhiệm vụ nói về nghề, không tả người.
   if (grade === 1 && has(/ước mơ/u) && has(/lớn lên/u) && has(/làm nghề gì|muốn làm nghề|bác sĩ|phi công/u)) {
     ideas.push('Chọn nghề con muốn làm khi lớn lên', 'Nói điều con thích ở nghề ấy', 'Kể một việc tốt con muốn làm với nghề đó');
