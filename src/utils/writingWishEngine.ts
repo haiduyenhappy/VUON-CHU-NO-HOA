@@ -20,6 +20,12 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
+  if (grade === 4 && /miêu tả|tả/u.test(text) && /con vật nuôi|chú chó|chú mèo|mèo mướp|chó giữ nhà/u.test(text)) {
+    return ['Chọn con vật nuôi em quan sát kĩ', 'Tả ngoại hình và bộ phận nổi bật', 'Tả hoạt động, thói quen riêng của con vật', 'Nêu tình cảm và cách chăm sóc con vật'];
+  }
+  if (grade === 4 && /bài thơ/u.test(text) && /sau khi đọc|đọc một bài thơ/u.test(text) && /mẹ|tình yêu bao la/u.test(text)) {
+    return ['Nêu tên bài thơ đã đọc (nếu biết)', 'Chọn hình ảnh hoặc câu thơ có thật gây xúc động', 'Giải thích cảm xúc của em trước tình yêu của mẹ', 'Nêu suy nghĩ của em sau khi đọc bài thơ'];
+  }
   // Xác định hành động giao tiếp trước khi xét những danh từ xuất hiện trong đề.
   // Ước mơ nghề nghiệp phải được nhận diện trước nhánh tả người (ví dụ 'cô giáo').
   if (has(/ước mơ|ước mong|nghề nghiệp tương lai|muốn trở thành|sẽ trở thành|biến ước mơ thành hiện thực/u)) {
