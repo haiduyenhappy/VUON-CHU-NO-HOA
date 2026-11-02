@@ -31,8 +31,21 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   } else if (has(/giới thiệu.*bản thân|giới thiệu.*về em|họ tên.*sở thích|sở thích.*ước mơ/u)) {
     ideas.push('Kể một sở thích con yêu nhất', 'Chia sẻ ước mơ của con', 'Nói một điều đặc biệt về chính mình', 'Kể vì sao con thích điều ấy');
   } else if (has(/tình cảm|yêu mến|kính trọng|biết ơn|yêu thương/u) && has(/ông|bà|bố|mẹ|cha|người thân|thầy|cô|bạn/u)) {
-    if (has(/ông hoặc bà|ông hay bà/u) && !object) ideas.push('Chọn kể về ông hay bà');
-    ideas.push('Nhớ một việc ông/bà làm cho con', 'Kể một kỉ niệm ấm áp cùng người ấy', 'Nói điều khiến con yêu quý, kính trọng');
+    // Ưu tiên đúng toàn bộ đối tượng có trong đề, không thu hẹp thành "ông/bà".
+    const familyOptions: string[] = [];
+    if (has(/\bbố\b|\bcha\b/u)) familyOptions.push('bố');
+    if (has(/\bmẹ\b/u)) familyOptions.push('mẹ');
+    if (has(/\bông\b/u)) familyOptions.push('ông');
+    if (has(/\bbà\b/u)) familyOptions.push('bà');
+    const chosen = familyOptions.find(person => object.includes(person));
+    if (familyOptions.length > 1 && !chosen) {
+      const names = familyOptions.length === 2
+        ? familyOptions.join(' hoặc ')
+        : `${familyOptions.slice(0, -1).join(', ')} hoặc ${familyOptions[familyOptions.length - 1]}`;
+      ideas.push(`Chọn kể về ${names}`);
+    }
+    const person = chosen || (familyOptions.length === 1 ? familyOptions[0] : 'người thân con chọn');
+    ideas.push(`Nhớ một việc ${person} làm cho con`, `Kể một kỉ niệm ấm áp cùng ${person}`, `Nói điều khiến con yêu quý ${person}`);
   } else if (has(/nêu ý kiến|ý kiến của em|đồng tình|không đồng tình/u)) {
     ideas.push('Con nghĩ gì về vấn đề này?', 'Điều gì khiến con nghĩ như vậy?', 'Kể một ví dụ con từng thấy');
   } else if (has(/kỉ niệm|kỷ niệm|trải nghiệm|việc tốt|kể lại|kể về|chuyến đi/u)) {
