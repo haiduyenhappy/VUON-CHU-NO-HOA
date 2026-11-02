@@ -3643,6 +3643,72 @@ Mức độ: ${diffLevel}`;
       finalResult.vocabularySuggestions = goodDeedVocabularyBank(prompt);
     }
 
+    // CD25: Quan sát tranh và kể hoạt động của TỪNG NHÓM, không kể chuyện bản thân.
+    // Không suy đoán nội dung tranh khi người học chưa tải ảnh lên.
+    const isCD25PictureGroups = /quan sát.*(?:bức )?tranh/i.test(prompt)
+      && /(?:từng nhóm|các nhóm|nhóm bạn nhỏ)/i.test(prompt)
+      && /(?:vui chơi|lao động)/i.test(prompt);
+    if (isCD25PictureGroups) {
+      const start = ['Giới thiệu bức tranh có các nhóm bạn nhỏ đang vui chơi và lao động (chỉ nêu những gì nhìn thấy).'];
+      const body = [
+        'Quan sát nhóm thứ nhất: Nhóm có những ai, ở vị trí nào trong tranh và đang làm hoạt động gì?',
+        'Quan sát nhóm tiếp theo: Các bạn đang làm gì, dùng đồ vật hoặc dụng cụ nào (nếu có)?',
+        'Nếu tranh còn nhóm khác, lần lượt kể hoạt động của nhóm đó; không bỏ sót nhóm nào.'
+      ];
+      const end = ['Nêu nhận xét chung về không khí hoạt động trong tranh dựa trên chi tiết nhìn thấy.'];
+      finalResult.writingType = 'ke_lai_hoat_dong_trong_tranh';
+      finalResult.writingFormat = 'Quan sát tranh và kể hoạt động theo từng nhóm';
+      finalResult.coreSubject = 'Hoạt động của từng nhóm bạn nhỏ trong tranh';
+      finalResult.mainObject = 'Các nhóm bạn nhỏ trong tranh';
+      finalResult.hoaNhoUnderstand = 'Con cần quan sát bức tranh thật kĩ, xác định có mấy nhóm bạn nhỏ và lần lượt kể từng nhóm đang vui chơi hay lao động như thế nào. Chỉ kể điều quan sát được; không tự thêm thời gian, địa điểm, lời nói, kết quả hoặc bài học không có trong tranh. Nếu chưa có ảnh, hãy tải ảnh tranh lên trước khi mô tả chi tiết.';
+      finalResult.specificRequirements = [
+        'Quan sát tranh để xác định đúng số nhóm bạn nhỏ',
+        'Kể lần lượt hoạt động của từng nhóm; không bỏ sót nhóm nào',
+        'Dựa vào tư thế, hành động, đồ vật và vị trí nhìn thấy trong tranh',
+        'Không biến đề thành câu chuyện về trải nghiệm của chính em hoặc tự bịa chi tiết'
+      ];
+      finalResult.suggestedLength = 'Theo số nhóm và chi tiết trong tranh; đề không quy định số câu';
+      finalResult.socraticQuestions = [
+        'Trong tranh có mấy nhóm bạn nhỏ?',
+        'Nhóm thứ nhất ở đâu và đang làm gì?',
+        'Nhóm thứ hai và các nhóm còn lại đang làm gì?',
+        'Chi tiết nào trong tranh giúp con nhận ra hoạt động của từng nhóm?'
+      ];
+      finalResult.branches = [
+        {id:'br-1',title:'🖼️ Quan sát toàn tranh',icon:'🖼️',color:'emerald',points:['Có bao nhiêu nhóm bạn nhỏ?','Các nhóm nằm ở đâu trong tranh?']},
+        {id:'br-2',title:'👧 Nhóm thứ nhất',icon:'👧',color:'purple',points:['Nhóm thứ nhất có những ai?','Các bạn đang làm gì?']},
+        {id:'br-3',title:'🧒 Nhóm thứ hai',icon:'🧒',color:'amber',points:['Nhóm thứ hai ở đâu?','Hoạt động nào thể hiện qua hành động và đồ vật?']},
+        {id:'br-4',title:'👫 Các nhóm còn lại',icon:'👫',color:'sky',points:['Còn nhóm nào khác không?','Mỗi nhóm đang làm hoạt động gì?']},
+        {id:'br-5',title:'🌼 Nhận xét chung',icon:'🌼',color:'rose',points:['Không khí trong tranh thế nào?','Chi tiết nào giúp con nhận xét như vậy?']}
+      ];
+      finalResult.outline = {
+        moDoan:start,phatTrienDoan:body,ketDoan:end,genre:'ke_lai_hoat_dong_trong_tranh',
+        sections:[
+          {id:'sec-1',title:'Phần 1. Mở đầu – Giới thiệu bức tranh',icon:'🖼️',guideNote:'Nêu khái quát nội dung tranh',bulletPoints:start},
+          {id:'sec-2',title:'Phần 2. Diễn biến – Hoạt động của từng nhóm',icon:'👫',guideNote:'Quan sát và kể lần lượt từng nhóm; số ý tùy số nhóm trong tranh',bulletPoints:body},
+          {id:'sec-3',title:'Phần 3. Kết thúc – Nhận xét chung',icon:'🌼',guideNote:'Nhận xét dựa trên điều quan sát được',bulletPoints:end}
+        ]
+      };
+      finalResult.vocabularySuggestions = {
+        goodWords:[
+          {word:'vui vẻ',meaningAndUsage:'Chỉ dùng nếu nét mặt, hành động trong tranh thể hiện niềm vui.'},
+          {word:'chăm chỉ',meaningAndUsage:'Dùng khi các bạn đang tập trung lao động.'},
+          {word:'nhộn nhịp',meaningAndUsage:'Dùng khi tranh có nhiều hoạt động diễn ra.'},
+          {word:'cùng nhau',meaningAndUsage:'Dùng khi nhiều bạn thực hiện một việc.'},
+          {word:'hăng say',meaningAndUsage:'Dùng khi các bạn tích cực tham gia hoạt động.'}
+        ],
+        imageries:[
+          {type:'Quan sát hành động',example:'Một nhóm bạn đang cùng nhau thực hiện một hoạt động.',explanation:'Thay bằng hành động cụ thể nhìn thấy trong tranh.'},
+          {type:'Quan sát vị trí',example:'Ở một góc tranh, các bạn nhỏ đang ...',explanation:'Điền đúng vị trí và hoạt động của nhóm.'}
+        ],
+        sampleSentences:[
+          {type:'quan_sat_tranh',label:'Gợi ý kể nhóm thứ nhất',sentence:'Ở phía ... của bức tranh, nhóm bạn thứ nhất đang ...',whyItIsGood:'Dẫn học sinh quan sát vị trí và hành động, không đoán nội dung.'},
+          {type:'quan_sat_tranh',label:'Gợi ý kể nhóm tiếp theo',sentence:'Bên cạnh đó, nhóm bạn khác đang ...',whyItIsGood:'Giúp kể lần lượt từng nhóm trong tranh.'}
+        ],
+        creativeIdeas:['Chỉ hoàn thiện câu sau khi quan sát ảnh thật của bức tranh.']
+      };
+    }
+
     // CD12: Ba hướng trải nghiệm ngoài trời phải được phân biệt rõ.
     // Không biến một hoạt động thực tế thành chuyện hư cấu có cao trào bắt buộc.
     const isCD12Outdoor = /cắm trại/i.test(prompt) &&
