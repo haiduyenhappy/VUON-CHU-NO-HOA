@@ -3220,6 +3220,34 @@ app.get('/api/topics-catalog', (_req, res) => {
 // =========================================================================
 // API PHÂN TÍCH ĐỀ ĐA TẦNG - TẠO BẢN ĐỒ Ý TƯỞNG - LẬP DÀN Ý GDPT 2018
 // =========================================================================
+
+// Gợi ý riêng cho từng con vật, đúng cấu trúc VocabularyImageryBank của giao diện.
+function petSuggestionBank(animal: string) {
+  const isCat = /mèo/i.test(animal);
+  const isRabbit = /thỏ/i.test(animal);
+  const words = isCat
+    ? [['mềm mượt','Tả bộ lông mèo.'],['long lanh','Tả đôi mắt mèo.'],['rón rén','Tả bước đi nhẹ nhàng.'],['tinh nghịch','Tả lúc mèo chơi.'],['ngoan ngoãn','Tả lúc mèo nằm yên.']]
+    : isRabbit
+    ? [['mềm mại','Tả bộ lông thỏ.'],['dài','Tả đôi tai thỏ.'],['nhanh nhẹn','Tả lúc thỏ nhảy.'],['chăm chú','Tả lúc thỏ gặm rau.'],['nhỏ nhắn','Tả dáng vẻ của thỏ.']]
+    : [['mềm mượt','Tả bộ lông cún.'],['long lanh','Tả đôi mắt cún.'],['tinh nghịch','Tả lúc cún chơi.'],['nhanh nhẹn','Tả lúc cún chạy.'],['quấn quýt','Tả lúc cún gần người chăm sóc.']];
+  const images = isCat
+    ? [['So sánh','Bộ lông mèo mềm như bông.','Gợi độ mềm của lông.'],['Hình ảnh gợi tả','Chú mèo rón rén bước trên nền nhà.','Gợi dáng đi nhẹ.'],['Nhân hóa','Chú mèo lim dim mắt như đang mơ.','Gợi dáng vẻ thư thái.']]
+    : isRabbit
+    ? [['So sánh','Bộ lông thỏ mềm như bông.','Gợi độ mềm của lông.'],['Hình ảnh gợi tả','Đôi tai dài của chú thỏ khẽ động đậy.','Nêu nét riêng của thỏ.'],['Hình ảnh gợi tả','Chú thỏ nhảy từng bước ngắn.','Tả hoạt động của thỏ.']]
+    : [['So sánh','Bộ lông cún mềm như bông.','Gợi độ mềm của lông.'],['Hình ảnh gợi tả','Chiếc đuôi cún vẫy liên hồi.','Gợi cử động vui mừng.'],['Nhân hóa','Chú cún nghiêng đầu như đang nghe em kể chuyện.','Gợi dáng vẻ đáng yêu.']];
+  const sentences = isCat
+    ? [['Gợi ý tả đặc điểm','Chú mèo con có bộ lông mềm mượt và đôi mắt sáng long lanh.','Nêu hai đặc điểm nổi bật.'],['Gợi ý tả hoạt động','Chú mèo con rón rén bước đi rồi cuộn tròn ngủ trên đệm.','Tả hành động phù hợp.']]
+    : isRabbit
+    ? [['Gợi ý tả đặc điểm','Chú thỏ có đôi tai dài và bộ lông mềm mại.','Nêu hai đặc điểm nổi bật.'],['Gợi ý tả hoạt động','Chú thỏ nhảy từng bước ngắn rồi gặm lá rau xanh.','Tả hành động phù hợp.']]
+    : [['Gợi ý tả đặc điểm','Chú cún có bộ lông mềm mượt và đôi mắt tròn long lanh.','Nêu hai đặc điểm nổi bật.'],['Gợi ý tả hoạt động','Khi em đi học về, chú cún chạy ra đón và vẫy đuôi.','Tả hành động phù hợp.']];
+  return {
+    goodWords: words.map(([word,meaningAndUsage])=>({word,meaningAndUsage})),
+    imageries: images.map(([type,example,explanation])=>({type,example,explanation})),
+    sampleSentences: sentences.map(([label,sentence,whyItIsGood])=>({type:'mieu_ta',label,sentence,whyItIsGood})),
+    creativeIdeas: ['Chỉ miêu tả một con vật mà em quan sát thực tế.']
+  };
+}
+
 app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
   try {
     const { 
@@ -3618,10 +3646,10 @@ Mức độ: ${diffLevel}`;
         'Con yêu quý con vật ấy như thế nào?'
       ];
       finalResult.branches = [
-        { id: 'br-1', title: '🐾 Con vật em chọn', icon: '🐾', color: 'emerald', points: ['Chọn một con vật trong ba con vật đề nêu', 'Con vật ấy có tên riêng không?'] },
+        { id: 'br-1', title: '🐾 Con vật em chọn', icon: '🐾', color: 'emerald', points: [`Con đã chọn ${subject} để miêu tả.`, 'Con vật ấy có tên riêng không?'] },
         { id: 'br-2', title: '🎨 Hình dáng', icon: '🎨', color: 'amber', points: ['Bộ lông màu gì, mềm hay xù?', 'Thân hình nhỏ nhắn hay mũm mĩm?'] },
-        { id: 'br-3', title: '👀 Đặc điểm nổi bật', icon: '👀', color: 'purple', points: ['Đôi mắt, đôi tai hoặc chiếc đuôi thế nào?', 'Điều gì khiến con dễ nhận ra nó?'] },
-        { id: 'br-4', title: '🧶 Hoạt động đáng yêu', icon: '🧶', color: 'sky', points: ['Nó thường chơi hoặc chạy nhảy ra sao?', 'Thói quen nào làm con thích thú?'] },
+        { id: 'br-3', title: '👀 Đặc điểm nổi bật', icon: '👀', color: 'purple', points: [/thỏ/.test(subject) ? 'Đôi tai dài của thỏ có gì đặc biệt?' : /mèo/.test(subject) ? 'Đôi mắt và ria mép mèo như thế nào?' : 'Đôi mắt và chiếc đuôi cún như thế nào?', 'Điều gì khiến con dễ nhận ra nó?'] },
+        { id: 'br-4', title: '🧶 Hoạt động đáng yêu', icon: '🧶', color: 'sky', points: [/thỏ/.test(subject) ? 'Thỏ nhảy và gặm rau ra sao?' : /mèo/.test(subject) ? 'Mèo bước đi và chơi đùa thế nào?' : 'Cún chạy nhảy và vẫy đuôi ra sao?', 'Thói quen nào làm con thích thú?'] },
         { id: 'br-5', title: '❤️ Tình cảm', icon: '❤️', color: 'rose', points: ['Con có yêu quý nó không?', 'Con chăm sóc hoặc chơi với nó thế nào?'] }
       ];
       finalResult.outline = {
@@ -3632,12 +3660,9 @@ Mức độ: ${diffLevel}`;
           { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '❤️', guideNote: '1 câu – Tình cảm với con vật', bulletPoints: ketThuc }
         ]
       };
-      finalResult.vocabularySuggestions = {
-        goodWords: ['mềm mượt', 'mũm mĩm', 'lanh lợi', 'tinh nghịch', 'đáng yêu'],
-        imageries: ['Bộ lông mềm như bông', 'Đôi mắt tròn long lanh', 'Chiếc đuôi nhỏ khẽ đung đưa'],
-        sampleSentences: [`${subject.charAt(0).toUpperCase() + subject.slice(1)} có bộ lông thật mềm mại.`, 'Em thích ngắm con vật vui đùa trong nhà.'],
-        creativeIdeas: ['Quan sát một nét riêng của con vật thay vì kể nhiều đặc điểm', 'Dùng từ gợi tả đúng với con vật em chọn']
-      };
+      // Cùng một lựa chọn phải chi phối sơ đồ tư duy, dàn ý và kho gợi ý.
+      finalResult.vocabularySuggestions = petSuggestionBank(animal);
+
     }
 
     // CD02: Khóa kết quả chuyên biệt ở tầng API sau bước làm giàu AI.
