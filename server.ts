@@ -3383,6 +3383,8 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
 
     // 4. Nếu có Gemini AI, làm giàu thêm ý tưởng sinh động nhưng KHÔNG ĐƯỢC LÀM SAI LỆCH cấu trúc và đối tượng
     // Nếu là LOẠI A khi chưa chọn đồ vật: giữ nguyên bản phân tích chuẩn sư phạm không để AI đoán mò đối tượng
+    const isCD07ThreePets = /3\s*[-–—]\s*5\s*câu/u.test(prompt) &&
+      /chú cún/u.test(prompt) && /chú mèo/u.test(prompt) && /chú thỏ/u.test(prompt);
     const isSpecialPedagogicalPrompt = 
       isFamilyLoveGrade1Prompt(prompt, numGrade) ||
       isSelfIntroGrade1Prompt(prompt, numGrade) ||
@@ -3409,7 +3411,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         /Trò chơi|Loài hoa|Tên hoa|Nghề con mơ ước|Người con muốn cảm ơn|Lời cảm ơn|Thầy cô dạy chữ/i.test(branch.title || '')
       );
 
-    if (ai && !isCD05Playtime && !isSpecialPedagogicalPrompt && !hasDedicatedGrade1Structure && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
+    if (ai && !isCD07ThreePets && !isCD05Playtime && !isSpecialPedagogicalPrompt && !hasDedicatedGrade1Structure && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
       try {
         const directionInstruction = semantics.selectedDirection ? `
 CHÚ Ý ĐẶC BIỆT VỀ HƯỚNG VIẾT ĐÃ CHỌN:
