@@ -1702,6 +1702,89 @@ export function buildGenreStructure(
   const promptRaw = semantics.taskAnalysis?.originalPrompt || semantics.coreSubject || '';
   const pLower = promptRaw.toLowerCase();
 
+  // LỚP 1 – ƯỚC MƠ NGHỀ NGHIỆP: KHÔNG DÙNG MẪU MIÊU TẢ ĐỐI TƯỢNG.
+  const isCareerDreamGrade1 = grade === 1 && /ước mơ/u.test(promptRaw) &&
+    /lớn lên/u.test(promptRaw) && /làm nghề gì|muốn làm nghề|bác sĩ|phi công/u.test(promptRaw);
+  if (isCareerDreamGrade1) {
+    const items: [string, string, string, string[]][] = [
+      ['⭐ Nghề con mơ ước', '⭐', 'emerald', ['Lớn lên con muốn làm nghề gì?', 'Con gọi tên nghề ấy như thế nào?']],
+      ['💗 Vì sao con thích', '💗', 'amber', ['Điều gì khiến con yêu thích nghề ấy?', 'Con thích nhất điều gì ở nghề đó?']],
+      ['🧰 Công việc', '🧰', 'purple', ['Người làm nghề ấy thường làm việc gì?', 'Con muốn được làm việc gì?']],
+      ['🤝 Điều tốt đẹp', '🤝', 'sky', ['Nghề ấy có thể giúp ai?', 'Con muốn mang lại điều tốt gì?']],
+      ['🌱 Mong muốn của con', '🌱', 'rose', ['Con mong ước mơ thành hiện thực ra sao?', 'Con muốn cố gắng học tập như thế nào?']]
+    ];
+    branches = items.map(([title, icon, color, points], i) => ({ id: `br-${i + 1}`, title, icon, color, points }));
+    hoaNhoUnderstand = 'Con hãy chọn một nghề mình mơ ước khi lớn lên và viết 1 hoặc 2 câu nói rõ ước mơ ấy. Con có thể nói thêm vì sao mình thích nghề đó.';
+    specificRequirements = [
+      'Nhiệm vụ: Viết 1–2 câu nói về ước mơ nghề nghiệp khi lớn lên',
+      'Nội dung: Nêu rõ nghề con muốn làm; có thể nói thêm lí do yêu thích hoặc điều tốt đẹp con muốn làm',
+      'Dung lượng: 1 hoặc 2 câu hoàn chỉnh, không bắt buộc viết đủ 2 câu',
+      'Viết hoa đầu câu và dùng dấu kết thúc câu phù hợp'
+    ];
+    socraticQuestions = ['Lớn lên con muốn làm nghề gì?', 'Vì sao con thích nghề đó?', 'Con muốn làm điều gì tốt đẹp khi làm nghề ấy?'];
+    const one = 'Viết một câu nói rõ lớn lên con muốn làm nghề gì.';
+    const two = ['Câu 1: Nói nghề con mơ ước khi lớn lên.', 'Câu 2: Nói vì sao con thích nghề đó hoặc con muốn làm điều gì tốt đẹp.'];
+    outline = {
+      moDoan: [one], phatTrienDoan: [], ketDoan: two, genre: 'viet_cau',
+      sections: [
+        { id: 'sec-1', title: 'Cách 1 – Viết một câu', icon: '1️⃣', guideNote: 'Nói rõ nghề con mơ ước', bulletPoints: [one] },
+        { id: 'sec-2', title: 'Cách 2 – Viết hai câu', icon: '2️⃣', guideNote: 'Nêu ước mơ và lí do yêu thích', bulletPoints: two }
+      ]
+    };
+    return { branches, outline, socraticQuestions, hoaNhoUnderstand, specificRequirements,
+      vocabularySuggestions: { goodWords: [{ word: 'ước mơ', meaningAndUsage: 'Nói nghề con muốn làm khi lớn lên' }, { word: 'giúp đỡ', meaningAndUsage: 'Nói điều tốt đẹp con muốn làm' }], imageries: [], sampleSentences: [], creativeIdeas: ['Hãy tự chọn nghề con thực sự yêu thích, không cần chọn theo ví dụ trong đề.'] }
+    };
+  }
+
+  // LỚP 1 – LỜI CẢM ƠN THẦY/CÔ DẠY NHỮNG NÉT CHỮ ĐẦU ĐỜI.
+  // Đề có hai hướng, tuyệt đối không xử lý như miêu tả người/đồ vật.
+  const isFirstLettersThanks = grade === 1 && /cảm ơn/i.test(promptRaw) &&
+    /nét chữ đầu đời/i.test(promptRaw) && /cô giáo/i.test(promptRaw) && /thầy giáo/i.test(promptRaw);
+  if (isFirstLettersThanks) {
+    const directionText = `${semantics.selectedDirection?.title || ''} ${semantics.selectedDirectionId || ''} ${semantics.selectedObjectName || ''}`.toLocaleLowerCase('vi-VN');
+    const isMale = /thầy giáo|thay_giao|thay-giao|\bthay\b/u.test(directionText) && !/cô giáo|co_giao/u.test(directionText);
+    const person = isMale ? 'thầy' : 'cô';
+    const fullPerson = isMale ? 'thầy giáo' : 'cô giáo';
+    const items: [string, string, string, string[]][] = [
+      ['👩‍🏫 Người con muốn cảm ơn', '👩‍🏫', 'emerald', [`${fullPerson} đã dạy con tập viết`, `Con nhớ đến ${person} khi học những chữ đầu tiên`]],
+      ['✏️ Điều con được dạy', '✏️', 'amber', [`${person === 'thầy' ? 'Thầy' : 'Cô'} hướng dẫn con viết từng nét chữ`, 'Con tập viết những chữ đầu tiên']],
+      ['🤲 Sự quan tâm', '🤲', 'purple', [`${person === 'thầy' ? 'Thầy' : 'Cô'} kiên nhẫn chỉ bảo con`, `${person === 'thầy' ? 'Thầy' : 'Cô'} động viên khi con viết chưa đẹp`]],
+      ['💗 Lòng biết ơn', '💗', 'sky', [`Con biết ơn ${person} vì đã dạy con tập viết`, `Con trân trọng công sức của ${person}`]],
+      ['💬 Lời con muốn nói', '💬', 'rose', [`Con muốn nói lời cảm ơn ${person}`, `Con muốn bày tỏ tình cảm kính yêu với ${person}`]]
+    ];
+    branches = items.map(([title, icon, color, points], i) => ({ id: `br-${i + 1}`, title, icon, color, points }));
+    hoaNhoUnderstand = `Con hãy nhớ lại ${fullPerson} đã dạy con những nét chữ đầu tiên như thế nào và tự viết 1 hoặc 2 câu bày tỏ lòng cảm ơn chân thành.`;
+    specificRequirements = [
+      `Nhiệm vụ: Viết 1–2 câu bày tỏ lời cảm ơn ${fullPerson}`,
+      'Dung lượng: 1 hoặc 2 câu hoàn chỉnh; không bắt buộc viết đủ 2 câu',
+      `Nội dung: Cảm ơn ${person} đã dạy con những nét chữ đầu đời`,
+      'Viết hoa đầu câu và dùng dấu kết thúc câu phù hợp'
+    ];
+    socraticQuestions = [
+      `${person === 'thầy' ? 'Thầy' : 'Cô'} đã hướng dẫn con viết những nét chữ đầu tiên ra sao?`,
+      `Điều gì ở ${person} khiến con biết ơn?`,
+      `Con muốn nói lời cảm ơn ${person} như thế nào?`
+    ];
+    const one = `Viết một câu cảm ơn ${person} vì đã dạy con những nét chữ đầu tiên.`;
+    const two = [
+      `Câu 1: Nhắc đến việc ${person} đã dạy con tập viết những nét chữ đầu đời.`,
+      `Câu 2: Nói lời cảm ơn hoặc bày tỏ lòng biết ơn của con đối với ${person}.`
+    ];
+    outline = {
+      moDoan: [one], phatTrienDoan: [], ketDoan: two, genre: 'viet_cau',
+      sections: [
+        { id: 'sec-1', title: 'Cách 1 – Viết một câu', icon: '1️⃣', guideNote: 'Một câu trọn ý bày tỏ lời cảm ơn', bulletPoints: [one] },
+        { id: 'sec-2', title: 'Cách 2 – Viết hai câu', icon: '2️⃣', guideNote: 'Một câu nhắc việc dạy chữ, một câu cảm ơn', bulletPoints: two }
+      ]
+    };
+    return { branches, outline, socraticQuestions, hoaNhoUnderstand, specificRequirements,
+      vocabularySuggestions: {
+        goodWords: [{ word: 'biết ơn', meaningAndUsage: 'Nói lời cảm ơn chân thành' }, { word: 'tận tình', meaningAndUsage: 'Nói về cách thầy cô hướng dẫn tập viết' }],
+        imageries: [], sampleSentences: [], creativeIdeas: [`Con nhớ lại một điều ${person} đã dạy con và tự nói lời cảm ơn.`]
+      }
+    };
+  }
+
   // Hai đề lớp 1: tách nhiệm vụ theo nội dung và hướng viết đã chọn.
   const isPlaytimeJoy = grade === 1 && /giờ ra chơi/i.test(promptRaw) && /niềm vui/i.test(promptRaw) && /sân trường/i.test(promptRaw);
   const isFlowerBeauty = grade === 1 && /sắc hoa rực rỡ/i.test(promptRaw) && /bông hoa/i.test(promptRaw) && /trong vườn/i.test(promptRaw);
