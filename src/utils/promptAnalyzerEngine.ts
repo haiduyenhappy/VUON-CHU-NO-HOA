@@ -1702,6 +1702,69 @@ export function buildGenreStructure(
   const promptRaw = semantics.taskAnalysis?.originalPrompt || semantics.coreSubject || '';
   const pLower = promptRaw.toLowerCase();
 
+  // Hai đề lớp 1: tách nhiệm vụ theo nội dung và hướng viết đã chọn.
+  const isPlaytimeJoy = grade === 1 && /giờ ra chơi/i.test(promptRaw) && /niềm vui/i.test(promptRaw) && /sân trường/i.test(promptRaw);
+  const isFlowerBeauty = grade === 1 && /sắc hoa rực rỡ/i.test(promptRaw) && /bông hoa/i.test(promptRaw) && /trong vườn/i.test(promptRaw);
+  if (isPlaytimeJoy || isFlowerBeauty) {
+    const isGarden = isFlowerBeauty && (
+      /trong vườn|bông hoa/i.test(semantics.selectedDirection?.title || '') &&
+      !/sắc hoa|đón tết/i.test(semantics.selectedDirection?.title || '') ||
+      /trong_vuon|bong_hoa|hoa_vuon|vuon/i.test(semantics.selectedDirectionId || '')
+    );
+    const items: [string,string,string,string[]][] = isPlaytimeJoy ? [
+      ['🎲 Trò chơi', '🎲', 'emerald', ['Con và các bạn chơi trò gì?', 'Trò chơi nào làm con thích nhất?']],
+      ['👫 Bạn cùng chơi', '👫', 'amber', ['Con chơi cùng những bạn nào?', 'Các bạn có vui không?']],
+      ['🏃 Hoạt động', '🏃', 'purple', ['Các con đã làm gì cùng nhau?', 'Con nhớ hành động nào?']],
+      ['✨ Điều vui nhất', '✨', 'sky', ['Khoảnh khắc nào khiến con bật cười?', 'Điều gì làm giờ ra chơi đáng nhớ?']],
+      ['💗 Cảm xúc', '💗', 'rose', ['Con cảm thấy vui như thế nào?', 'Con có muốn được chơi tiếp không?']]
+    ] : isGarden ? [
+      ['🌸 Tên hoa', '🌸', 'emerald', ['Con nhìn thấy bông hoa gì?', 'Bông hoa ở chỗ nào trong vườn?']],
+      ['🎨 Màu sắc', '🎨', 'amber', ['Cánh hoa có màu gì?', 'Màu nào làm con chú ý?']],
+      ['🌼 Hình dáng', '🌼', 'purple', ['Cánh hoa trông thế nào?', 'Nhụy hoa có gì đẹp?']],
+      ['🔍 Nét đẹp nhất', '🔍', 'sky', ['Con thích nhất chi tiết nào?', 'Điều gì khiến bông hoa nổi bật?']],
+      ['💗 Cảm xúc', '💗', 'rose', ['Con cảm thấy thế nào khi ngắm hoa?', 'Con muốn nói gì về bông hoa?']]
+    ] : [
+      ['🌺 Loài hoa', '🌺', 'emerald', ['Con nhìn thấy hoa mai, hoa đào hay hoa gì?', 'Hoa nở ở đâu?']],
+      ['🎨 Màu sắc', '🎨', 'amber', ['Sắc hoa nổi bật là màu gì?', 'Có những màu hoa nào?']],
+      ['🏮 Khung cảnh Tết', '🏮', 'purple', ['Hoa xuất hiện ở đâu ngày Tết?', 'Không khí xung quanh thế nào?']],
+      ['✨ Vẻ rực rỡ', '✨', 'sky', ['Điều gì làm sắc hoa nổi bật?', 'Con thích nhất vẻ đẹp nào?']],
+      ['💗 Cảm xúc', '💗', 'rose', ['Ngắm hoa ngày Tết con thấy thế nào?', 'Sắc hoa khiến con nghĩ đến điều gì?']]
+    ];
+    branches = items.map(([title, icon, color, points], i) => ({id: `br-${i+1}`, title, icon, color, points}));
+    const subject = isPlaytimeJoy ? 'niềm vui khi chơi cùng các bạn giờ ra chơi' : isGarden ? 'vẻ đẹp một bông hoa trong vườn' : 'sắc hoa rực rỡ đón Tết';
+    hoaNhoUnderstand = isPlaytimeJoy
+      ? 'Con hãy nhớ lại một trò chơi cùng các bạn trên sân trường, chọn một khoảnh khắc vui nhất và kể bằng 1 hoặc 2 câu của chính mình.'
+      : isGarden
+      ? 'Con hãy quan sát hoặc nhớ lại một bông hoa trong vườn, chọn nét đẹp con thích nhất rồi viết 1 hoặc 2 câu.'
+      : 'Con hãy nhớ sắc hoa rực rỡ trong những ngày Tết, chọn một màu hoa hoặc khung cảnh nổi bật rồi viết 1 hoặc 2 câu.';
+    specificRequirements = [
+      `Nhiệm vụ: Viết 1–2 câu về ${subject}`,
+      'Dung lượng: 1 hoặc 2 câu hoàn chỉnh, không bắt buộc viết đủ 2 câu',
+      isPlaytimeJoy ? 'Nội dung: Kể trò chơi cùng bạn và niềm vui của con' : 'Nội dung: Nêu vẻ đẹp của hoa đúng hướng viết đã chọn',
+      'Viết hoa đầu câu và dùng dấu kết thúc câu phù hợp'
+    ];
+    socraticQuestions = isPlaytimeJoy
+      ? ['Con và các bạn đã chơi trò gì?', 'Điều gì khiến con vui nhất?', 'Con muốn nói gì về giờ ra chơi ấy?']
+      : isGarden
+      ? ['Con nhìn thấy bông hoa nào?', 'Màu sắc hoặc hình dáng nào của hoa đẹp nhất?', 'Con cảm thấy thế nào khi ngắm hoa?']
+      : ['Con nhìn thấy những loài hoa nào ngày Tết?', 'Sắc hoa rực rỡ ra sao?', 'Nhìn hoa con cảm thấy thế nào?'];
+    const one = isPlaytimeJoy
+      ? 'Kể một trò chơi con cùng các bạn tham gia và niềm vui của con trong một câu.'
+      : isGarden
+      ? 'Nói một nét đẹp nổi bật của bông hoa trong vườn bằng một câu.'
+      : 'Nói một nét rực rỡ của sắc hoa ngày Tết bằng một câu.';
+    const two = isPlaytimeJoy
+      ? ['Câu 1: Kể trò chơi con cùng các bạn tham gia trên sân trường.', 'Câu 2: Kể khoảnh khắc vui nhất hoặc nói cảm xúc của con.']
+      : ['Câu 1: Nói về màu sắc hoặc hình dáng đẹp của hoa.', 'Câu 2: Nói thêm một nét đẹp hoặc cảm xúc của con khi ngắm hoa.'];
+    outline = {
+      moDoan: [one], phatTrienDoan: [], ketDoan: two, genre: 'viet_cau',
+      sections: [
+        {id: 'sec-1', title: 'Cách 1 – Viết một câu', icon: '1️⃣', guideNote: `Viết một câu về ${subject}`, bulletPoints: [one]},
+        {id: 'sec-2', title: 'Cách 2 – Viết hai câu', icon: '2️⃣', guideNote: `Viết hai câu về ${subject}`, bulletPoints: two}
+      ]
+    };
+  }
+  else 
   // -------------------------------------------------------------
   // TRƯỜNG HỢP ĐẶC BIỆT 1 (LỚP 1 BÀI 1): TÌNH CẢM YÊU THƯƠNG GIA ĐÌNH
   // Đề: "Viết 1–2 câu thể hiện tình cảm yêu thương của em dành cho bố, mẹ, ông hoặc bà."
