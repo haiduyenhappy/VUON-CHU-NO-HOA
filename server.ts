@@ -3350,7 +3350,14 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       isMessageThanksOrApologyGrade2Prompt(prompt) ||
       isGrandparentLoveGrade2Prompt(prompt, numGrade) ||
       isItemDescriptiveGrade2Prompt(prompt, numGrade) ||
-      isTeacherMemoryGrade5Prompt(prompt);
+      isTeacherMemoryGrade5Prompt(prompt) ||
+      // Các đề lớp 1 đã có bộ phân tích chuyên biệt: không để AI ghi đè 5 nhánh.
+      (numGrade === 1 && (
+        (/sắc hoa rực rỡ/i.test(prompt) && /bông hoa/i.test(prompt) && /trong vườn/i.test(prompt)) ||
+        (/giờ ra chơi/i.test(prompt) && /niềm vui/i.test(prompt) && /sân trường/i.test(prompt)) ||
+        (/cảm ơn/i.test(prompt) && /nét chữ đầu đời/i.test(prompt)) ||
+        (/ước mơ/i.test(prompt) && /lớn lên/i.test(prompt) && /nghề gì/i.test(prompt))
+      ));
 
     if (ai && !isSpecialPedagogicalPrompt && !(semantics.choiceType === 'object_selection' && !semantics.selectedObjectId)) {
       try {
