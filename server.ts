@@ -3765,6 +3765,51 @@ app.post('/api/ai/vocabulary-imagery', async (req, res) => {
     ]
   };
 
+  // CD: Kể lại một việc tốt do chính học sinh thực hiện (3–5 câu).
+  // Dùng ngân hàng xác định để không bị AI hoặc mẫu gia đình ghi đè.
+  const isGoodDeedPrompt = /việc tốt/i.test(prompt) && /(em đã làm|em làm|con đã làm|mình đã làm)/i.test(prompt);
+  if (isGoodDeedPrompt) {
+    const ideaText = `${studentIdeas || ''}`.toLowerCase();
+    const context = `${pLower} ${ideaText}`;
+    const deed = /của rơi|nhặt được|trả lại|đánh rơi/.test(context) ? 'found'
+      : /nhặt rác|rác|sạch sân|vệ sinh/.test(context) ? 'clean'
+      : /dắt em|em nhỏ|giúp đỡ|giúp bạn|giúp người/.test(context) ? 'help' : 'other';
+    const details = deed === 'found' ? {
+      words: ['nhặt được', 'đánh rơi', 'trả lại', 'vui mừng', 'thật thà'],
+      action: 'Em nhặt được … và tìm cách trả lại cho người đánh rơi.',
+      outcome: 'Người nhận lại đồ đã …',
+      imagery: 'Em nhìn thấy món đồ nằm trên sân và cúi xuống nhặt lên.'
+    } : deed === 'clean' ? {
+      words: ['nhặt rác', 'bỏ vào thùng', 'sạch sẽ', 'gọn gàng', 'vui vẻ'],
+      action: 'Em nhặt những mẩu rác và bỏ vào thùng đúng nơi quy định.',
+      outcome: 'Sân trường sau đó …',
+      imagery: 'Em thấy vài mẩu giấy trên sân nên nhặt chúng bỏ vào thùng rác.'
+    } : deed === 'help' ? {
+      words: ['giúp đỡ', 'dìu', 'dắt', 'cẩn thận', 'biết ơn'],
+      action: 'Thấy … cần giúp đỡ, em liền …',
+      outcome: 'Người được giúp đã …',
+      imagery: 'Em nhìn thấy một người đang cần giúp đỡ nên bước đến hỏi thăm.'
+    } : {
+      words: ['giúp đỡ', 'tự giác', 'lễ phép', 'vui vẻ', 'tốt bụng'],
+      action: 'Em đã … để giúp …',
+      outcome: 'Sau khi em làm việc ấy, …',
+      imagery: 'Em nhận ra có người cần giúp đỡ nên chủ động làm một việc tốt.'
+    };
+    return res.json({
+      goodWords: details.words.map(word => ({ word, meaningAndUsage: 'Chọn từ phù hợp với việc tốt con thực sự đã làm; không cần dùng hết các từ.' })),
+      imageries: [
+        { type: 'Chi tiết quan sát', example: details.imagery, explanation: 'Nhớ lại điều con thực sự nhìn thấy trước khi hành động.' },
+        { type: 'Hành động cụ thể', example: details.action, explanation: 'Thay dấu … bằng hành động thật của con, không bịa thêm chi tiết.' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Gợi ý câu mở đầu', sentence: 'Một hôm, em đã làm được một việc tốt ở …', whyItIsGood: 'Nêu sự việc và nơi xảy ra bằng lời kể đơn giản.' },
+        { type: 'mieu_ta', label: 'Gợi ý câu kể việc làm', sentence: details.action, whyItIsGood: 'Kể rõ hành động của chính em, theo đúng việc đã chọn.' },
+        { type: 'ket_bai', label: 'Gợi ý câu kết', sentence: 'Sau việc làm ấy, em cảm thấy …', whyItIsGood: 'Bày tỏ cảm xúc thật; không bắt buộc rút ra bài học.' }
+      ],
+      creativeIdeas: [details.outcome, 'Con có thể thêm một lời nói hoặc chi tiết con nhớ rõ, nhưng vẫn giữ đoạn văn trong 3–5 câu.']
+    });
+  }
+
   // Specific fallback for Letter writing
   if (isLetterPrompt) {
     const hasGrandparents = pLower.includes('ông') || pLower.includes('bà');
