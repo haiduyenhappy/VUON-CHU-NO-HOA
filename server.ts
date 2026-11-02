@@ -3496,6 +3496,57 @@ Mức độ: ${diffLevel}`;
       }
     }
 
+    // CD11 lớp 1: chốt cấu trúc theo HƯỚNG VIẾT sau mọi bước làm giàu AI.
+    // Không phụ thuộc bản engine đang triển khai và không cho mẫu chung ghi đè.
+    const flowerCD11 = numGrade === 1 && /sắc hoa rực rỡ/i.test(prompt) &&
+      /bông hoa/i.test(prompt) && /trong vườn/i.test(prompt);
+    if (flowerCD11 && selectedDirectionId) {
+      const selectedFlowerTitle = semantics.selectedDirection?.title || '';
+      const gardenFlower = /trong vườn|bông hoa/i.test(selectedFlowerTitle) &&
+        !/sắc hoa|đón tết/i.test(selectedFlowerTitle) ||
+        /trong_vuon|bong_hoa|hoa_vuon|vuon/i.test(selectedDirectionId);
+      const flowerItems: [string, string, string, string[]][] = gardenFlower ? [
+        ['🌸 Tên hoa', '🌸', 'emerald', ['Con nhìn thấy bông hoa gì?', 'Bông hoa ở đâu trong vườn?']],
+        ['🎨 Màu sắc', '🎨', 'amber', ['Cánh hoa có màu gì?', 'Màu nào khiến con chú ý?']],
+        ['🌼 Hình dáng', '🌼', 'purple', ['Cánh hoa trông thế nào?', 'Nhụy hoa có gì đẹp?']],
+        ['🔍 Nét đẹp nhất', '🔍', 'sky', ['Con thích chi tiết nào nhất?', 'Điều gì khiến bông hoa nổi bật?']],
+        ['💗 Cảm xúc', '💗', 'rose', ['Ngắm hoa con thấy thế nào?', 'Con muốn nói gì về bông hoa?']]
+      ] : [
+        ['🌺 Loài hoa', '🌺', 'emerald', ['Con thấy hoa mai, hoa đào hay hoa gì?', 'Hoa nở ở đâu?']],
+        ['🎨 Màu sắc', '🎨', 'amber', ['Hoa có màu gì rực rỡ?', 'Con thấy những sắc hoa nào?']],
+        ['🏮 Khung cảnh Tết', '🏮', 'purple', ['Hoa xuất hiện ở đâu ngày Tết?', 'Khung cảnh xung quanh thế nào?']],
+        ['✨ Vẻ rực rỡ', '✨', 'sky', ['Điều gì làm hoa nổi bật?', 'Con thích vẻ đẹp nào nhất?']],
+        ['💗 Cảm xúc', '💗', 'rose', ['Ngắm hoa ngày Tết con thấy thế nào?', 'Sắc hoa gợi con nghĩ đến điều gì?']]
+      ];
+      finalResult.branches = flowerItems.map(([title, icon, color, points], i) => ({
+        id: `br-${i + 1}`, title, icon, color, points
+      }));
+      const flowerSubject = gardenFlower ? 'vẻ đẹp của một bông hoa trong vườn' : 'sắc hoa rực rỡ ngày Tết';
+      const oneSentence = gardenFlower
+        ? 'Nói một nét đẹp nổi bật của bông hoa trong vườn bằng một câu.'
+        : 'Nói một nét rực rỡ của sắc hoa ngày Tết bằng một câu.';
+      const twoSentences = gardenFlower
+        ? ['Câu 1: Nói màu sắc hoặc hình dáng đẹp của bông hoa.', 'Câu 2: Nói nét đẹp con thích nhất hoặc cảm xúc khi ngắm hoa.']
+        : ['Câu 1: Nói về sắc hoa rực rỡ con nhìn thấy ngày Tết.', 'Câu 2: Nói khung cảnh hoặc niềm vui của con khi ngắm hoa.'];
+      finalResult.hoaNhoUnderstand = `Con hãy chọn một nét đẹp của ${flowerSubject} và viết 1 hoặc 2 câu bằng lời của mình.`;
+      finalResult.specificRequirements = [
+        `Nhiệm vụ: Viết 1–2 câu nói về ${flowerSubject}`,
+        'Chọn một hoặc hai chi tiết đẹp mà con thật sự quan sát hoặc nhớ được',
+        'Không bắt buộc viết đủ hai câu',
+        'Viết hoa đầu câu và dùng dấu kết thúc câu phù hợp'
+      ];
+      finalResult.socraticQuestions = gardenFlower
+        ? ['Đó là bông hoa gì?', 'Cánh hoa có màu sắc, hình dáng thế nào?', 'Con thích điều gì nhất?']
+        : ['Con thấy hoa gì vào ngày Tết?', 'Sắc hoa đẹp, rực rỡ thế nào?', 'Ngắm hoa con thấy vui ra sao?'];
+      finalResult.outline = {
+        moDoan: [oneSentence], phatTrienDoan: [], ketDoan: twoSentences, genre: 'viet_cau',
+        sections: [
+          { id: 'sec-1', title: 'Cách 1 – Viết một câu', icon: '1️⃣', guideNote: `Một câu về ${flowerSubject}`, bulletPoints: [oneSentence] },
+          { id: 'sec-2', title: 'Cách 2 – Viết hai câu', icon: '2️⃣', guideNote: `Hai câu về ${flowerSubject}`, bulletPoints: twoSentences }
+        ]
+      };
+    }
+
     // 5. Kiểm định tự động 20 tiêu chuẩn GDPT 2018 (Section XV)
     const validationReport = validatePromptAnalysisResult(prompt, finalResult, semantics);
     finalResult.validationChecks = validationReport.checks;
