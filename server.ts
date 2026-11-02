@@ -3587,6 +3587,59 @@ Mức độ: ${diffLevel}`;
       finalResult.vocabularySuggestions = goodDeedVocabularyBank(prompt);
     }
 
+    // CD07: Dàn ý miêu tả vật nuôi 3–5 câu, chọn đúng MỘT con vật.
+    if (isCD07ThreePets) {
+      const chosen = `${semantics.selectedObjectName || ''} ${semantics.mainObject || ''}`.toLowerCase();
+      const animal = /mèo/.test(chosen) ? 'chú mèo con' : /thỏ/.test(chosen) ? 'chú thỏ' : /cún|chó/.test(chosen) ? 'chú cún' : '';
+      const subject = animal || 'con vật con chọn (chú cún, chú mèo con hoặc chú thỏ)';
+      const moDau = [`Câu 1: Giới thiệu ${subject} mà con muốn miêu tả.`];
+      const thanDoan = [
+        `Câu 2: Tả một hoặc hai đặc điểm nổi bật của ${subject} như bộ lông, đôi mắt, đôi tai hoặc dáng vẻ.`,
+        'Câu 3: Tả một hoạt động hoặc thói quen đáng yêu mà con đã quan sát.',
+        'Nếu viết 5 câu, thêm một chi tiết riêng về dáng đi, tiếng kêu hoặc cách con vật chơi đùa.'
+      ];
+      const ketThuc = ['Câu cuối: Nêu tình cảm của con đối với con vật ấy.'];
+      finalResult.writingType = 'mieu_ta';
+      finalResult.writingFormat = 'Đoạn văn 3–5 câu';
+      finalResult.coreSubject = `Miêu tả ${subject}`;
+      finalResult.mainObject = subject;
+      finalResult.suggestedLength = '3–5 câu';
+      finalResult.hoaNhoUnderstand = `Đề yêu cầu con chọn MỘT con vật: chú cún, chú mèo con hoặc chú thỏ trong nhà. Con hãy quan sát và miêu tả dáng vẻ, hoạt động đáng yêu của con vật đã chọn, rồi nói tình cảm của mình. Viết một đoạn văn 3–5 câu, không tả cả ba con vật.`;
+      finalResult.specificRequirements = [
+        'Chỉ chọn một trong ba con vật: chú cún, chú mèo con hoặc chú thỏ',
+        'Miêu tả đặc điểm bên ngoài và hoạt động đáng yêu mà con quan sát được',
+        'Bày tỏ tình cảm với con vật',
+        'Viết một đoạn văn ngắn từ 3 đến 5 câu'
+      ];
+      finalResult.socraticQuestions = [
+        'Con chọn tả chú cún, chú mèo con hay chú thỏ?',
+        'Bộ lông, đôi mắt, đôi tai hoặc dáng vẻ của con vật ấy có gì đặc biệt?',
+        'Con vật thường làm gì khiến con thấy đáng yêu?',
+        'Con yêu quý con vật ấy như thế nào?'
+      ];
+      finalResult.branches = [
+        { id: 'br-1', title: '🐾 Con vật em chọn', icon: '🐾', color: 'emerald', points: ['Chọn một con vật trong ba con vật đề nêu', 'Con vật ấy có tên riêng không?'] },
+        { id: 'br-2', title: '🎨 Hình dáng', icon: '🎨', color: 'amber', points: ['Bộ lông màu gì, mềm hay xù?', 'Thân hình nhỏ nhắn hay mũm mĩm?'] },
+        { id: 'br-3', title: '👀 Đặc điểm nổi bật', icon: '👀', color: 'purple', points: ['Đôi mắt, đôi tai hoặc chiếc đuôi thế nào?', 'Điều gì khiến con dễ nhận ra nó?'] },
+        { id: 'br-4', title: '🧶 Hoạt động đáng yêu', icon: '🧶', color: 'sky', points: ['Nó thường chơi hoặc chạy nhảy ra sao?', 'Thói quen nào làm con thích thú?'] },
+        { id: 'br-5', title: '❤️ Tình cảm', icon: '❤️', color: 'rose', points: ['Con có yêu quý nó không?', 'Con chăm sóc hoặc chơi với nó thế nào?'] }
+      ];
+      finalResult.outline = {
+        moDoan: moDau, phatTrienDoan: thanDoan, ketDoan: ketThuc, genre: 'mieu_ta',
+        sections: [
+          { id: 'sec-1', title: 'Phần 1. Mở đầu', icon: '🐾', guideNote: '1 câu – Giới thiệu con vật đã chọn', bulletPoints: moDau },
+          { id: 'sec-2', title: 'Phần 2. Miêu tả', icon: '👀', guideNote: '1–3 câu – Hình dáng và hoạt động đáng yêu', bulletPoints: thanDoan },
+          { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '❤️', guideNote: '1 câu – Tình cảm với con vật', bulletPoints: ketThuc }
+        ]
+      };
+      finalResult.vocabularySuggestions = {
+        goodWords: ['mềm mượt', 'mũm mĩm', 'lanh lợi', 'tinh nghịch', 'đáng yêu'],
+        imageries: ['Bộ lông mềm như bông', 'Đôi mắt tròn long lanh', 'Chiếc đuôi nhỏ khẽ đung đưa'],
+        sampleSentences: [`${subject.charAt(0).toUpperCase() + subject.slice(1)} có bộ lông thật mềm mại.`, 'Em thích ngắm con vật vui đùa trong nhà.'],
+        creativeIdeas: ['Quan sát một nét riêng của con vật thay vì kể nhiều đặc điểm', 'Dùng từ gợi tả đúng với con vật em chọn']
+      };
+    }
+
     // CD02: Khóa kết quả chuyên biệt ở tầng API sau bước làm giàu AI.
     if (isSummerFamilyJoyPrompt(prompt)) {
       finalResult.writingType = 'ke_chuyen';
@@ -4120,6 +4173,29 @@ Hãy trả về JSON:
 app.post('/api/ai/refresh-outline', async (req, res) => {
   const { prompt, grade = 3, genre, previousOutline, studentStory } = req.body;
   const isLetter = genre === 'viet_thu' || detectGenre(prompt || '') === 'viet_thu';
+
+  if (/3\s*[-–—]\s*5\s*câu/u.test(prompt || '') && /chú cún/u.test(prompt || '') && /chú mèo/u.test(prompt || '') && /chú thỏ/u.test(prompt || '')) {
+    const moDau = ['Câu 1: Giới thiệu MỘT con vật con chọn (chú cún, chú mèo con hoặc chú thỏ).'];
+    const thanDoan = [
+      'Câu 2: Tả bộ lông, đôi mắt, đôi tai hoặc dáng vẻ nổi bật của con vật.',
+      'Câu 3: Tả hoạt động hoặc thói quen đáng yêu mà con đã quan sát.',
+      'Nếu viết 5 câu, thêm một chi tiết riêng về con vật ấy.'
+    ];
+    const ketThuc = ['Câu cuối: Nêu tình cảm của con với con vật.'];
+    const sections = [
+      { id: 'sec-1', title: 'Phần 1. Mở đầu', icon: '🐾', guideNote: '1 câu', bulletPoints: moDau },
+      { id: 'sec-2', title: 'Phần 2. Miêu tả', icon: '👀', guideNote: '1–3 câu', bulletPoints: thanDoan },
+      { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '❤️', guideNote: '1 câu', bulletPoints: ketThuc }
+    ];
+    return res.json({
+      initialIdeas: ['Một con vật đáng yêu trong nhà'],
+      newDetails: studentStory ? [studentStory] : [],
+      newOutline: sections.map((section, i) => ({ id: String(i + 1), section: section.title, content: section.bulletPoints.join('\n') })),
+      detailedOutline: { moDoan: moDau, phatTrienDoan: thanDoan, ketDoan: ketThuc, sections, genre: 'mieu_ta' },
+      comparisonNote: 'Dàn ý miêu tả con vật đã được cập nhật, giữ đúng đoạn văn 3–5 câu.',
+      adherenceNote: 'Chỉ tả một con vật được chọn, không lạc sang đồ vật hoặc người thân.'
+    });
+  }
 
   if (isSummerFamilyJoyPrompt(prompt || '')) {
     const moDau = ['Câu 1: Giới thiệu một kỷ niệm vui trong kỳ nghỉ hè bên gia đình.'];
