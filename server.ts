@@ -3248,6 +3248,34 @@ function petSuggestionBank(animal: string) {
   };
 }
 
+
+function outdoorActivityVocabularyBank(activity: string) {
+  const sports = /thể thao/.test(activity), planting = /trồng cây/.test(activity);
+  const data = sports ? {
+    words:['hào hứng','sôi nổi','cổ vũ','nỗ lực','phấn khởi'],
+    images:['Tiếng reo hò vang khắp sân trường.','Các bạn chạy nhanh về phía vạch đích.'],
+    samples:['Em hào hứng cổ vũ cho các bạn trong cuộc thi chạy.','Khi cuộc thi kết thúc, cả sân trường vang lên tiếng vỗ tay.']
+  } : planting ? {
+    words:['xanh non','tươi tốt','cẩn thận','vun đất','tưới nước'],
+    images:['Những chiếc lá non rung rinh trong gió.','Từng giọt nước thấm vào gốc cây mới trồng.'],
+    samples:['Em cẩn thận đặt cây non xuống hố rồi vun đất quanh gốc.','Nhìn cây đứng thẳng trong nắng, em thấy rất vui.']
+  } : /cắm trại/.test(activity) ? {
+    words:['náo nức','rộn ràng','quây quần','khéo léo','thích thú'],
+    images:['Những chiếc lều đủ màu sắc nổi bật trên bãi cỏ.','Tiếng cười nói rộn ràng bên khu trại.'],
+    samples:['Em cùng các bạn dựng lều và trang trí khu trại.','Em thích nhất lúc cả nhóm quây quần tham gia trò chơi.']
+  } : {
+    words:['hào hứng','rộn ràng','chăm chỉ','vui vẻ','đáng nhớ'],
+    images:['Không khí hoạt động thật sôi nổi.','Mọi người cùng tham gia với nụ cười vui vẻ.'],
+    samples:['Em tham gia một hoạt động ngoài trời cùng các bạn.','Điều em nhớ nhất là niềm vui khi cùng mọi người hoàn thành hoạt động.']
+  };
+  return {
+    goodWords:data.words.map(word=>({word,meaningAndUsage:`Từ gợi tả phù hợp với ${activity || 'hoạt động em chọn'}; chỉ dùng khi đúng trải nghiệm thực tế.`})),
+    imageries:data.images.map(example=>({type:'Hình ảnh gợi tả',example,explanation:'Giúp người đọc hình dung khung cảnh hoặc hoạt động.'})),
+    sampleSentences:data.samples.map((sentence,i)=>({type:'ke_chuyen',label:i?'Gợi ý diễn biến hoặc cảm xúc':'Gợi ý hoạt động',sentence,whyItIsGood:'Kể một chi tiết cụ thể, không viết thay toàn bộ bài của con.'})),
+    creativeIdeas:['Chọn chi tiết con thật sự nhớ, không cần thêm sự việc không có thật.']
+  };
+}
+
 app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
   try {
     const { 
@@ -3409,7 +3437,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       };
     }
 
-    // CD13: Kể một việc tốt chính em đã làm (3–5 câu). Dàn ý 3 phần trong MỘT đoạn 3–5 câu.
+    // CD13: Kể một việc tốt chính em đã làm (3–5 câu). Không dùng dàn ý bài văn ba phần.
     const isPersonalGoodDeed = /việc tốt/i.test(prompt) &&
       /(?:em đã làm|con đã làm)/i.test(prompt) &&
       /3\s*[-–—]\s*5\s*câu/i.test(prompt);
@@ -3418,7 +3446,7 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
       finalResult.writingFormat = 'Đoạn văn 3–5 câu';
       finalResult.coreSubject = 'Kể lại một việc tốt do chính em thực hiện';
       finalResult.mainObject = 'Việc tốt em đã làm';
-      finalResult.hoaNhoUnderstand = 'Con hãy chọn một việc tốt có thật mà chính con đã làm. Nhớ lại con đã giúp ai hoặc làm gì, kết quả ra sao và con cảm thấy thế nào. Con viết một đoạn 3–5 câu theo ba phần gợi ý: Mở đầu, Diễn biến và Kết thúc. Không cần xuống dòng thành ba đoạn.';
+      finalResult.hoaNhoUnderstand = 'Con hãy chọn một việc tốt có thật mà chính con đã làm. Nhớ lại con đã giúp ai hoặc làm gì, kết quả ra sao và con cảm thấy thế nào. Con viết một đoạn 3–5 câu, không cần chia thành ba phần.';
       finalResult.suggestedLength = '3–5 câu';
       finalResult.specificRequirements = [
         'Chọn một việc tốt do chính em đã làm, không kể việc của người khác',
@@ -3438,24 +3466,16 @@ app.post('/api/ai/analyze-prompt-deep', async (req, res) => {
         { id: 'br-4', title: '🌟 Kết quả', icon: '🌟', color: 'sky', points: ['Việc tốt mang lại kết quả gì?', 'Người được giúp đỡ phản ứng ra sao?'] },
         { id: 'br-5', title: '❤️ Cảm xúc', icon: '❤️', color: 'rose', points: ['Sau đó con cảm thấy thế nào?', 'Điều gì làm con nhớ nhất?'] }
       ];
-      // Ba PHẦN DÀN Ý, không phải ba đoạn văn; tổng số câu từ 3 đến 5.
-      // Mỗi phần được hiển thị riêng trong mục “Dàn ý chi tiết các phần của bài”.
-      const opening = 'Câu 1: Giới thiệu việc tốt con đã làm; có thể nêu thời gian hoặc địa điểm.';
-      const development = [
+      const bullets = [
+        'Câu 1: Nêu một việc tốt con đã làm, có thể cho biết thời gian hoặc địa điểm.',
         'Câu 2: Kể con đã thực hiện việc tốt ấy như thế nào.',
-        'Câu 3 (hoặc thêm chi tiết nếu viết 4–5 câu): Kể việc xảy ra tiếp theo và kết quả của việc làm.'
+        'Câu 3: Nêu kết quả của việc làm.',
+        'Câu 4–5 (nếu viết): Thêm chi tiết đáng nhớ hoặc nói cảm xúc của con.'
       ];
-      const ending = 'Câu cuối: Nêu cảm xúc của con sau khi làm việc tốt (không bắt buộc rút ra bài học).';
       finalResult.outline = {
-        moDoan: [opening],
-        phatTrienDoan: development,
-        ketDoan: [ending],
+        moDoan: [bullets[0]], phatTrienDoan: [bullets[1], bullets[2]], ketDoan: [bullets[3]],
         genre: 'ke_chuyen',
-        sections: [
-          { id: 'sec-1', title: 'Phần 1. Mở đầu', icon: '📝', guideNote: '1 câu – Giới thiệu việc tốt chính con đã làm', bulletPoints: [opening] },
-          { id: 'sec-2', title: 'Phần 2. Diễn biến', icon: '🙌', guideNote: '1–3 câu – Con đã làm gì, sự việc diễn ra và kết quả ra sao', bulletPoints: development },
-          { id: 'sec-3', title: 'Phần 3. Kết thúc', icon: '❤️', guideNote: '1 câu – Cảm xúc của con sau việc tốt', bulletPoints: [ending] }
-        ]
+        sections: [{ id: 'sec-1', title: 'Gợi ý viết một đoạn 3–5 câu', icon: '📝', guideNote: 'Chọn ý phù hợp với việc tốt con đã thực hiện; không phải bài văn ba phần', bulletPoints: bullets }]
       };
     }
 
@@ -3617,10 +3637,77 @@ Mức độ: ${diffLevel}`;
       }
     }
 
+    // Không cho dữ liệu AI chung ghi đè bộ từ ngữ riêng của hoạt động.
+    if (isCD12Outdoor) {
+      const chosen = `${semantics.selectedDirection?.title || ''} ${semantics.selectedObjectName || ''} ${semantics.mainObject || ''}`;
+      const activity = /thể thao/i.test(chosen) ? 'ngày hội thể thao' : /trồng cây/i.test(chosen) ? 'hoạt động trồng cây' : /cắm trại/i.test(chosen) ? 'buổi cắm trại' : '';
+      finalResult.vocabularySuggestions = outdoorActivityVocabularyBank(activity);
+    }
+
     // CD: Kể lại một việc tốt em đã làm — giữ kho từ ngữ đúng đề,
     // không để kết quả làm giàu từ AI thay bằng nội dung về gia đình.
     if (/việc tốt em đã làm|một việc tốt (?:mà )?em đã làm|kể lại một việc tốt/i.test(prompt)) {
       finalResult.vocabularySuggestions = goodDeedVocabularyBank(prompt);
+    }
+
+    // CD12: Ba hướng trải nghiệm ngoài trời phải được phân biệt rõ.
+    // Không biến một hoạt động thực tế thành chuyện hư cấu có cao trào bắt buộc.
+    const isCD12Outdoor = /cắm trại/i.test(prompt) &&
+      /ngày hội thể thao/i.test(prompt) && /trồng cây/i.test(prompt);
+    if (isCD12Outdoor) {
+      const selectedText = `${semantics.selectedDirection?.title || ''} ${semantics.selectedObjectName || ''} ${semantics.mainObject || ''}`.toLowerCase();
+      const activity = /thể thao/.test(selectedText) ? 'ngày hội thể thao'
+        : /trồng cây/.test(selectedText) ? 'hoạt động trồng cây'
+        : /cắm trại/.test(selectedText) ? 'buổi cắm trại' : '';
+      const label = activity || 'một trong ba hoạt động: cắm trại, ngày hội thể thao hoặc trồng cây';
+      finalResult.writingType = 'ke_chuyen';
+      finalResult.writingFormat = 'Kể lại hoạt động trải nghiệm';
+      finalResult.coreSubject = `Kể lại ${label} mà em thích thú`;
+      finalResult.mainObject = label;
+      finalResult.hoaNhoUnderstand = `Đề yêu cầu con kể lại MỘT hoạt động con đã tham gia hoặc chứng kiến: cắm trại, ngày hội thể thao hay trồng cây. Con kể theo thứ tự trước – trong – sau hoạt động, nhấn vào chi tiết khiến con thích thú và cảm xúc thật của mình. Không cần tạo tình tiết cao trào hay rút ra bài học nếu đề không yêu cầu.`;
+      finalResult.specificRequirements = [
+        'Chọn một hoạt động: cắm trại, ngày hội thể thao hoặc trồng cây',
+        'Nêu thời gian, địa điểm và những người tham gia nếu con nhớ',
+        'Kể hoạt động đã diễn ra theo thứ tự hợp lí, có chi tiết con thích thú nhất',
+        'Kết thúc bằng kết quả hoặc cảm xúc của con; không bắt buộc rút ra bài học'
+      ];
+      finalResult.suggestedLength = 'Một đoạn văn theo yêu cầu của giáo viên (đề không quy định số câu)';
+      finalResult.socraticQuestions = [
+        'Con muốn kể buổi cắm trại, ngày hội thể thao hay hoạt động trồng cây?',
+        'Hoạt động diễn ra ở đâu, cùng những ai?',
+        'Con đã làm gì trước, trong và sau hoạt động?',
+        'Khoảnh khắc nào khiến con thích thú nhất?'
+      ];
+      const specific = /thể thao/.test(activity)
+        ? ['Con tham gia hoặc cổ vũ môn thể thao nào?', 'Khoảnh khắc thi đấu nào làm con hào hứng?']
+        : /trồng cây/.test(activity)
+        ? ['Con chuẩn bị cây, đất và dụng cụ gì?', 'Con đã đào hố, đặt cây và tưới nước thế nào?']
+        : /cắm trại/.test(activity)
+        ? ['Con cùng mọi người chuẩn bị lều trại thế nào?', 'Trò chơi hoặc hoạt động nào ở trại làm con vui nhất?']
+        : ['Con chọn hoạt động nào trong ba hoạt động?', 'Điều gì ở hoạt động ấy khiến con thích thú?'];
+      finalResult.branches = [
+        { id:'br-1',title:'🎯 Hoạt động em chọn',icon:'🎯',color:'emerald',points:[`Con kể về ${label}?`,'Vì sao con chọn hoạt động ấy?'] },
+        { id:'br-2',title:'🕒 Thời gian, địa điểm',icon:'🕒',color:'purple',points:['Hoạt động diễn ra khi nào?','Ở đâu?'] },
+        { id:'br-3',title:'👫 Người tham gia',icon:'👫',color:'amber',points:['Ai cùng tham gia với con?','Mọi người cùng làm gì?'] },
+        { id:'br-4',title:'🌟 Diễn biến đáng nhớ',icon:'🌟',color:'sky',points:specific },
+        { id:'br-5',title:'❤️ Kết quả, cảm xúc',icon:'❤️',color:'rose',points:['Hoạt động kết thúc ra sao?','Con thích thú nhất điều gì?'] }
+      ];
+      const opening = [`Giới thiệu ${label} con đã tham gia hoặc chứng kiến; nêu thời gian, địa điểm nếu nhớ.`];
+      const middle = [
+        `Kể hoạt động bắt đầu thế nào và con đã làm gì.`,
+        ...specific.map(q=>`Gợi nhớ chi tiết: ${q}`),
+        'Kể khoảnh khắc đáng nhớ nhất theo đúng diễn biến thực tế.'
+      ];
+      const ending = ['Nêu kết quả hoạt động và cảm xúc thích thú của con; không bắt buộc nêu bài học.'];
+      finalResult.outline = {
+        moDoan:opening, phatTrienDoan:middle, ketDoan:ending, genre:'ke_chuyen',
+        sections:[
+          {id:'sec-1',title:'Phần 1. Mở đầu – Giới thiệu hoạt động',icon:'🌿',guideNote:'Hoạt động nào, khi nào, ở đâu?',bulletPoints:opening},
+          {id:'sec-2',title:'Phần 2. Diễn biến – Những việc đã diễn ra',icon:'🎒',guideNote:'Kể theo thứ tự và chọn chi tiết đáng nhớ',bulletPoints:middle},
+          {id:'sec-3',title:'Phần 3. Kết thúc – Kết quả và cảm xúc',icon:'❤️',guideNote:'Điều khiến con thích thú nhất',bulletPoints:ending}
+        ]
+      };
+      finalResult.vocabularySuggestions = outdoorActivityVocabularyBank(activity);
     }
 
     // CD07: Dàn ý miêu tả vật nuôi 3–5 câu, chọn đúng MỘT con vật.
