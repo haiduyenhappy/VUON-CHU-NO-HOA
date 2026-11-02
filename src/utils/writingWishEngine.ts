@@ -20,8 +20,12 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
-  // Xác định hành động giao tiếp trước khi xét những danh từ xuất hiện trong đề.
-  if (has(/tin nhắn|nhắn tin|lời nhắn/u)) {
+  // Hai bài lớp 1 cần gợi ý riêng theo nhiệm vụ chính.
+  if (grade === 1 && has(/giờ ra chơi/u) && has(/niềm vui/u) && has(/sân trường/u)) {
+    ideas.push('Nhớ trò chơi con và các bạn cùng chơi', 'Kể một việc vui xảy ra khi chơi', 'Nói điều làm con vui nhất');
+  } else if (grade === 1 && has(/sắc hoa rực rỡ/u) && has(/bông hoa/u) && has(/trong vườn/u)) {
+    ideas.push('Chọn sắc hoa ngày Tết hoặc bông hoa trong vườn', 'Nhớ màu hoa con thấy đẹp nhất', 'Nói một nét đẹp con chú ý', 'Chia sẻ cảm xúc khi ngắm hoa');
+  } else if (has(/tin nhắn|nhắn tin|lời nhắn/u)) {
     const thanks = has(/cảm ơn/u), sorry = has(/xin lỗi/u);
     if (thanks && sorry && !object) ideas.push('Chọn cảm ơn hay xin lỗi bạn');
     const apology = /xin lỗi/u.test(object) || (sorry && !thanks);
