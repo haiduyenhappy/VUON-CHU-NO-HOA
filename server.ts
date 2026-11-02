@@ -3637,13 +3637,6 @@ Mức độ: ${diffLevel}`;
       }
     }
 
-    // Không cho dữ liệu AI chung ghi đè bộ từ ngữ riêng của hoạt động.
-    if (isCD12Outdoor) {
-      const chosen = `${semantics.selectedDirection?.title || ''} ${semantics.selectedObjectName || ''} ${semantics.mainObject || ''}`;
-      const activity = /thể thao/i.test(chosen) ? 'ngày hội thể thao' : /trồng cây/i.test(chosen) ? 'hoạt động trồng cây' : /cắm trại/i.test(chosen) ? 'buổi cắm trại' : '';
-      finalResult.vocabularySuggestions = outdoorActivityVocabularyBank(activity);
-    }
-
     // CD: Kể lại một việc tốt em đã làm — giữ kho từ ngữ đúng đề,
     // không để kết quả làm giàu từ AI thay bằng nội dung về gia đình.
     if (/việc tốt em đã làm|một việc tốt (?:mà )?em đã làm|kể lại một việc tốt/i.test(prompt)) {
