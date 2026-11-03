@@ -1,90 +1,67 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
+import type { GardenType, EssayGenre } from '../types';
 
-export interface EditableWritingTask {
-  id: string;
-  grade: number;
-  title: string;
-  prompt: string;
-  genre: string;
-  directions: string[];
-  requirements: string[];
-  mindMap: string[];
-  outline: string[];
-  words: string[];
-  images: string[];
-  examples: string[];
-  updatedAt: string;
-  updatedBy: string;
-  deleted?: boolean;
-}
-const STORAGE_KEY = 'vcnh_question_bank_local_v1';
-const emptyTask = (): EditableWritingTask => ({ id: '', grade: 1, title: '', prompt: '', genre: '', directions: [], requirements: [], mindMap: ['', '', '', '', ''], outline: ['', '', ''], words: [], images: [], examples: [], updatedAt: '', updatedBy: '' });
-const splitLines = (s: string) => s.split('\n').map(v => v.trim()).filter(Boolean);
-const fields: Array<{ key: keyof EditableWritingTask; title: string; hint: string }> = [
-  { key: 'directions', title: 'Các hướng viết', hint: 'Mỗi hướng viết một dòng' },
-  { key: 'requirements', title: 'Yêu cầu bổ sung', hint: 'Mỗi yêu cầu một dòng' },
-  { key: 'mindMap', title: 'Sơ đồ tư duy – 5 nhánh', hint: 'Đúng 5 dòng, mỗi dòng là một nhánh' },
-  { key: 'outline', title: 'Dàn ý chi tiết – 3 phần', hint: 'Đúng 3 dòng: mở đầu, nội dung, kết thúc (điều chỉnh theo thể loại)' },
-  { key: 'words', title: 'Từ ngữ gợi ý', hint: 'Mỗi từ/cụm từ một dòng' },
-  { key: 'images', title: 'Hình ảnh sáng tạo', hint: 'Mỗi hình ảnh một dòng' },
-  { key: 'examples', title: 'Câu mẫu', hint: 'Mỗi câu một dòng' },
+const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean);
+const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
+  { key: 'suggestedQuestions', label: 'Câu hỏi gợi ý' },
+  { key: 'evaluationCriteria', label: 'Tiêu chí đánh giá' },
+  { key: 'directions', label: 'Các hướng viết' },
+  { key: 'requirements', label: 'Yêu cầu bổ sung' },
+  { key: 'mindMap', label: 'Sơ đồ tư duy (5 nhánh)' },
+  { key: 'outline', label: 'Dàn ý (3 phần)' },
+  { key: 'words', label: 'Từ hay' },
+  { key: 'images', label: 'Hình ảnh sáng tạo' },
+  { key: 'examples', label: 'Câu mẫu' }
 ];
-function readSaved(): EditableWritingTask[] {
-  try { const v = JSON.parse(localStorage.getItem(STORAGE_KEY) || '[]'); return Array.isArray(v) ? v : []; } catch { return []; }
-}
+const newTask = (): ManagedWritingTask => ({ id: '', grade: 3, volume: 1, week: 1, title: '', prompt: '', gardenType: 'ke_chuyen', genre: 'ke_su_viec', suggestedQuestions: [], evaluationCriteria: [] });
 export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorName }) => {
-  const [tasks, setTasks] = useState<EditableWritingTask[]>(readSaved);
-  const [selected, setSelected] = useState<string>('');
-  const [draft, setDraft] = useState<EditableWritingTask | null>(null);
+  const [tasks, setTasks] = useState<ManagedWritingTask[]>(() => getManagedCurriculumTasks(true));
+  const [draft, setDraft] = useState<ManagedWritingTask | null>(null);
   const [query, setQuery] = useState('');
   const [grade, setGrade] = useState(0);
-  const [message, setMessage] = useState('');
+  const [showDeleted, setShowDeleted] = useState(false);
   const [preview, setPreview] = useState(false);
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch { setMessage('Không đủ dung lượng lưu trên trình duyệt.'); } }, [tasks]);
-  const visible = useMemo(() => tasks.filter(t => !t.deleted && (!grade || t.grade === grade) && `${t.title} ${t.prompt} ${t.id}`.toLowerCase().includes(query.toLowerCase())), [tasks, grade, query]);
-  const startEdit = (t: EditableWritingTask) => { setDraft(JSON.parse(JSON.stringify(t))); setSelected(t.id); setPreview(false); setMessage(''); };
-  const update = (key: keyof EditableWritingTask, value: any) => setDraft(prev => prev ? { ...prev, [key]: value } : prev);
+  const [message, setMessage] = useState('');
+  useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
+  const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
+  const edit = (t: ManagedWritingTask) => { setDraft(JSON.parse(JSON.stringify(t))); setPreview(false); setMessage(''); };
+  const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
   const save = () => {
     if (!draft) return;
-    if (!draft.title.trim() || !draft.prompt.trim() || !draft.genre.trim()) { setMessage('Cần nhập tên bài, đề bài và thể loại.'); return; }
-    if (draft.mindMap.filter(Boolean).length !== 5 || draft.outline.filter(Boolean).length !== 3) { setMessage('Sơ đồ phải có đúng 5 nhánh và dàn ý phải có đúng 3 phần.'); return; }
-    const id = draft.id || `CUSTOM-${Date.now()}`;
-    const next = { ...draft, id, title: draft.title.trim(), prompt: draft.prompt.trim(), updatedAt: new Date().toISOString(), updatedBy: editorName };
-    setTasks(prev => prev.some(t => t.id === id) ? prev.map(t => t.id === id ? next : t) : [...prev, next]);
-    setDraft(next); setSelected(id); setMessage('Đã lưu trên trình duyệt này. Chưa đồng bộ Google Sheets/Firebase.');
+    if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
+    if (draft.mindMap?.length && draft.mindMap.length !== 5) { setMessage('Nếu nhập sơ đồ tư duy, cần đúng 5 nhánh.'); return; }
+    if (draft.outline?.length && draft.outline.length !== 3) { setMessage('Nếu nhập dàn ý, cần đúng 3 phần.'); return; }
+    const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
+    try { saveManagedCurriculumTask(updated); setDraft(updated); setMessage('Đã lưu vào ngân hàng đề trên trình duyệt này. Học sinh dùng cùng trình duyệt sẽ thấy đề cập nhật khi mở lại danh sách.'); }
+    catch { setMessage('Không lưu được dữ liệu trên trình duyệt.'); }
   };
-  const remove = (id: string) => {
-    if (!window.confirm('Chuyển bài này vào mục đã xóa?')) return;
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, deleted: true, updatedAt: new Date().toISOString(), updatedBy: editorName } : t));
-    setDraft(null); setSelected(''); setMessage('Đã chuyển vào mục đã xóa.');
+  const toggleDeleted = () => {
+    if (!draft?.id) return;
+    const next = { ...draft, deleted: !draft.deleted, updatedAt: new Date().toISOString(), updatedBy: editorName };
+    try { saveManagedCurriculumTask(next); setDraft(null); setMessage(next.deleted ? 'Đã chuyển vào mục đã xóa.' : 'Đã khôi phục bài.'); } catch { setMessage('Không lưu được thay đổi.'); }
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
-    <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề – Thêm, xem, sửa, xóa</h3>
-    <p className="text-sm text-amber-800">Bản bước 1: dữ liệu được lưu trên trình duyệt đang sử dụng; chưa tự đồng bộ với ngân hàng đề gốc, học sinh, Google Sheets hoặc Firebase.</p>
-    <div className="flex flex-wrap gap-2">
-      <button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => { setDraft(emptyTask()); setSelected(''); setMessage(''); }}>+ Thêm bài</button>
-    </div>
-    <div className="flex flex-wrap gap-2">
-      <input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm tên bài, mã bài, nội dung đề..." value={query} onChange={e => setQuery(e.target.value)} />
-      <select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(g => <option key={g} value={g}>Lớp {g}</option>)}</select>
-    </div>
+    <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
+    <p className="text-sm text-amber-900 rounded-xl bg-amber-50 p-3">Đã kết nối danh sách đề gốc của học sinh. Bước 1 lưu trên trình duyệt hiện tại, chưa đồng bộ tài khoản, Google Sheets hoặc Firebase. Phần sơ đồ, dàn ý và kho sáng tạo lưu được nội dung nhưng chưa ghi đè kết quả AI tạo ra.</p>
+    <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
+    <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
+    <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
-      <div className="max-h-[550px] space-y-2 overflow-y-auto rounded-xl border p-2">
-        {visible.length === 0 && <p className="p-3 text-sm text-stone-600">Chưa có bài lưu trong trình duyệt. Chọn “Thêm bài” để bắt đầu.</p>}
-        {visible.map(t => <button key={t.id} className={`block w-full rounded-xl border p-3 text-left ${selected === t.id ? 'border-emerald-600 bg-emerald-50' : 'bg-white'}`} onClick={() => startEdit(t)}><span className="text-xs text-stone-500">Lớp {t.grade} · {t.id}</span><div className="font-semibold">{t.title}</div><div className="line-clamp-2 text-sm text-stone-600">{t.prompt}</div></button>)}
-      </div>
-      <div className="space-y-3 min-w-0">
-        {!draft ? <p className="rounded-xl bg-stone-50 p-5">Chọn một bài bên trái hoặc thêm bài mới để chỉnh sửa.</p> : <>
-          <div className="flex flex-wrap items-center justify-between gap-2"><h4 className="font-bold">{draft.id ? 'Chỉnh sửa bài' : 'Tạo bài mới'}</h4><button className="rounded-lg border px-3 py-2" onClick={() => setPreview(!preview)}>{preview ? 'Quay lại chỉnh sửa' : 'Xem trước'}</button></div>
-          {preview ? <div className="space-y-3 rounded-xl bg-emerald-50 p-4"><h4 className="text-lg font-bold">{draft.title}</h4><p>{draft.prompt}</p>{fields.map(f => <div key={f.key}><strong>{f.title}</strong><ul className="list-disc pl-6">{(draft[f.key] as string[]).map((s,i) => <li key={i}>{s}</li>)}</ul></div>)}</div> : <>
-            <label className="block text-sm font-semibold">Lớp<select className="mt-1 block w-full rounded-xl border p-3" value={draft.grade} onChange={e => update('grade', Number(e.target.value))}>{[1,2,3,4,5].map(g => <option key={g} value={g}>Lớp {g}</option>)}</select></label>
-            {(['title','prompt','genre'] as const).map(k => <label className="block text-sm font-semibold" key={k}>{k === 'title' ? 'Tên bài' : k === 'prompt' ? 'Đề bài' : 'Thể loại'}<textarea className="mt-1 block w-full rounded-xl border p-3 font-normal" rows={k === 'prompt' ? 3 : 1} value={draft[k]} onChange={e => update(k, e.target.value)} /></label>)}
-            {fields.map(f => <label key={f.key} className="block text-sm font-semibold">{f.title}<span className="block text-xs font-normal text-stone-500">{f.hint}</span><textarea className="mt-1 block w-full rounded-xl border p-3 font-normal" rows={f.key === 'mindMap' ? 5 : 3} value={(draft[f.key] as string[]).join('\n')} onChange={e => update(f.key, splitLines(e.target.value))} /></label>)}
-          </>}
-          <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 font-bold text-white" onClick={save}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={() => remove(draft.id)}>Xóa bài</button>}<button className="rounded-xl border px-4 py-3" onClick={() => { setDraft(null); setSelected(''); }}>Đóng</button></div>
+      <div className="max-h-[600px] overflow-y-auto space-y-2 rounded-xl border p-2">{visible.map(t => <button key={t.id} className={`w-full text-left rounded-xl border p-3 ${draft?.id === t.id ? 'border-emerald-600 bg-emerald-50' : ''}`} onClick={() => edit(t)}><span className="text-xs text-stone-500">Lớp {t.grade} · {t.id} · Tập {t.volume}</span><div className="font-semibold">{t.title}</div><div className="text-sm line-clamp-2">{t.prompt}</div></button>)}{!visible.length && <p className="p-3">Không có bài phù hợp.</p>}</div>
+      <div className="space-y-3 min-w-0">{draft ? <>
+        <div className="flex justify-between items-center gap-2"><strong>{draft.id ? `Chỉnh sửa ${draft.id}` : 'Thêm bài mới'}</strong><button className="rounded-xl border px-3 py-2" onClick={() => setPreview(v => !v)}>{preview ? 'Chỉnh sửa' : 'Xem trước'}</button></div>
+        {preview ? <div className="rounded-xl bg-emerald-50 p-4 space-y-3"><strong>{draft.title}</strong><p>{draft.prompt}</p>{listFields.map(f => <div key={f.key}><strong>{f.label}</strong><ul className="list-disc pl-6">{((draft[f.key] as string[] | undefined) || []).map((s,i) => <li key={i}>{s}</li>)}</ul></div>)}</div> : <>
+          <div className="grid grid-cols-2 gap-2"><label>Lớp<select className="w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade', Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label>Tập<select className="w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume', Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
+          <label className="block">Tên bài<input className="block w-full rounded-xl border p-3" value={draft.title} onChange={e => change('title', e.target.value)}/></label>
+          <label className="block">Đề bài<textarea rows={3} className="block w-full rounded-xl border p-3" value={draft.prompt} onChange={e => change('prompt', e.target.value)}/></label>
+          <label className="block">Thể loại<input className="block w-full rounded-xl border p-3" value={draft.genre || ''} onChange={e => change('genre', e.target.value as EssayGenre)}/></label>
+          <label className="block">Vườn<select className="block w-full rounded-xl border p-3" value={draft.gardenType} onChange={e => change('gardenType', e.target.value as GardenType)}>{(['ke_chuyen','yeu_thuong','sac_mau','y_kien','cuoc_song'] as GardenType[]).map(g => <option key={g} value={g}>{g.replaceAll('_',' ')}</option>)}</select></label>
+          {listFields.map(f => <label className="block" key={f.key}>{f.label}<textarea className="block w-full rounded-xl border p-3" rows={f.key === 'mindMap' ? 5 : 3} value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key, lines(e.target.value))}/></label>)}
         </>}
-      </div>
+        <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>
+      </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
     </div>
-    {message && <p role="status" className="rounded-xl bg-amber-50 p-3 text-sm text-amber-900">{message}</p>}
+    {message && <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">{message}</p>}
   </section>;
 };
