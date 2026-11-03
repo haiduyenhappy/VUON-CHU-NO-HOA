@@ -2393,7 +2393,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                       </h4>
                       <div className="space-y-1 text-xs text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200">
                         <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject?.trim() || dir.title}</p>
-                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope?.trim() || `Tập trung miêu tả ${dir.mainObject?.trim() || dir.title.toLowerCase()}; lựa chọn những chi tiết thực sự quan sát được và nêu cảm nghĩ của em.`}</p>
+                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope?.trim() || (dir.id === 'chai_nhua' || dir.id === 'giay_bao' ? 'Nêu vật liệu, dụng cụ, các bước làm theo đúng thứ tự và cách sử dụng an toàn.' : `Tập trung vào ${dir.mainObject?.trim() || dir.title.toLowerCase()} và các yêu cầu cụ thể của đề bài.`)}</p>
                       </div>
                     </div>
 
