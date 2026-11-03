@@ -697,3 +697,36 @@ export const CURRICULUM_TASKS: WritingTask[] = [
   ...GRADE_4_TASKS,
   ...GRADE_5_TASKS
 ];
+
+
+// Bước 1: lớp ghi đè cục bộ trên đúng ngân hàng đề SGK đang hiển thị cho học sinh.
+// Chưa đồng bộ giữa các thiết bị/tài khoản; sẽ chuyển sang lưu máy chủ ở bước sau.
+export const LOCAL_TASKS_KEY = 'vcnh_curriculum_task_overrides_v2';
+export const LOCAL_TASKS_EVENT = 'vcnh-curriculum-updated';
+export type ManagedWritingTask = WritingTask & {
+  directions?: string[]; requirements?: string[]; mindMap?: string[];
+  outline?: string[]; words?: string[]; images?: string[]; examples?: string[];
+  updatedAt?: string; updatedBy?: string; deleted?: boolean;
+};
+export function readTaskOverrides(): Record<string, ManagedWritingTask> {
+  try {
+    const raw = localStorage.getItem(LOCAL_TASKS_KEY);
+    const value = raw ? JSON.parse(raw) : {};
+    return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
+  } catch { return {}; }
+}
+export function getManagedCurriculumTasks(includeDeleted = false): ManagedWritingTask[] {
+  const overrides = readTaskOverrides();
+  const originalIds = new Set(CURRICULUM_TASKS.map(t => t.id));
+  const merged = CURRICULUM_TASKS.map(t => ({ ...t, ...(overrides[t.id] || {}) }));
+  for (const task of Object.values(overrides)) {
+    if (task && typeof task.id === 'string' && !originalIds.has(task.id)) merged.push(task);
+  }
+  return includeDeleted ? merged : merged.filter(t => !t.deleted);
+}
+export function saveManagedCurriculumTask(task: ManagedWritingTask): void {
+  const overrides = readTaskOverrides();
+  overrides[task.id] = task;
+  localStorage.setItem(LOCAL_TASKS_KEY, JSON.stringify(overrides));
+  window.dispatchEvent(new Event(LOCAL_TASKS_EVENT));
+}
