@@ -99,8 +99,6 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const save = async () => {
     if (!draft || saving) return;
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
-    if (draft.mindMap?.length && draft.mindMap.length !== 5) { setMessage('Sơ đồ tư duy phải đúng 5 nhánh.'); return; }
-    if (draft.outline?.length && draft.outline.length !== 3) { setMessage('Dàn ý phải đúng 3 phần.'); return; }
     const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
     setSaving(true);
     try {
