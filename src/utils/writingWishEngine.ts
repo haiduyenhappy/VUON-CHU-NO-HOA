@@ -26,6 +26,12 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   if (grade === 4 && /bài thơ/u.test(text) && /sau khi đọc|đọc một bài thơ/u.test(text) && /mẹ|tình yêu bao la/u.test(text)) {
     return ['Nêu tên bài thơ đã đọc (nếu biết)', 'Chọn hình ảnh hoặc câu thơ có thật gây xúc động', 'Giải thích cảm xúc của em trước tình yêu của mẹ', 'Nêu suy nghĩ của em sau khi đọc bài thơ'];
   }
+  if (grade === 4 && /hướng dẫn/u.test(text) && /đồ chơi/u.test(text) && /chai nhựa|giấy báo/u.test(text)) {
+    return ['Chọn món đồ chơi và vật liệu con muốn dùng', 'Nêu vật liệu, dụng cụ cần chuẩn bị', 'Sắp xếp các bước làm theo đúng thứ tự', 'Nêu cách hoàn thiện và sử dụng an toàn'];
+  }
+  if (grade === 4 && /tưởng tượng/u.test(text) && /nhân vật hoạt hình|vương quốc hoa/u.test(text)) {
+    return ['Chọn gặp nhân vật hoạt hình hoặc bước vào vương quốc hoa', 'Tưởng tượng bối cảnh và nhân vật cụ thể', 'Kể một sự việc thú vị theo hướng con chọn', 'Nêu cảm xúc khi câu chuyện kết thúc'];
+  }
   // Xác định hành động giao tiếp trước khi xét những danh từ xuất hiện trong đề.
   // Ước mơ nghề nghiệp phải được nhận diện trước nhánh tả người (ví dụ 'cô giáo').
   if (has(/ước mơ|ước mong|nghề nghiệp tương lai|muốn trở thành|sẽ trở thành|biến ước mơ thành hiện thực/u)) {
