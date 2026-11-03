@@ -57,6 +57,7 @@ import {
   Share2
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
+import { getManagedCurriculumTasks } from '../data/curriculumData';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
 import { getWritingWishes } from '../utils/writingWishEngine';
 import { isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
@@ -689,6 +690,30 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
       if (resDeep.ok) {
         const deepData: PromptAnalysisData = await resDeep.json();
+        // Nội dung đã được giáo viên duyệt có ưu tiên cao hơn nội dung AI mới tạo.
+        const teacherTask = getManagedCurriculumTasks().find(t => t.grade === grade && t.prompt.trim() === promptText.trim());
+        if (teacherTask) {
+          if (teacherTask.mindMap?.length === 5 && teacherTask.mindMap.every(Boolean)) {
+            deepData.branches = teacherTask.mindMap.map((value, index) => {
+              const [title, ...points] = value.split('\n').filter(Boolean);
+              const existing = deepData.branches?.[index];
+              return { id: existing?.id || `branch-${index + 1}`, title: title || `Nhánh ${index + 1}`,
+                icon: existing?.icon || '🌸', color: existing?.color || 'pink', points };
+            });
+          }
+          if (teacherTask.outline?.length === 3 && teacherTask.outline.every(Boolean)) {
+            const [moDoan, phatTrienDoan, ketDoan] = teacherTask.outline.map(t => t.split('\n').filter(Boolean));
+            deepData.outline = { moDoan, phatTrienDoan, ketDoan };
+          }
+          if (teacherTask.words?.length || teacherTask.images?.length || teacherTask.examples?.length) {
+            const bank = deepData.vocabularySuggestions || { goodWords: [], imageries: [], sampleSentences: [], creativeIdeas: [] };
+            if (teacherTask.words?.some(Boolean)) bank.goodWords = teacherTask.words.filter(Boolean).map(word => ({ word, meaningAndUsage: '' }));
+            if (teacherTask.images?.some(Boolean)) bank.imageries = teacherTask.images.filter(Boolean).map(example => ({ type: 'Hình ảnh', example, explanation: '' }));
+            if (teacherTask.examples?.some(Boolean)) bank.sampleSentences = teacherTask.examples.filter(Boolean).map(sentence => ({ type: 'mieu_ta' as const, label: 'Câu gợi ý', sentence, whyItIsGood: '' }));
+            deepData.vocabularySuggestions = bank;
+          }
+          if (teacherTask.requirements?.some(Boolean)) deepData.specificRequirements = teacherTask.requirements.filter(Boolean);
+        }
 
         // Kiểm tra tránh race condition nếu học sinh đã sửa đề mới hơn
         if (currentVersion !== promptVersionRef.current) return;

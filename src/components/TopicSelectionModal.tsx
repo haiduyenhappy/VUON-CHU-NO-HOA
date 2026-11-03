@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { WritingTask, GardenType, EssayGenre } from '../types';
 import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT, GARDEN_INFOS } from '../data/curriculumData';
+import { subscribeCurriculum } from '../lib/curriculumSync';
 import { OTHER_CREATIVE_TOPICS, OTHER_TOPICS_CATEGORIES } from '../data/otherTopicsData';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { playPop, playSparkle } from '../utils/audio';
@@ -47,6 +48,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const [bankRevision, setBankRevision] = useState(0);
+  useEffect(() => subscribeCurriculum(error => console.warn(error)), []);
   useEffect(() => { const refresh = () => setBankRevision(v => v + 1); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
 
   // Combine curriculum tasks and other creative topics into a unified selectable list

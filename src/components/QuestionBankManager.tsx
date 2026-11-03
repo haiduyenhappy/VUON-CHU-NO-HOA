@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
 import { analyzePromptSemantics } from '../utils/promptAnalyzerEngine';
+import { subscribeCurriculum, saveCurriculumToCloud, importLocalEditsToCloud } from '../lib/curriculumSync';
 
 const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean);
 const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
@@ -25,6 +26,9 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [preview, setPreview] = useState(false);
   const [message, setMessage] = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [syncError, setSyncError] = useState('');
+  useEffect(() => subscribeCurriculum(setSyncError), []);
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
   const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
   const loadActualContent = async (task: ManagedWritingTask) => {
@@ -92,23 +96,40 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
-  const save = () => {
-    if (!draft) return;
+  const save = async () => {
+    if (!draft || saving) return;
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
-    if (draft.mindMap?.length && draft.mindMap.length !== 5) { setMessage('Nếu nhập sơ đồ tư duy, cần đúng 5 nhánh.'); return; }
-    if (draft.outline?.length && draft.outline.length !== 3) { setMessage('Nếu nhập dàn ý, cần đúng 3 phần.'); return; }
+    if (draft.mindMap?.length && draft.mindMap.length !== 5) { setMessage('Sơ đồ tư duy phải đúng 5 nhánh.'); return; }
+    if (draft.outline?.length && draft.outline.length !== 3) { setMessage('Dàn ý phải đúng 3 phần.'); return; }
     const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
-    try { saveManagedCurriculumTask(updated); setDraft(updated); setMessage('Đã lưu vào ngân hàng đề trên trình duyệt này. Học sinh dùng cùng trình duyệt sẽ thấy đề cập nhật khi mở lại danh sách.'); }
-    catch { setMessage('Không lưu được dữ liệu trên trình duyệt.'); }
+    setSaving(true);
+    try {
+      // Chỉ báo thành công khi Firebase xác nhận đã lưu.
+      await saveCurriculumToCloud(updated);
+      saveManagedCurriculumTask(updated);
+      setDraft(updated); setMessage('Đã lưu lên Firebase. Học sinh sẽ nhận bài mới khi mở hoặc làm mới danh sách đề.');
+    } catch (error) { setMessage(`Chưa lưu đồng bộ: ${error instanceof Error ? error.message : 'Lỗi không xác định'}. Bài cũ không bị thay đổi.`); }
+    finally { setSaving(false); }
   };
-  const toggleDeleted = () => {
-    if (!draft?.id) return;
+  const toggleDeleted = async () => {
+    if (!draft?.id || saving) return;
     const next = { ...draft, deleted: !draft.deleted, updatedAt: new Date().toISOString(), updatedBy: editorName };
-    try { saveManagedCurriculumTask(next); setDraft(null); setMessage(next.deleted ? 'Đã chuyển vào mục đã xóa.' : 'Đã khôi phục bài.'); } catch { setMessage('Không lưu được thay đổi.'); }
+    setSaving(true);
+    try { await saveCurriculumToCloud(next); saveManagedCurriculumTask(next); setDraft(null); setMessage(next.deleted ? 'Đã ẩn bài khỏi học sinh.' : 'Đã khôi phục bài.'); }
+    catch (error) { setMessage(`Chưa lưu được thay đổi: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`); }
+    finally { setSaving(false); }
+  };
+  const importPreviousEdits = async () => {
+    if (!window.confirm('Chuyển các bài đã sửa trên trình duyệt này lên Firebase? Các bài đã có trên Firebase sẽ không bị ghi đè.')) return;
+    setSaving(true);
+    try { const result = await importLocalEditsToCloud(); setMessage(`Đã chuyển ${result.imported} bài; bỏ qua ${result.skipped} bài đã tồn tại hoặc không hợp lệ.`); }
+    catch (error) { setMessage(`Không chuyển được dữ liệu cũ: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`); }
+    finally { setSaving(false); }
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
+    {syncError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-red-800">{syncError}</p>}
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
-    <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
+    <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button disabled={saving} className="rounded-xl border border-emerald-600 px-4 py-2 text-emerald-800 disabled:opacity-50" onClick={() => void importPreviousEdits()}>Chuyển bài đã sửa trước đây lên Firebase</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
     <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
@@ -141,7 +162,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
           </div>
           <div className="rounded-2xl border p-4"><label className="block font-semibold">Tiêu chí đánh giá<textarea className="mt-2 block w-full rounded-xl border p-3 font-normal" rows={4} value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label></div>
         </>}
-        <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>
+        <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={() => void save()} disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu bài'}</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={() => void toggleDeleted()} disabled={saving}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>
       </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
     </div>
     {message && <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">{message}</p>}
