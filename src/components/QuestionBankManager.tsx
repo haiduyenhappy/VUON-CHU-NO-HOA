@@ -81,7 +81,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         examples: fill(prev.examples, (bank?.sampleSentences || []).map(e =>
           `${e.label}: ${e.sentence} — ${e.whyItIsGood}`))
       } : prev);
-      setMessage('Đã nạp hướng viết và dàn ý để chỉnh sửa. Nội dung đã lưu trước đó được giữ nguyên.');
+      setMessage('');
     } catch {
       setMessage('Không kết nối được bộ phân tích đề. Hướng viết cơ bản đã nạp; dàn ý chưa có dữ liệu, không tự tạo nội dung giả.');
     } finally { setLoadingContent(false); }
