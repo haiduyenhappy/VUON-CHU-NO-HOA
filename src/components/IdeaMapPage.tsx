@@ -696,8 +696,11 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         setLastAnalyzedPrompt(promptText.trim());
         setHasMultipleDirections(deepData.hasMultipleDirections || false);
         setDetectedDirections(deepData.detectedDirections || []);
-        setSelectedDirectionId(deepData.selectedDirectionId || null);
-        setSelectedDirectionTitle(deepData.selectedDirectionTitle || '');
+        // Giữ lựa chọn người học khi máy chủ trả về thiếu ID hướng viết.
+        // Tránh quay lại màn hình chọn hướng sau khi đã bấm chọn.
+        const confirmedDirectionId = deepData.selectedDirectionId || dirIdToSend || null;
+        setSelectedDirectionId(confirmedDirectionId);
+        setSelectedDirectionTitle(deepData.selectedDirectionTitle || deepData.detectedDirections?.find(d => d.id === confirmedDirectionId)?.title || '');
 
         setChoiceType(deepData.choiceType || 'none');
         setObjectChoiceQuestion(deepData.objectChoiceQuestion || 'Con muốn tả đồ vật nào?');
@@ -740,7 +743,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
         // TRƯỜNG HỢP ĐỀ CÓ 2 HƯỚNG VÀ CHƯA CHỌN:
         // Hướng dẫn học sinh chọn hướng trước, KHÔNG tự ý tạo dàn ý
-        if (deepData.hasMultipleDirections && !deepData.selectedDirectionId) {
+        if (deepData.hasMultipleDirections && !confirmedDirectionId) {
           setMindMapBranches([]);
           setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
           setActiveOutline([]);
