@@ -40,7 +40,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [grade, setGrade] = useState(0);
   const [message, setMessage] = useState('');
   const [preview, setPreview] = useState(false);
-  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch { setMessage('Không đủ dung lượng lưu trên trình duyệt. Hãy xuất bản sao lưu JSON.'); } }, [tasks]);
+  useEffect(() => { try { localStorage.setItem(STORAGE_KEY, JSON.stringify(tasks)); } catch { setMessage('Không đủ dung lượng lưu trên trình duyệt.'); } }, [tasks]);
   const visible = useMemo(() => tasks.filter(t => !t.deleted && (!grade || t.grade === grade) && `${t.title} ${t.prompt} ${t.id}`.toLowerCase().includes(query.toLowerCase())), [tasks, grade, query]);
   const startEdit = (t: EditableWritingTask) => { setDraft(JSON.parse(JSON.stringify(t))); setSelected(t.id); setPreview(false); setMessage(''); };
   const update = (key: keyof EditableWritingTask, value: any) => setDraft(prev => prev ? { ...prev, [key]: value } : prev);
@@ -58,28 +58,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     setTasks(prev => prev.map(t => t.id === id ? { ...t, deleted: true, updatedAt: new Date().toISOString(), updatedBy: editorName } : t));
     setDraft(null); setSelected(''); setMessage('Đã chuyển vào mục đã xóa.');
   };
-  const downloadBackup = () => {
-    const blob = new Blob([JSON.stringify({ version: 1, exportedAt: new Date().toISOString(), tasks }, null, 2)], { type: 'application/json' });
-    const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'vuon-chu-no-hoa-ngan-hang-de.json'; a.click(); URL.revokeObjectURL(url);
-  };
-  const importBackup = async (file?: File) => {
-    if (!file) return;
-    try {
-      const raw = JSON.parse(await file.text());
-      if (!Array.isArray(raw.tasks) || !raw.tasks.every((t: any) => t && typeof t.id === 'string' && typeof t.prompt === 'string' && Array.isArray(t.mindMap))) throw new Error('Sai định dạng');
-      setTasks(prev => {
-        const byId = new Map(prev.map(t => [t.id, t])); raw.tasks.forEach((t: EditableWritingTask) => byId.set(t.id, t)); return [...byId.values()];
-      });
-      setMessage('Đã nhập bản sao lưu vào trình duyệt.');
-    } catch { setMessage('Không đọc được tệp sao lưu JSON hợp lệ.'); }
-  };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề – Thêm, xem, sửa, xóa</h3>
     <p className="text-sm text-amber-800">Bản bước 1: dữ liệu được lưu trên trình duyệt đang sử dụng; chưa tự đồng bộ với ngân hàng đề gốc, học sinh, Google Sheets hoặc Firebase.</p>
     <div className="flex flex-wrap gap-2">
       <button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => { setDraft(emptyTask()); setSelected(''); setMessage(''); }}>+ Thêm bài</button>
-      <button className="rounded-xl border px-4 py-2" onClick={downloadBackup}>Xuất sao lưu JSON</button>
-      <label className="rounded-xl border px-4 py-2 cursor-pointer">Nhập sao lưu JSON<input className="hidden" type="file" accept=".json,application/json" onChange={e => { void importBackup(e.target.files?.[0]); e.target.value = ''; }} /></label>
     </div>
     <div className="flex flex-wrap gap-2">
       <input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm tên bài, mã bài, nội dung đề..." value={query} onChange={e => setQuery(e.target.value)} />
