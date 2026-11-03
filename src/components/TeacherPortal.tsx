@@ -1199,12 +1199,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
             </button>
           </div>
         </div>
-      </div>
-
-      {activeTab === 'bank' && <QuestionBankManager editorName={teacherName} />}
-
-      {/* Hoa Nhỏ Personalized Teacher Greeting */}
-      <div className="flex justify-start">
+        {/* Lời chào luôn nằm trong khung quản lý, không bị đẩy xuống dưới danh sách đề */}
+        <div className="basis-full w-full flex justify-start mt-3">
         <HoaNhoMascot
           mood="happy"
           size="sm"
@@ -1216,7 +1212,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
             assignedClasses.find(c => c.id === selectedClassId)?.name || assignedClasses[0]?.name
           )}
         />
+        </div>
+
       </div>
+
+      {activeTab === 'bank' && <QuestionBankManager editorName={teacherName} />}
 
       {/* ================= TAB 1: SỔ CHẤM BÀI & NHẬN XÉT ================= */}
       {activeTab === 'reviews' && (

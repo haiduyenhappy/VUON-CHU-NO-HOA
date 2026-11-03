@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
+import { analyzePromptSemantics } from '../utils/promptAnalyzerEngine';
 
 const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean);
 const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
@@ -27,55 +28,62 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
   const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
   const loadActualContent = async (task: ManagedWritingTask) => {
-    const hasAll = task.mindMap?.some(Boolean) && task.outline?.some(Boolean)
-      && task.words?.some(Boolean) && task.images?.some(Boolean) && task.examples?.some(Boolean);
-    if (hasAll) return;
+    if (!task.prompt.trim()) return;
+    const fill = (existing: string[] | undefined, incoming: string[]) =>
+      existing?.some(v => v.trim()) ? existing : incoming.filter(v => v.trim());
+    const semantic = analyzePromptSemantics(task.prompt, task.grade);
+    const semanticDirections = semantic.detectedDirections?.map(d =>
+      [d.title, d.scope].filter(Boolean).join(' – ')) || [];
+    const defaultDirection = [semantic.coreSubject, semantic.writingScope].filter(Boolean).join(' – ');
+    // Không để trống hướng viết khi đề chỉ có một hướng.
+    setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt
+      ? { ...prev, directions: fill(prev.directions, semanticDirections.length ? semanticDirections : [defaultDirection]) }
+      : prev);
+    const alreadyComplete = task.mindMap?.filter(Boolean).length === 5 &&
+      task.outline?.filter(Boolean).length === 3 && task.words?.some(Boolean) &&
+      task.images?.some(Boolean) && task.examples?.some(Boolean);
+    if (alreadyComplete) return;
     setLoadingContent(true);
-    setMessage('Đang nạp nội dung sơ đồ, dàn ý và kho sáng tạo từ bộ xử lý đề của ứng dụng...');
+    setMessage('Đang nạp nội dung bài theo đúng đề gốc...');
     try {
       const response = await fetch('/api/ai/analyze-prompt-deep', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt: task.prompt, grade: task.grade, difficultyLevel: 'co_ban', specialWishes: (task.requirements || []).join('. ') })
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt: task.prompt, grade: task.grade, difficultyLevel: 'co_ban',
+          specialWishes: (task.requirements || []).join('. ') })
       });
       if (!response.ok) throw new Error(`HTTP ${response.status}`);
       const data: PromptAnalysisData = await response.json();
-      const branches = (data.branches || []).map(b => [b.title || b.name, ...(b.points || b.items || [])].filter(Boolean).join('\\n'));
+      const branches = (data.branches || []).map(branch =>
+        [branch.title || branch.name, ...(branch.points || branch.items || [])].filter(Boolean).join('\n'));
       const sections = data.outline?.sections || [];
-      const outline = sections.length ? sections.map(section =>
-        [section.title, section.guide || section.guideNote, ...(section.bullets || section.bulletPoints || [])].filter(Boolean).join('\\n')
-      ) : [
-        (data.outline?.moDoan || []).join('\\n'),
-        (data.outline?.phatTrienDoan || []).join('\\n'),
-        (data.outline?.ketDoan || []).join('\\n')
-      ];
+      const sectionTexts = sections.map(section =>
+        [section.title, section.guide || section.guideNote,
+          ...(section.bullets || section.bulletPoints || [])].filter(Boolean).join('\n'));
+      const baseOutline = [data.outline?.moDoan || [], data.outline?.phatTrienDoan || [],
+        data.outline?.ketDoan || []].map(lines => lines.join('\n'));
+      // Một số dạng bài (ví dụ thư) có trên 3 mục. Giữ đủ nội dung bằng cách
+      // gom phần giữa vào mục 2, không âm thầm bỏ bớt.
+      const outline = sections.length === 3 ? sectionTexts : sections.length > 3
+        ? [sectionTexts[0], sectionTexts.slice(1, -1).join('\n'), sectionTexts[sectionTexts.length - 1]]
+        : baseOutline.some(Boolean) ? baseOutline : sectionTexts;
       const bank = data.vocabularySuggestions;
-      const fill = (old: string[] | undefined, generated: string[]) => old?.some(x => x.trim()) ? old : generated;
-      const populated: ManagedWritingTask = {
-        ...task,
-        directions: fill(task.directions, (data.detectedDirections || []).map(d => d.title)),
-        requirements: fill(task.requirements, data.specificRequirements || []),
-        mindMap: fill(task.mindMap, branches.length === 5 ? branches : []),
-        outline: fill(task.outline, outline.length === 3 ? outline : []),
-        words: fill(task.words, (bank?.goodWords || []).map(w => `${w.word}: ${w.meaningAndUsage}`)),
-        images: fill(task.images, (bank?.imageries || []).map(i => `${i.type}: ${i.example} — ${i.explanation}`)),
-        examples: fill(task.examples, (bank?.sampleSentences || []).map(e => `${e.label}: ${e.sentence} — ${e.whyItIsGood}`))
-      };
+      const generatedDirections = (data.detectedDirections || []).map(d =>
+        [d.title, d.scope].filter(Boolean).join(' – '));
       setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt ? {
         ...prev,
-        directions: fill(prev.directions, populated.directions || []),
-        requirements: fill(prev.requirements, populated.requirements || []),
-        mindMap: fill(prev.mindMap, populated.mindMap || []),
-        outline: fill(prev.outline, populated.outline || []),
-        words: fill(prev.words, populated.words || []),
-        images: fill(prev.images, populated.images || []),
-        examples: fill(prev.examples, populated.examples || [])
+        directions: fill(prev.directions, generatedDirections.length ? generatedDirections :
+          [data.writingScope || semantic.writingScope || data.coreSubject || semantic.coreSubject]),
+        requirements: fill(prev.requirements, data.specificRequirements || []),
+        mindMap: fill(prev.mindMap, branches.length === 5 ? branches : []),
+        outline: fill(prev.outline, outline.length === 3 ? outline : []),
+        words: fill(prev.words, (bank?.goodWords || []).map(w => `${w.word}: ${w.meaningAndUsage}`)),
+        images: fill(prev.images, (bank?.imageries || []).map(i => `${i.type}: ${i.example} — ${i.explanation}`)),
+        examples: fill(prev.examples, (bank?.sampleSentences || []).map(e =>
+          `${e.label}: ${e.sentence} — ${e.whyItIsGood}`))
       } : prev);
-      setMessage(data.hasMultipleDirections && !data.selectedDirectionId
-        ? 'Đề có nhiều hướng viết: nội dung chung đã nạp. Muốn có nội dung riêng cho từng hướng cần chọn hướng cụ thể.'
-        : 'Đã nạp nội dung hiện có để chỉnh sửa. Bấm “Lưu bài” để lưu các thay đổi.');
+      setMessage('Đã nạp hướng viết và dàn ý để chỉnh sửa. Nội dung đã lưu trước đó được giữ nguyên.');
     } catch {
-      setMessage('Chưa nạp được nội dung từ bộ phân tích của ứng dụng. Các trường đã lưu vẫn được giữ nguyên.');
+      setMessage('Không kết nối được bộ phân tích đề. Hướng viết cơ bản đã nạp; dàn ý chưa có dữ liệu, không tự tạo nội dung giả.');
     } finally { setLoadingContent(false); }
   };
   const edit = (t: ManagedWritingTask) => {
