@@ -378,7 +378,22 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     : normalQuickWishes;
   // Gợi ý được sinh từ đề đang hiển thị và đối tượng học sinh đã chọn.
   // Không dùng danh sách chung theo thể loại vì dễ lạc đề ở lớp 1–5.
-  const quickWishes = getWritingWishes({ prompt: promptText, grade, selectedObject: selectedObjectName });
+  const grade5ReadingPrompt = grade === 5 && /đọc sách/i.test(promptText) && /ý nghĩa|vai trò|lợi ích|quan trọng|khẳng định/i.test(promptText);
+  const grade5GrandparentPrompt = grade === 5 && /ông\/bà|ông bà|ông hoặc bà|bà hoặc ông/i.test(promptText) && /tình cảm|cảm xúc|biết ơn|yêu quý|yêu thương/i.test(promptText);
+  const grade5FarewellPrompt = grade === 5 && /mái trường tiểu học/i.test(promptText) && /tốt nghiệp|chia tay|biết ơn|kỉ niệm/i.test(promptText);
+  const grade5MoonPrompt = grade === 5 && /đêm trăng rằm/i.test(promptText) && /miêu tả|tả/i.test(promptText);
+  const grade5WorkerPrompt = grade === 5 && /người lao động bình dị/i.test(promptText) && /miêu tả|tả/i.test(promptText);
+  const quickWishes = grade5MoonPrompt
+    ? ['Chọn làng quê hoặc sân thượng giữa phố', 'Tả vầng trăng và ánh sáng trăng rằm', 'Tả cảnh vật, âm thanh ở nơi đã chọn', 'Bộc lộ cảm xúc trước vẻ đẹp đêm trăng']
+    : grade5WorkerPrompt
+    ? ['Chọn một người lao động bình dị', 'Tả ngoại hình và trang phục nổi bật', 'Tả cử chỉ, thao tác khi làm việc', 'Thể hiện sự trân trọng người lao động']
+    : grade5FarewellPrompt
+    ? ['Nhớ một kỉ niệm với thầy cô hoặc bạn bè', 'Nêu cảm xúc trước ngày tốt nghiệp', 'Bày tỏ lòng biết ơn mái trường', 'Gửi lời chia tay và mong ước chân thành']
+    : grade5ReadingPrompt
+    ? ['Viết đúng 8–10 câu', 'Nêu ít nhất hai lợi ích của đọc sách', 'Dẫn chứng một cuốn sách em đã đọc', 'Khẳng định thói quen đọc sách mỗi ngày']
+    : grade5GrandparentPrompt
+    ? ['Nhớ một cử chỉ ông/bà dành cho con', 'Kể một kỉ niệm thật với ông/bà', 'Bày tỏ lòng yêu quý, kính trọng và biết ơn']
+    : getWritingWishes({ prompt: promptText, grade, selectedObject: selectedObjectName });
 
 
   // Image Rotation (Canvas-based)
@@ -737,7 +752,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             contentRequirements: deepData.specificRequirements || [
               'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
             ],
-            suggestedSentenceCount: (/(?:\d{1,2}\s*(?:[-–—]|đến|tới)\s*\d{1,2}|\d{1,2})\s*câu/u.test(promptText.toLocaleLowerCase('vi-VN')) ? deepData.suggestedLength : (isLetter ? 'Viết thư đủ các phần theo yêu cầu đề bài' : 'Một đoạn văn (đề không quy định số câu)')),
+            suggestedSentenceCount: (/(?:\d{1,2}\s*(?:[-–—]|đến|tới)\s*\d{1,2}|\d{1,2})\s*câu/u.test(promptText.toLocaleLowerCase('vi-VN')) ? deepData.suggestedLength : (isLetter ? 'Viết thư đủ các phần theo yêu cầu đề bài' : /\bbài văn\b/i.test(promptText) ? 'Một bài văn (đề không quy định số câu)' : 'Một đoạn văn (đề không quy định số câu)')),
             specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
             advice: 'Chọn cách viết con cảm thấy gần gũi và có nhiều kỷ niệm nhất!'
           });
@@ -806,7 +821,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             target: deepData.mainObject || deepData.coreSubject || promptText,
             genreEvaluation: deepData.hoaNhoUnderstand || (isLetter ? 'Con sẽ viết một bức thư để hỏi thăm và chia sẻ tình cảm với người thân hoặc bạn bè. Hoa Nhỏ sẽ giúp con tìm những điều muốn nói, sắp xếp thành một bức thư thật tự nhiên nhé!' : `Đề bài muốn con bám sát chủ đề "${deepData.coreSubject || promptText}" để viết đoạn văn thật sinh động.`),
             contentRequirements: reqs,
-            suggestedSentenceCount: (/(?:\d{1,2}\s*(?:[-–—]|đến|tới)\s*\d{1,2}|\d{1,2})\s*câu/u.test(promptText.toLocaleLowerCase('vi-VN')) ? deepData.suggestedLength : (isLetter ? 'Viết thư đủ các phần theo yêu cầu đề bài' : 'Một đoạn văn (đề không quy định số câu)')),
+            suggestedSentenceCount: (/(?:\d{1,2}\s*(?:[-–—]|đến|tới)\s*\d{1,2}|\d{1,2})\s*câu/u.test(promptText.toLocaleLowerCase('vi-VN')) ? deepData.suggestedLength : (isLetter ? 'Viết thư đủ các phần theo yêu cầu đề bài' : /\bbài văn\b/i.test(promptText) ? 'Một bài văn (đề không quy định số câu)' : 'Một đoạn văn (đề không quy định số câu)')),
             specialWishesNoted: specialWishes ? [specialWishes] : ['Viết câu văn tự nhiên, có cảm xúc thật'],
             advice: isLetter ? 'Con hãy viết lời xưng hô phù hợp, hỏi thăm chân thành và nhớ trình bày đủ 5 phần của bức thư nhé!' : (deepData.choiceType === 'object_selection' && !deepData.selectedObjectId ? 'Con hãy chọn một đồ vật mình hiểu rõ nhất ở bên trên để Hoa Nhỏ hướng dẫn chi tiết nhé!' : (/ước mơ|ước mong|nghề nghiệp tương lai|trở thành bác sĩ|trở thành phi công/u.test(promptText.toLocaleLowerCase('vi-VN')) ? 'Con hãy nêu ước mơ của mình, giải thích lí do và chọn những việc cụ thể con sẽ làm từ hôm nay để thực hiện ước mơ nhé!' : 'Con hãy chọn những ý đúng với đề bài, trình bày rõ ràng và dùng lời văn tự nhiên của mình nhé!'))
           });
@@ -2374,8 +2389,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                         {dir.title}
                       </h4>
                       <div className="space-y-1 text-xs text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200">
-                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject}</p>
-                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope}</p>
+                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject || dir.title}</p>
+                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope || `Viết đúng nội dung của hướng “${dir.title}”, không trộn với hướng khác.`}</p>
                       </div>
                     </div>
 
