@@ -381,8 +381,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const grade5ReadingPrompt = grade === 5 && /đọc sách/i.test(promptText) && /ý nghĩa|vai trò|lợi ích|quan trọng|khẳng định/i.test(promptText);
   const grade5GrandparentPrompt = grade === 5 && /ông\/bà|ông bà|ông hoặc bà|bà hoặc ông/i.test(promptText) && /tình cảm|cảm xúc|biết ơn|yêu quý|yêu thương/i.test(promptText);
   const grade5FarewellPrompt = grade === 5 && /mái trường tiểu học/i.test(promptText) && /tốt nghiệp|chia tay|biết ơn|kỉ niệm/i.test(promptText);
-  const grade5MoonPrompt = grade === 5 && /đêm trăng rằm/i.test(promptText) && /miêu tả|tả/i.test(promptText);
-  const grade5WorkerPrompt = grade === 5 && /người lao động bình dị/i.test(promptText) && /miêu tả|tả/i.test(promptText);
+  const grade5MoonPrompt = /đêm trăng rằm/i.test(promptText) && /miêu tả|tả/i.test(promptText);
+  const grade5WorkerPrompt = /người lao động bình dị/i.test(promptText) && /miêu tả|tả/i.test(promptText);
   const quickWishes = grade5MoonPrompt
     ? ['Chọn làng quê hoặc sân thượng giữa phố', 'Tả vầng trăng và ánh sáng trăng rằm', 'Tả cảnh vật, âm thanh ở nơi đã chọn', 'Bộc lộ cảm xúc trước vẻ đẹp đêm trăng']
     : grade5WorkerPrompt
@@ -748,7 +748,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
           setUnderstanding({
             target: promptText.trim(),
-            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!',
+            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài có nhiều hướng viết. Con hãy chọn một hướng mình yêu thích nhé!',
             contentRequirements: deepData.specificRequirements || [
               'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
             ],
@@ -2365,10 +2365,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               <div className="p-4 bg-white/95 rounded-2xl border-2 border-pink-300 shadow-xs space-y-2">
                 <div className="flex items-center gap-2 text-pink-900 font-extrabold text-sm sm:text-base font-display">
                   <span>✨</span>
-                  <span>Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!</span>
+                  <span>Đề bài có nhiều hướng viết. Con hãy chọn một hướng mình yêu thích nhé!</span>
                 </div>
                 <p className="text-xs sm:text-sm text-stone-600 font-medium">
-                  Hoa Nhỏ đã phân tích thấy đề bài mở ra 2 hướng viết khác nhau. Con hãy bấm chọn một hướng dưới đây để cùng Hoa Nhỏ lập sơ đồ 5 nhánh và dàn ý bám sát hướng đó:
+                  Hoa Nhỏ đã nhận ra các hướng viết phù hợp với đề bài. Con hãy chọn một hướng để lập sơ đồ 5 nhánh và dàn ý riêng cho hướng đó:
                 </p>
               </div>
 
@@ -2389,8 +2389,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                         {dir.title}
                       </h4>
                       <div className="space-y-1 text-xs text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200">
-                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject || dir.title}</p>
-                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope || `Viết đúng nội dung của hướng “${dir.title}”, không trộn với hướng khác.`}</p>
+                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject?.trim() || dir.title}</p>
+                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope?.trim() || `Tập trung miêu tả ${dir.mainObject?.trim() || dir.title.toLowerCase()}; lựa chọn những chi tiết thực sự quan sát được và nêu cảm nghĩ của em.`}</p>
                       </div>
                     </div>
 
