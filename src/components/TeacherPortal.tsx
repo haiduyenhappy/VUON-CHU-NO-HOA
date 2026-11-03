@@ -1049,7 +1049,6 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
   return (
     <div className="max-w-7xl mx-auto px-3 sm:px-6 py-6 space-y-6">
-      {activeTab === 'bank' && <QuestionBankManager editorName={teacherName} />}
       {/* Top Banner: Góc Cô Giáo */}
       <div className="bg-gradient-to-r from-emerald-100 via-teal-50 to-amber-100 rounded-3xl p-4 sm:p-5 border-2 border-emerald-300 shadow-xs flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -1201,6 +1200,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           </div>
         </div>
       </div>
+
+      {activeTab === 'bank' && <QuestionBankManager editorName={teacherName} />}
 
       {/* Hoa Nhỏ Personalized Teacher Greeting */}
       <div className="flex justify-start">
