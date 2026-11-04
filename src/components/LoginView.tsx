@@ -1,3 +1,5 @@
+import { signInWithCustomToken } from 'firebase/auth';
+import { firebaseAuth } from '../lib/firebase';
 import React, { useState, useEffect } from 'react';
 import { GoogleTeacherButton } from './GoogleTeacherButton';
 import { Student, AppSettings, AuthUser } from '../types';
@@ -187,6 +189,22 @@ export const LoginView: React.FC<LoginViewProps> = ({
         return;
       }
 
+      // Một lần đăng nhập: tự xác thực Firebase bằng token do máy chủ cấp.
+      if (role === 'teacher') {
+        if (!firebaseAuth || !data.firebaseCustomToken) {
+          setErrorMsg('Chưa kết nối được Firebase để lưu ngân hàng đề.');
+          setIsLoading(false);
+          return;
+        }
+        try {
+          await signInWithCustomToken(firebaseAuth, data.firebaseCustomToken);
+        } catch (error) {
+          console.error('Firebase sign-in failed:', error);
+          setErrorMsg('Không xác thực được quyền giáo viên trên Firebase.');
+          setIsLoading(false);
+          return;
+        }
+      }
       // Successful auth - build authUser
       if (role === 'teacher') {
         authUser = {
