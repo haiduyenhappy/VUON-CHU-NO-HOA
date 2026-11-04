@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
 import { analyzePromptSemantics } from '../utils/promptAnalyzerEngine';
+import { getWritingWishes } from '../utils/writingWishEngine';
 
 const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean);
 const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
@@ -58,13 +59,18 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       if (!data.prompt || !String(data.prompt).trim()) throw new Error('Chưa nhận diện được đề bài.');
       const fields = ['directions','requirements','quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'] as const;
       setDraft(prev => {
+        const recognizedPrompt = String(data.prompt).trim();
+        const recognizedGrade = Number.isInteger(data.grade) && data.grade >= 1 && data.grade <= 5 ? data.grade : (prev?.grade || 3);
         const next: ManagedWritingTask = { ...(prev || newTask()),
           title: String(data.title || prev?.title || '').trim(),
-          prompt: String(data.prompt).trim() };
+          prompt: recognizedPrompt,
+          quickWishes: getWritingWishes({ prompt: recognizedPrompt, grade: recognizedGrade }) };
         if (Number.isInteger(data.grade) && data.grade >= 1 && data.grade <= 5) next.grade = data.grade;
         for (const key of fields) {
-          if (Array.isArray(data[key])) (next as any)[key] = data[key].filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim());
+          if (Array.isArray(data[key]) && data[key].some((v: unknown) => typeof v === 'string' && v.trim()))
+            (next as any)[key] = data[key].filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim());
         }
+        if (!next.quickWishes?.length) next.quickWishes = getWritingWishes({ prompt: recognizedPrompt, grade: recognizedGrade });
         return next;
       });
       setMessage('Đã đọc ảnh. Cô xem và chỉnh sửa nội dung trước khi lưu bài.');
@@ -142,6 +148,13 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
+  const generateQuickWishes = () => {
+    if (!draft?.prompt.trim()) { setMessage('Cô nhập đề bài trước khi tạo gợi ý.'); return; }
+    const suggestions = getWritingWishes({ prompt: draft.prompt, grade: draft.grade });
+    setDraft(prev => prev ? { ...prev, quickWishes: suggestions } : prev);
+    setMessage('Đã tạo gợi ý theo đề bài. Cô có thể chỉnh sửa trước khi lưu.');
+  };
+
   const save = () => {
     if (!draft) return;
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
@@ -181,6 +194,10 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
           <label className="block">Vườn<select className="block w-full rounded-xl border p-3" value={draft.gardenType} onChange={e => change('gardenType', e.target.value as GardenType)}>{(['ke_chuyen','yeu_thuong','sac_mau','y_kien','cuoc_song'] as GardenType[]).map(g => <option key={g} value={g}>{g.replaceAll('_',' ')}</option>)}</select></label>
           <div className="rounded-2xl border-2 border-violet-200 bg-violet-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold text-violet-900">🌸 Các hướng viết và yêu cầu của đề</h4>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <span className="font-semibold text-violet-900">Gợi ý chọn nhanh cho học sinh</span>
+              <button type="button" className="rounded-xl bg-violet-700 px-3 py-2 text-sm font-bold text-white" onClick={generateQuickWishes}>Tạo gợi ý theo đề bài</button>
+            </div>
             {listFields.filter(f => ['directions','requirements','suggestedQuestions','quickWishes'].includes(f.key)).map(f => <label className="block font-semibold" key={f.key}>{f.label}<textarea className="mt-1 block w-full rounded-xl border p-3 font-normal" rows={3} value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key, lines(e.target.value))}/></label>)}
           </div>
           <div className="rounded-2xl border-2 border-pink-200 bg-pink-50/30 p-4 space-y-3">

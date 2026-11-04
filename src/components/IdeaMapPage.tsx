@@ -409,7 +409,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     : getWritingWishes({ prompt: promptText, grade, selectedObject: selectedObjectName });
 
 
-  const studentQuickWishes = editedTask?.quickWishes !== undefined ? editedTask.quickWishes : quickWishes;
+  // Ưu tiên gợi ý giáo viên biên soạn; nếu chưa có, sinh gợi ý từ chính đề đang mở.
+  const studentQuickWishes = editedTask?.quickWishes?.some(w => w.trim())
+    ? editedTask.quickWishes.filter(w => w.trim())
+    : quickWishes;
   const studentDifficultyDescriptions = editedTask?.difficultyOptions || ['Chuẩn SGK', 'Thêm quan sát', 'Từ ngữ gợi cảm', 'Ý tưởng mới lạ'];
 
   // Image Rotation (Canvas-based)
