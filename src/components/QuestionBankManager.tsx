@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
 import { analyzePromptSemantics } from '../utils/promptAnalyzerEngine';
-import { subscribeCurriculum, saveCurriculumToCloud } from '../lib/curriculumSync';
 
 const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean);
 const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
@@ -26,9 +25,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [preview, setPreview] = useState(false);
   const [message, setMessage] = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
-  const [saving, setSaving] = useState(false);
   const [, setSyncError] = useState('');
-  useEffect(() => subscribeCurriculum(setSyncError), []);
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
   const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
   const loadActualContent = async (task: ManagedWritingTask) => {
@@ -96,48 +93,43 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
-  // Lưu tại thiết bị trước; kết nối trực tuyến không được phép khóa chức năng biên soạn.
-  const save = async () => {
+  // Lưu toàn bộ bản ghi theo mã bài cố định; không phụ thuộc dịch vụ bên ngoài.
+  const save = () => {
     if (!draft || saving) return;
-    if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
-    const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
-    setSaving(true);
-    try {
-      saveManagedCurriculumTask(updated);
-      setDraft(updated);
-      setMessage('Đã lưu bản nháp.');
-    } catch {
-      setMessage('Không lưu được bài trên thiết bị. Vui lòng kiểm tra dung lượng trình duyệt.');
-      setSaving(false);
+    if (!draft.title.trim() || !draft.prompt.trim()) {
+      setMessage('Vui lòng nhập tên bài và đề bài.');
       return;
     }
+    const updated: ManagedWritingTask = {
+      ...draft, id: draft.id || `GV-${Date.now()}`,
+      updatedAt: new Date().toISOString(), updatedBy: editorName
+    };
     try {
-      await saveCurriculumToCloud(updated);
+      saveManagedCurriculumTask(updated);
+      // Kiểm tra lại bản vừa ghi để tránh báo thành công khi dữ liệu không tồn tại.
+      const saved = getManagedCurriculumTasks(true).find(t => t.id === updated.id);
+      if (!saved || JSON.stringify(saved) !== JSON.stringify(updated)) {
+        throw new Error('Không đọc lại được bài đã lưu');
+      }
+      setDraft(updated);
       setMessage('Đã lưu bài.');
     } catch {
-      // Giữ bản lưu trên thiết bị, không báo sai rằng các thiết bị khác đã được cập nhật.
-      setMessage('Đã lưu bản nháp.');
-    } finally { setSaving(false); }
+      setMessage('Không lưu được bài. Vui lòng kiểm tra bộ nhớ trình duyệt.');
+    }
   };
-  const toggleDeleted = async () => {
+  const toggleDeleted = () => {
     if (!draft?.id || saving) return;
-    const next = { ...draft, deleted: !draft.deleted, updatedAt: new Date().toISOString(), updatedBy: editorName };
-    setSaving(true);
+    const next: ManagedWritingTask = {
+      ...draft, deleted: !draft.deleted,
+      updatedAt: new Date().toISOString(), updatedBy: editorName
+    };
     try {
       saveManagedCurriculumTask(next);
       setDraft(null);
-      setMessage(next.deleted ? 'Đã chuyển bài vào mục đã xóa trên thiết bị này.' : 'Đã khôi phục bài trên thiết bị này.');
+      setMessage(next.deleted ? 'Đã xóa bài.' : 'Đã khôi phục bài.');
     } catch {
-      setMessage('Không lưu được thay đổi trên thiết bị.');
-      setSaving(false);
-      return;
+      setMessage('Không lưu được thay đổi.');
     }
-    try {
-      await saveCurriculumToCloud(next);
-      setMessage(next.deleted ? 'Đã ẩn bài khỏi danh sách học sinh.' : 'Đã khôi phục bài.');
-    } catch {
-      setMessage('Đã lưu bản nháp.');
-    } finally { setSaving(false); }
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
@@ -174,7 +166,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
           </div>
           <div className="rounded-2xl border p-4"><label className="block font-semibold">Tiêu chí đánh giá<textarea className="mt-2 block w-full rounded-xl border p-3 font-normal" rows={4} value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label></div>
         </>}
-        <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={() => void save()} disabled={saving}>{saving ? 'Đang lưu...' : 'Lưu bài'}</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={() => void toggleDeleted()} disabled={saving}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>
+        <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={() => void save()}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={() => void toggleDeleted()}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>
       </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
     </div>
     {message && <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">{message}</p>}
