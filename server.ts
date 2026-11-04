@@ -1225,7 +1225,7 @@ app.post('/api/auth', async (req, res) => {
     saveDatabase(db);
 
     // Custom Token được ký bởi Firebase Admin trên máy chủ, không cấp từ trình duyệt.
-    let firebaseCustomToken: string;
+    let firebaseCustomToken: string | undefined;
     try {
       const firebaseRole = matchedTeacher.role === 'SUPER_ADMIN' ? 'admin' : 'teacher';
       firebaseCustomToken = await getFirebaseAdminAuth().createCustomToken(
@@ -1234,7 +1234,8 @@ app.post('/api/auth', async (req, res) => {
       );
     } catch (error) {
       console.error('Firebase Admin không thể cấp token:', error);
-      return res.status(503).json({ success: false, message: 'Chưa thể kết nối quyền lưu ngân hàng đề. Vui lòng liên hệ quản trị hệ thống.' });
+      // Firebase chưa sẵn sàng không được chặn phiên đăng nhập giáo viên hợp lệ.
+      firebaseCustomToken = undefined;
     }
     const token = `tok_${matchedTeacher.id}_${Date.now()}`;
     return res.json({
