@@ -104,6 +104,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     initialPrompt || 'Viết một đoạn văn giới thiệu về bản thân em: họ tên, sở thích, ước mơ và một điểm đặc biệt của mình.'
   );
   const [lastAnalyzedPrompt, setLastAnalyzedPrompt] = useState<string>('');
+  // Mã bài ổn định dù giáo viên đổi tên hoặc sửa nguyên văn đề.
+  const [selectedCurriculumTaskId, setSelectedCurriculumTaskId] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [uncertainWords, setUncertainWords] = useState<string[]>([]);
@@ -164,6 +166,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   useEffect(() => {
     if (initialPrompt) {
       setPromptText(initialPrompt);
+      setSelectedCurriculumTaskId(null);
       setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
     }
   }, [initialPrompt]);
@@ -691,7 +694,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
       if (resDeep.ok) {
         const deepData: PromptAnalysisData = await resDeep.json();
         // Nội dung đã được giáo viên duyệt có ưu tiên cao hơn nội dung AI mới tạo.
-        const teacherTask = getManagedCurriculumTasks().find(t => t.grade === grade && t.prompt.trim() === promptText.trim());
+        const teacherTask = getManagedCurriculumTasks().find(t => t.grade === grade && (selectedCurriculumTaskId ? t.id === selectedCurriculumTaskId : t.prompt.trim() === promptText.trim()));
         if (teacherTask) {
           if (teacherTask.mindMap?.length === 5 && teacherTask.mindMap.every(Boolean)) {
             deepData.branches = teacherTask.mindMap.map((value, index) => {
@@ -713,6 +716,14 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             deepData.vocabularySuggestions = bank;
           }
           if (teacherTask.requirements?.some(Boolean)) deepData.specificRequirements = teacherTask.requirements.filter(Boolean);
+          if (teacherTask.directions?.some(Boolean)) {
+            const approved = teacherTask.directions.filter(v => v.trim()).map((value, index) => {
+              const [title, ...scope] = value.split(' – ');
+              return { id: `teacher-direction-${index + 1}`, title: title.trim(), mainObject: title.trim(), scope: scope.join(' – ').trim() };
+            });
+            deepData.detectedDirections = approved;
+            deepData.hasMultipleDirections = approved.length > 1;
+          }
         }
 
         // Kiểm tra tránh race condition nếu học sinh đã sửa đề mới hơn
@@ -1344,6 +1355,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             onChange={(e) => {
               const val = e.target.value;
               setPromptText(val);
+              setSelectedCurriculumTaskId(null);
               setHasCheckedPrompt(true);
               // Xóa sạch kết quả phân tích cũ ngay lập tức để không bị lẫn lộn giữa các đề
               promptVersionRef.current++;
@@ -3402,6 +3414,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         soundEnabled={settings.soundEnabled}
         onSelectTopic={(topic) => {
           setPromptText(topic.prompt);
+          setSelectedCurriculumTaskId(topic.taskId || null);
           setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
           if (topic.grade && topic.grade >= 1 && topic.grade <= 5) {
             setGrade(topic.grade);

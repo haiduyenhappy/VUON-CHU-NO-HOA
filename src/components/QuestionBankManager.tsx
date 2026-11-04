@@ -27,7 +27,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [message, setMessage] = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
   const [saving, setSaving] = useState(false);
-  const [syncError, setSyncError] = useState('');
+  const [, setSyncError] = useState('');
   useEffect(() => subscribeCurriculum(setSyncError), []);
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
   const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
@@ -105,7 +105,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     try {
       saveManagedCurriculumTask(updated);
       setDraft(updated);
-      setMessage('Đã lưu bài trên thiết bị này.');
+      setMessage('Đã lưu bản nháp.');
     } catch {
       setMessage('Không lưu được bài trên thiết bị. Vui lòng kiểm tra dung lượng trình duyệt.');
       setSaving(false);
@@ -113,10 +113,10 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     }
     try {
       await saveCurriculumToCloud(updated);
-      setMessage('Đã lưu bài và cập nhật cho học sinh.');
+      setMessage('Đã lưu bài.');
     } catch {
       // Giữ bản lưu trên thiết bị, không báo sai rằng các thiết bị khác đã được cập nhật.
-      setMessage('Đã lưu bài trên thiết bị này. Nội dung trên thiết bị khác sẽ được cập nhật khi kết nối dữ liệu hoạt động.');
+      setMessage('Đã lưu bản nháp.');
     } finally { setSaving(false); }
   };
   const toggleDeleted = async () => {
@@ -136,7 +136,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       await saveCurriculumToCloud(next);
       setMessage(next.deleted ? 'Đã ẩn bài khỏi danh sách học sinh.' : 'Đã khôi phục bài.');
     } catch {
-      setMessage('Đã lưu thay đổi trên thiết bị này. Các thiết bị khác sẽ được cập nhật khi kết nối dữ liệu hoạt động.');
+      setMessage('Đã lưu bản nháp.');
     } finally { setSaving(false); }
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">

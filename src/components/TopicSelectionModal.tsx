@@ -28,6 +28,7 @@ interface TopicSelectionModalProps {
     grade: number;
     genre: EssayGenre;
     title: string;
+    taskId?: string;
     suggestedQuestions?: string[];
   }) => void;
   soundEnabled?: boolean;
@@ -372,6 +373,7 @@ export const TopicSelectionModal: React.FC<TopicSelectionModalProps> = ({
                       playSparkle(soundEnabled);
                       onSelectTopic({
                         prompt: task.prompt,
+                        taskId: task.isCreative ? undefined : task.id,
                         grade: task.grade,
                         genre: task.genre,
                         title: task.title,
