@@ -1,4 +1,4 @@
-import { collection, doc, onSnapshot, setDoc, getDoc, type Unsubscribe } from 'firebase/firestore';
+import { collection, doc, onSnapshot, setDoc, getDoc, runTransaction, type Unsubscribe } from 'firebase/firestore';
 import { firebaseAuth, firestore } from './firebase';
 import { readTaskOverrides, setRemoteTaskOverrides, type ManagedWritingTask } from '../data/curriculumData';
 
@@ -24,9 +24,14 @@ export async function importLocalEditsToCloud(): Promise<{ imported: number; ski
     if (!task?.id || !/^[a-zA-Z0-9_-]{1,100}$/.test(task.id)) { skipped++; continue; }
     const reference = doc(firestore, COLLECTION, taskKey(task));
     // Tuyệt đối không ghi đè bản đã được giáo viên khác lưu trên Firestore.
-    if ((await getDoc(reference)).exists()) { skipped++; continue; }
-    await setDoc(reference, JSON.parse(JSON.stringify(task)));
-    imported++;
+    // Create-only transaction: a second device cannot overwrite a newer teacher edit.
+    const created = await runTransaction(firestore, async tx => {
+      const existing = await tx.get(reference);
+      if (existing.exists()) return false;
+      tx.set(reference, JSON.parse(JSON.stringify(task)));
+      return true;
+    });
+    if (created) imported++; else skipped++;
   }
   return { imported, skipped };
 }
