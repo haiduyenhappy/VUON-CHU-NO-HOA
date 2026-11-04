@@ -18,6 +18,20 @@ const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
   { key: 'images', label: 'Hình ảnh sáng tạo' },
   { key: 'examples', label: 'Câu mẫu' }
 ];
+// Các gợi ý an toàn cho đề kể hoạt động cùng người thân; không tự thêm yêu cầu số câu.
+const familyActivitySupport = (prompt: string) => {
+  const p = prompt.toLocaleLowerCase('vi');
+  if (!/(hoạt động|việc làm)/.test(p) || !/(bố|mẹ|ông|bà|anh chị|người thân)/.test(p)) return null;
+  return {
+    questions: ['Em đã làm hoạt động gì cùng người thân?', 'Ai đã cùng em tham gia?', 'Hoạt động diễn ra ở đâu và khi nào?', 'Mọi người đã làm những việc gì?', 'Khoảnh khắc nào khiến em nhớ nhất?', 'Em cảm thấy thế nào sau hoạt động ấy?'],
+    branches: ['Thời gian và địa điểm\nHoạt động diễn ra khi nào?\nHoạt động diễn ra ở đâu?', 'Người thân tham gia\nEm đã làm cùng ai?\nMỗi người tham gia thế nào?', 'Diễn biến hoạt động\nHoạt động bắt đầu ra sao?\nEm và người thân đã làm những gì?', 'Khoảnh khắc đáng nhớ\nĐiều gì khiến em vui hoặc xúc động?\nMọi người phản ứng thế nào?', 'Cảm xúc và ý nghĩa\nEm cảm thấy ra sao?\nEm trân trọng điều gì?'],
+    outline: ['Giới thiệu hoạt động em đã làm cùng người thân.\nNêu người cùng tham gia, thời gian hoặc địa điểm nếu em nhớ.', 'Kể hoạt động bắt đầu như thế nào.\nKể lần lượt những việc em và người thân đã làm.\nChọn một khoảnh khắc em nhớ nhất để kể rõ hơn.', 'Nêu cảm xúc của em sau hoạt động.\nChia sẻ điều làm em trân trọng người thân.'],
+    words: ['vui vẻ: thể hiện niềm vui khi cùng làm việc', 'ấm áp: cảm giác được quan tâm, gần gũi', 'háo hức: mong chờ một hoạt động', 'gắn bó: tình cảm gần gũi giữa người thân'],
+    images: ['Nụ cười của người thân trong lúc cùng làm việc', 'Ánh mắt động viên hoặc cử chỉ quan tâm'],
+    examples: ['Em nhớ nhất khoảnh khắc cả nhà cùng nhau hoàn thành công việc.', 'Hoạt động ấy khiến em cảm thấy gần gũi với người thân hơn.'],
+    criteria: ['Kể đúng một hoạt động cùng người thân theo yêu cầu đề.', 'Các việc được kể theo trình tự dễ hiểu.', 'Có chi tiết thực tế và cảm xúc của bản thân.', 'Dùng từ và viết câu phù hợp với lớp học.']
+  };
+};
 const newTask = (): ManagedWritingTask => ({ id: '', grade: 3, volume: 1, week: 1, title: '', prompt: '', gardenType: 'ke_chuyen', genre: 'ke_su_viec', suggestedQuestions: [], evaluationCriteria: [] });
 export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorName }) => {
   const [tasks, setTasks] = useState<ManagedWritingTask[]>(() => getManagedCurriculumTasks(true));
@@ -89,8 +103,15 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       task.outline?.filter(Boolean).length === 3 && task.words?.some(Boolean) &&
       task.images?.some(Boolean) && task.examples?.some(Boolean);
     if (alreadyComplete) return;
+    const family = familyActivitySupport(task.prompt);
+    if (family) setDraft(prev => prev?.prompt === task.prompt ? {
+      ...prev, suggestedQuestions: fill(prev.suggestedQuestions, family.questions),
+      mindMap: fill(prev.mindMap, family.branches), outline: fill(prev.outline, family.outline),
+      words: fill(prev.words, family.words), images: fill(prev.images, family.images),
+      examples: fill(prev.examples, family.examples), evaluationCriteria: fill(prev.evaluationCriteria, family.criteria)
+    } : prev);
     setLoadingContent(true);
-    setMessage('Đang nạp nội dung bài theo đúng đề gốc...');
+    setMessage('Đang tạo gợi ý theo đúng đề bài...');
     try {
       const response = await fetch('/api/ai/analyze-prompt-deep', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
@@ -129,7 +150,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       } : prev);
       setMessage('');
     } catch {
-      setMessage('Không kết nối được bộ phân tích đề. Hướng viết cơ bản đã nạp; dàn ý chưa có dữ liệu, không tự tạo nội dung giả.');
+      setMessage(family ? 'Đã nạp gợi ý cho đề kể hoạt động cùng người thân. Cô kiểm tra và chỉnh sửa trước khi lưu.' : 'Chưa tạo đủ gợi ý: bộ phân tích đề không phản hồi. Cô kiểm tra nội dung trước khi lưu.');
     } finally { setLoadingContent(false); }
   };
   const edit = (t: ManagedWritingTask) => {
@@ -149,6 +170,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const save = () => {
     if (!draft) return;
     if (!draft.id && !generated) { setMessage('Cô hãy tạo bài từ ảnh trước khi lưu.'); return; }
+    if (!draft.mindMap?.some(Boolean) || !draft.outline?.some(Boolean) || !draft.suggestedQuestions?.some(Boolean)) { setMessage('Chưa đủ sơ đồ, dàn ý hoặc câu hỏi gợi ý. Cô bổ sung trước khi lưu.'); return; }
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
@@ -186,47 +208,48 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
          {!draft.id && generated && imagePreview && <img src={imagePreview} alt="Ảnh đề bài" className="max-h-48 max-w-full rounded-xl border object-contain" />}
 {loadingContent && <p role="status" className="rounded-xl bg-sky-50 p-3 text-sky-900">Đang tải nội dung bài từ bộ phân tích đề…</p>}
         {(!!draft.id || generated) && (preview ? <div className="rounded-xl bg-emerald-50 p-4 space-y-3"><strong>{draft.title}</strong><p>{draft.prompt}</p>{listFields.map(f => <div key={f.key}><strong>{f.label}</strong><ul className="list-disc pl-6">{((draft[f.key] as string[] | undefined) || []).map((s,i) => <li key={i}>{s}</li>)}</ul></div>)}</div> : <>
-          <div className="grid grid-cols-2 gap-2"><label>Lớp<select className="w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade', Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label>Tập<select className="w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume', Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
-          <label className="block">Tên bài<input className="block w-full rounded-xl border p-3" value={draft.title} onChange={e => change('title', e.target.value)}/></label>
-          <label className="block">Đề bài<textarea rows={3} className="block w-full rounded-xl border p-3" value={draft.prompt} onChange={e => change('prompt', e.target.value)}/></label>
-          <label className="block">Thể loại<input className="block w-full rounded-xl border p-3" value={draft.genre || ''} onChange={e => change('genre', e.target.value as EssayGenre)}/></label>
-          <label className="block">Vườn<select className="block w-full rounded-xl border p-3" value={draft.gardenType} onChange={e => change('gardenType', e.target.value as GardenType)}>{(['ke_chuyen','yeu_thuong','sac_mau','y_kien','cuoc_song'] as GardenType[]).map(g => <option key={g} value={g}>{g.replaceAll('_',' ')}</option>)}</select></label>
-          <div className="rounded-2xl border-2 border-violet-200 bg-violet-50/30 p-4 space-y-3">
-            <h4 className="text-lg font-bold text-violet-900">🌸 Các hướng viết và yêu cầu của đề</h4>
-            <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="font-semibold text-violet-900">Gợi ý chọn nhanh cho học sinh</span>
-              <button type="button" className="rounded-xl bg-violet-700 px-3 py-2 text-sm font-bold text-white" onClick={generateQuickWishes}>Tạo gợi ý theo đề bài</button>
-            </div>
-            {listFields.filter(f => ['directions','requirements','suggestedQuestions','quickWishes'].includes(f.key)).map(f => <label className="block font-semibold" key={f.key}>{f.label}<textarea className="mt-1 block w-full rounded-xl border p-3 font-normal" rows={3} value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key, lines(e.target.value))}/></label>)}
+          <div className="rounded-2xl border border-pink-200 bg-white p-4 space-y-3">
+            <h4 className="text-lg font-bold">✏️ 1. Đề bài của con</h4>
+            <label className="block font-semibold">Tên bài<input className="mt-1 block w-full rounded-xl border p-3 font-normal" value={draft.title} onChange={e => change('title',e.target.value)}/></label>
+            <label className="block font-semibold">Nội dung đề bài<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={draft.prompt} onChange={e => change('prompt',e.target.value)}/></label>
+            <p className="text-sm text-stone-600">Cô kiểm tra nội dung nhận dạng từ ảnh. Nếu sửa đề, bấm “Tạo lại gợi ý” để cập nhật nội dung theo đề mới.</p>
+            <button type="button" disabled={loadingContent} className="rounded-xl border border-violet-300 px-4 py-2 font-semibold text-violet-800" onClick={() => { if (!draft.prompt.trim()) { setMessage('Cô nhập đề bài trước.'); return; } const t = {...draft, suggestedQuestions: [], directions: [], requirements: [], mindMap: [], outline: [], words: [], images: [], examples: [], evaluationCriteria: []}; setDraft(t); void loadActualContent(t); }}>Tạo lại gợi ý theo đề đã sửa</button>
           </div>
-          <div className="rounded-2xl border-2 border-pink-200 bg-pink-50/30 p-4 space-y-3">
-            <h4 className="text-lg font-bold text-pink-900">🌟 3. Con muốn bài viết của mình có điều gì đặc biệt?</h4>
-            <p className="text-sm text-stone-600">Các gợi ý chọn nhanh được nhập ở phần trên, mỗi dòng một gợi ý. Giáo viên có thể chỉnh sửa nội dung mặc định và tên các mức độ.</p>
-            <label className="block font-semibold">Nội dung mặc định trong ô mong muốn của học sinh
-              <input className="mt-1 block w-full rounded-xl border bg-white p-3 font-normal" value={draft.defaultWish ?? ''} placeholder="Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên." onChange={e => change('defaultWish', e.target.value)}/>
-            </label>
-            <div className="space-y-2"><strong>Mức độ thử thách rèn luyện</strong>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {['Cơ bản','Mở rộng','Nâng cao','Sáng tạo'].map((name, n) => <label key={name} className="block rounded-xl border bg-white p-3 font-semibold">{name}
-                  <input className="mt-1 block w-full rounded-lg border p-2 font-normal" value={draft.difficultyOptions?.[n] ?? ['Chuẩn SGK','Thêm quan sát','Từ ngữ gợi cảm','Ý tưởng mới lạ'][n]} onChange={e => { const next = [...(draft.difficultyOptions || ['Chuẩn SGK','Thêm quan sát','Từ ngữ gợi cảm','Ý tưởng mới lạ'])]; next[n] = e.target.value; change('difficultyOptions', next); }}/>
-                </label>)}
-              </div>
-            </div>
+          <div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
+            <h4 className="text-lg font-bold">📚 2. Chọn khối lớp và tập</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><label className="font-semibold">Lớp<select className="mt-1 block w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade',Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label className="font-semibold">Tập<select className="mt-1 block w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume',Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
           </div>
-          <div className="rounded-2xl border-2 border-violet-200 p-4 space-y-3">
-            <h4 className="text-lg font-bold text-violet-900">🗺️ Sơ đồ tư duy 5 nhánh – Tỏa sáng ý tưởng</h4>
-            <p className="text-sm text-stone-600">Giáo viên chỉnh sửa nội dung từng nhánh. Mỗi nhánh có thể chứa nhiều ý, mỗi ý một dòng.</p>
-            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-3">{[0,1,2,3,4].map((n) => <label key={n} className={`block rounded-xl border-2 p-3 ${['border-emerald-200 bg-emerald-50','border-violet-200 bg-violet-50','border-amber-200 bg-amber-50','border-sky-200 bg-sky-50','border-rose-200 bg-rose-50'][n]}`}><strong>Nhánh {n+1}</strong><textarea rows={7} className="mt-2 block w-full rounded-lg border p-2 bg-white text-sm" placeholder={`Tên nhánh ${n+1} và các ý liên quan`} value={(draft.mindMap || [])[n] || ''} onChange={e => { const next = [...(draft.mindMap || [])]; while(next.length < 5) next.push(''); next[n] = e.target.value; change('mindMap',next); }}/></label>)}</div>
+          <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
+            <h4 className="text-lg font-bold">🌟 3. Con muốn bài viết của mình có điều gì đặc biệt?</h4>
+            <label className="block font-semibold">Gợi ý chọn nhanh cho học sinh<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.quickWishes || []).join('\n')} onChange={e => change('quickWishes',lines(e.target.value))}/></label>
+            <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={generateQuickWishes}>Tạo gợi ý chọn nhanh</button>
+            <label className="block font-semibold">Mong muốn của học sinh<input className="mt-1 block w-full rounded-xl border p-3 font-normal" value={draft.defaultWish || ''} placeholder="Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên." onChange={e => change('defaultWish',e.target.value)}/></label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{['Cơ bản','Mở rộng','Nâng cao','Sáng tạo'].map((name,n) => <label key={name} className="rounded-xl border bg-white p-3 font-semibold">{name}<input className="mt-2 block w-full rounded-lg border p-2 font-normal" value={draft.difficultyOptions?.[n] ?? ['Chuẩn SGK','Thêm quan sát','Từ ngữ gợi cảm','Ý tưởng mới lạ'][n]} onChange={e => { const a=[...(draft.difficultyOptions || ['Chuẩn SGK','Thêm quan sát','Từ ngữ gợi cảm','Ý tưởng mới lạ'])]; a[n]=e.target.value; change('difficultyOptions',a); }}/></label>)}</div>
           </div>
-          <div className="rounded-2xl border-2 border-emerald-200 p-4 space-y-3">
-            <h4 className="text-lg font-bold text-emerald-900">📋 Dàn ý chi tiết các phần của bài</h4>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{['Phần 1 – Mở đầu','Phần 2 – Nội dung chính','Phần 3 – Kết thúc'].map((label,n) => <label key={n} className="block rounded-xl bg-emerald-50 p-3"><strong>{label}</strong><textarea rows={6} className="mt-2 block w-full rounded-lg border bg-white p-3" value={(draft.outline || [])[n] || ''} onChange={e => { const next = [...(draft.outline || [])]; while(next.length < 3) next.push(''); next[n] = e.target.value; change('outline',next); }}/></label>)}</div>
+          <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4 space-y-3">
+            <h4 className="text-lg font-bold text-violet-900">🌸 4. Hoa Nhỏ cùng con hiểu đề</h4>
+            <p className="text-sm">Đề gốc: {draft.prompt}</p>
+            {listFields.filter(f => ['directions','requirements','suggestedQuestions'].includes(f.key)).map(f => <label key={f.key} className="block font-semibold">{f.label}<textarea rows={4} className="mt-1 block w-full rounded-xl border bg-white p-3 font-normal" value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key,lines(e.target.value))}/></label>)}
+            <p className="text-sm text-stone-600">Không tự đặt thêm số câu hoặc yêu cầu không có trong đề.</p>
           </div>
-          <div className="rounded-2xl border-2 border-pink-200 p-4 space-y-3">
-            <h4 className="text-lg font-bold text-pink-900">🌸 Kho từ ngữ và hình ảnh sáng tạo</h4>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{listFields.filter(f => ['words','images','examples'].includes(f.key)).map(f => <label key={f.key} className="block rounded-xl bg-pink-50 p-3"><strong>{f.label}</strong><textarea rows={6} className="mt-2 block w-full rounded-lg border bg-white p-3" value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key, lines(e.target.value))}/></label>)}</div>
+          <div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
+            <h4 className="text-lg font-bold">🗺️ 5. Sơ đồ tư duy 5 nhánh – Tỏa sáng ý tưởng</h4>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">{[0,1,2,3,4].map(n => <label key={n} className={`rounded-xl border-2 p-3 ${['border-emerald-200 bg-emerald-50','border-violet-200 bg-violet-50','border-amber-200 bg-amber-50','border-sky-200 bg-sky-50','border-rose-200 bg-rose-50'][n]}`}><strong>Nhánh {n+1}</strong><textarea rows={8} className="mt-2 block w-full rounded-lg border bg-white p-2" value={(draft.mindMap || [])[n] || ''} onChange={e => {const a=[...(draft.mindMap || [])]; while(a.length<5)a.push(''); a[n]=e.target.value; change('mindMap',a);}}/></label>)}</div>
           </div>
-          <div className="rounded-2xl border p-4"><label className="block font-semibold">Tiêu chí đánh giá<textarea className="mt-2 block w-full rounded-xl border p-3 font-normal" rows={4} value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label></div>
+          <div className="rounded-2xl border border-emerald-200 bg-white p-4 space-y-3">
+            <h4 className="text-lg font-bold">📋 6. Dàn ý chi tiết các phần của bài</h4>
+            <div className="space-y-3">{['Phần 1 – Mở đầu','Phần 2 – Nội dung chính','Phần 3 – Kết thúc'].map((name,n) => <label key={n} className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-semibold">{name}<textarea rows={5} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={(draft.outline || [])[n] || ''} onChange={e => {const a=[...(draft.outline || [])];while(a.length<3)a.push('');a[n]=e.target.value;change('outline',a);}}/></label>)}</div>
+          </div>
+          <div className="rounded-2xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
+            <h4 className="text-lg font-bold">🌼 7. Hoa Nhỏ khơi mở kỷ niệm thật của con</h4>
+            <p className="text-sm text-stone-600">Những câu hỏi này giúp học sinh tự nhớ lại trải nghiệm, không viết bài thay học sinh.</p>
+            <div className="space-y-2">{(draft.suggestedQuestions || []).map((q,n) => <p key={n} className="rounded-xl border bg-white p-3">{n+1}. {q}</p>)}{!draft.suggestedQuestions?.length && <p className="text-amber-800">Chưa có câu hỏi khơi mở phù hợp; cô cần bổ sung trước khi lưu.</p>}</div>
+          </div>
+          <div className="rounded-2xl border border-pink-200 bg-white p-4 space-y-3">
+            <h4 className="text-lg font-bold">🌸 8. Kho từ ngữ và hình ảnh sáng tạo</h4>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{listFields.filter(f => ['words','images','examples'].includes(f.key)).map(f => <label key={f.key} className="rounded-xl border bg-pink-50 p-3 font-semibold">{f.label}<textarea rows={7} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key,lines(e.target.value))}/></label>)}</div>
+            <label className="block font-semibold">Tiêu chí đánh giá<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label>
+          </div>
         </>)}
         {(!!draft.id || generated) && <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>}
       </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
