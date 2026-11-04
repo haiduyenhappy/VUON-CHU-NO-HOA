@@ -20,6 +20,17 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
+  if (/hoạt động thể thao|trò chơi.*(?:tham gia|ở trường)|(?:tham gia|chơi).*trò chơi/u.test(text)) {
+    const count = lengthHint(text);
+    return [
+      ...(count ? [count] : []),
+      'Kể tên hoạt động thể thao hoặc trò chơi em tham gia',
+      'Nói em tham gia cùng những ai và ở đâu',
+      'Kể một việc em đã làm khi tham gia',
+      'Chia sẻ cảm xúc của em trong hoạt động',
+      'Nêu điều em thích nhất ở hoạt động hoặc trò chơi'
+    ];
+  }
   if (grade === 4 && /miêu tả|tả/u.test(text) && /con vật nuôi|chú chó|chú mèo|mèo mướp|chó giữ nhà/u.test(text)) {
     return ['Chọn con vật nuôi em quan sát kĩ', 'Tả ngoại hình và bộ phận nổi bật', 'Tả hoạt động, thói quen riêng của con vật', 'Nêu tình cảm và cách chăm sóc con vật'];
   }
