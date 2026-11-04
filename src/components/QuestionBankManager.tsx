@@ -77,7 +77,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : '';
       setMessage(/Unexpected token|DOCTYPE|not valid JSON|SyntaxError|Failed to fetch/i.test(rawMessage)
-        ? 'Chưa đọc được ảnh. Cô vui lòng thử lại hoặc nhập đề bài bằng tay.'
+        ? 'Không kết nối được máy chủ đọc ảnh. Vui lòng kiểm tra API trên Vercel.'
         : rawMessage || 'Không đọc được ảnh.');
     } finally { setReadingImage(false); }
   };

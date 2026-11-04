@@ -555,7 +555,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ images: imagesToProcess })
       });
-      const data: TextbookOcrResult = await res.json();
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Không đọc được ảnh. Vui lòng thử lại.');
+      if (!Array.isArray(data?.exercises) || data.exercises.length === 0) throw new Error('Ảnh chưa có bài tập nhận dạng được.');
       clearInterval(stepInterval);
       setOcrStepMessage(stepMessages[4]);
       setDetectedOcrResult(data);
@@ -569,7 +571,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     } catch (err) {
       console.error(err);
       clearInterval(stepInterval);
-      setOcrErrorMessage('Hoa Nhỏ chưa đọc xong ảnh. Con hãy thử lại nhé!');
+      setOcrErrorMessage(err instanceof Error ? err.message : 'Hoa Nhỏ chưa đọc được ảnh. Con hãy thử lại nhé!');
     } finally {
       setIsOcrLoading(false);
     }
