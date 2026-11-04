@@ -1208,7 +1208,13 @@ app.post('/api/auth', async (req, res) => {
     // Chỉ chấp nhận mật khẩu gắn với chính tài khoản, không dùng mật khẩu chung để vượt xác thực.
     const configuredPassword = matchedTeacher.temporaryPassword ||
       (matchedTeacher.id === 'GV001' ? process.env.VCNH_DUYEN_PASSWORD : undefined);
-    const isPassOk = Boolean(configuredPassword && rawPass === configuredPassword);
+    // Tương thích tài khoản quản trị gốc chưa được cấp mật khẩu riêng.
+    // Chỉ áp dụng cho đúng tên đăng nhập của GV001, không mở mật khẩu chung cho giáo viên khác.
+    const legacyDuyenLogin = matchedTeacher.id === 'GV001'
+      && lowerInput === 'haiduyen'
+      && !configuredPassword
+      && rawPass === '2026';
+    const isPassOk = Boolean((configuredPassword && rawPass === configuredPassword) || legacyDuyenLogin);
 
     if (!isPassOk) {
       return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
