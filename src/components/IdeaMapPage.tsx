@@ -1,6 +1,5 @@
-import { recognizeVietnameseImages } from '../utils/browserOcr';
 import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT } from '../data/curriculumData';
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Student, 
   WritingTask, 
@@ -106,8 +105,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   );
   const [lastAnalyzedPrompt, setLastAnalyzedPrompt] = useState<string>('');
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
-  const [textbookVolume, setTextbookVolume] = useState<1 | 2>(1);
-  const [isCreatingFromPhoto, setIsCreatingFromPhoto] = useState(false);
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [uncertainWords, setUncertainWords] = useState<string[]>([]);
   const [hasCheckedPrompt, setHasCheckedPrompt] = useState(true);
@@ -520,7 +517,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           if (newImgs.length === maxFiles) {
             const combined = [...uploadedImages, ...newImgs];
             setUploadedImages(combined);
-            // Chỉ lưu ảnh; không tự chạy OCR khi giáo viên vừa tải ảnh.
+            processPromptOcr(combined);
           }
         }
       };
@@ -528,26 +525,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     });
   };
 
-  const handleCreateFromPhoto = async () => {
-    if (!uploadedImages.length || isOcrLoading || isCreatingFromPhoto) return;
-    setIsCreatingFromPhoto(true);
-    try {
-      const recognized = await processPromptOcr(uploadedImages);
-      if (!recognized?.trim()) return;
-      // Nội dung OCR phải hiển thị để cô kiểm tra/sửa; không dùng đề mẫu.
-      setPromptText(recognized.trim());
-      setHasCheckedPrompt(true);
-      setLastAnalyzedPrompt('');
-      setGenre(detectGenre(recognized.trim()));
-      // Sinh gợi ý và dàn ý bằng chính nội dung nhận dạng, tránh state React cập nhật chậm.
-      await handleGenerateIdeaMap(undefined, undefined, undefined, undefined, undefined, recognized.trim());
-    } finally {
-      setIsCreatingFromPhoto(false);
-    }
-  };
-
-  const processPromptOcr = async (imagesToProcess: string[]): Promise<string | null> => {
-    if (imagesToProcess.length === 0) return null;
+  const processPromptOcr = async (imagesToProcess: string[]) => {
+    if (imagesToProcess.length === 0) return;
     setIsOcrLoading(true);
     setOcrErrorMessage('');
     setHasCheckedPrompt(false);
@@ -571,31 +550,28 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }, 900);
 
     try {
-      const recognizedText = await recognizeVietnameseImages(imagesToProcess);
-      // OCR không suy diễn nội dung: giữ nguyên văn bản để giáo viên xác nhận.
-      // Chỉ tách khi ảnh có đánh số bài rõ ràng.
-      const blocks = recognizedText.split(/\n(?=(?:Bài\s*tập|Bài|Câu)\s*\d+[.:)]\s*)/iu).map(v => v.trim()).filter(Boolean);
-      const exercises: TextbookExercise[] = blocks.map((block, idx) => ({
-        exercise_id: `Nội dung ${idx + 1}`,
-        question_text: block,
-        sub_questions: [], related_prompts: [], uncertain_spans: [],
-        ready_for_confirmation: true
-      }));
-      const data: TextbookOcrResult = {
-        exercises,
-        overall_quality_note: 'Đọc ảnh trực tiếp trên thiết bị. Con hãy kiểm tra và sửa chữ nhận dạng trước khi xác nhận; các bài chưa được AI phân loại.'
-      };
+      const res = await fetch('/api/ai/ocr-textbook', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ images: imagesToProcess })
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data?.error || 'Không đọc được ảnh. Vui lòng thử lại.');
+      if (!Array.isArray(data?.exercises) || data.exercises.length === 0) throw new Error('Ảnh chưa có bài tập nhận dạng được.');
       clearInterval(stepInterval);
       setOcrStepMessage(stepMessages[4]);
       setDetectedOcrResult(data);
       playChime(settings.soundEnabled);
 
-      return recognizedText;
+      if (data.exercises && data.exercises.length > 0) {
+        if (data.exercises.length === 1) {
+          handleSelectExercise(data.exercises[0]);
+        }
+      }
     } catch (err) {
       console.error(err);
       clearInterval(stepInterval);
-      setOcrErrorMessage(err instanceof Error ? err.message : 'Hoa Nhỏ chưa đọc được ảnh. Cô hãy thử ảnh rõ hơn.');
-      return null;
+      setOcrErrorMessage(err instanceof Error ? err.message : 'Hoa Nhỏ chưa đọc được ảnh. Con hãy thử lại nhé!');
     } finally {
       setIsOcrLoading(false);
     }
@@ -693,11 +669,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     forceObjectId?: string,
     forceObjectName?: string,
     forceCustomName?: string,
-    forceFormatId?: string,
-    photoPromptOverride?: string
+    forceFormatId?: string
   ) => {
-    const effectivePrompt = photoPromptOverride ?? promptText;
-    if (!effectivePrompt.trim()) return;
+    if (!promptText.trim()) return;
 
     playChime(settings.soundEnabled);
     setIsUnderstandingLoading(true);
@@ -722,7 +696,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          prompt: effectivePrompt.trim(),
+          prompt: promptText.trim(),
           grade,
           specialWishes,
           selectedDirectionId: dirIdToSend,
@@ -740,7 +714,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         // Kiểm tra tránh race condition nếu học sinh đã sửa đề mới hơn
         if (currentVersion !== promptVersionRef.current) return;
 
-        setLastAnalyzedPrompt(effectivePrompt.trim());
+        setLastAnalyzedPrompt(promptText.trim());
         setHasMultipleDirections(deepData.hasMultipleDirections || false);
         setDetectedDirections(deepData.detectedDirections || []);
         setSelectedDirectionId(deepData.selectedDirectionId || null);
@@ -776,7 +750,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           setAllChecksPassed(deepData.allChecksPassed ?? true);
         }
 
-        const detectedWType = (deepData.writingType as EssayGenre) || detectGenre(effectivePrompt.trim());
+        const detectedWType = (deepData.writingType as EssayGenre) || detectGenre(promptText.trim());
         setGenre(detectedWType);
         // SỬA TRIỆT ĐỂ: Chỉ khi kiểu bài đúng là viet_thu mới tính là isLetter
         const isLetter = detectedWType === 'viet_thu';
@@ -794,7 +768,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           setVocabBank(null);
 
           setUnderstanding({
-            target: effectivePrompt.trim(),
+            target: promptText.trim(),
             genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!',
             contentRequirements: deepData.specificRequirements || [
               'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
@@ -1443,12 +1417,12 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
             {uploadedImages.length > 0 && (
               <button
-                onClick={handleCreateFromPhoto}
+                onClick={() => processPromptOcr(uploadedImages)}
                 disabled={isOcrLoading}
                 className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white text-xs sm:text-sm font-bold transition-all disabled:opacity-50 shadow-xs"
               >
                 <Sparkles className="w-4 h-4 text-yellow-300" />
-                <span>✨ Tạo bài từ ảnh</span>
+                <span>🔍 Hoa Nhỏ đọc bài tập từ ảnh</span>
               </button>
             )}
 
@@ -1459,20 +1433,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               </span>
             )}
           </div>
-
-          <div className="grid grid-cols-2 gap-3 p-3 bg-purple-50 rounded-2xl border border-purple-200">
-            <label className="text-sm font-bold text-purple-950">Lớp
-              <select value={grade} onChange={e => setGrade(Number(e.target.value))} className="block w-full mt-1 p-2 rounded-xl border border-purple-200 bg-white text-base">
-                {[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}
-              </select>
-            </label>
-            <label className="text-sm font-bold text-purple-950">Sách Tiếng Việt
-              <select value={textbookVolume} onChange={e => setTextbookVolume(Number(e.target.value) as 1 | 2)} className="block w-full mt-1 p-2 rounded-xl border border-purple-200 bg-white text-base">
-                <option value={1}>Tập 1</option><option value={2}>Tập 2</option>
-              </select>
-            </label>
-          </div>
-          <p className="text-sm text-stone-700">Chọn ảnh, lớp và tập rồi bấm <strong>Tạo bài từ ảnh</strong>. Đề nhận dạng và các gợi ý sẽ xuất hiện bên dưới. Cô có thể sửa đề nếu ảnh bị đọc sai.</p>
 
           {/* Uploaded images thumbnails with Rotate, Crop, Reorder & Delete */}
           {uploadedImages.length > 0 && (
@@ -1549,7 +1509,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                 <span>{ocrErrorMessage}</span>
               </div>
               <button
-                onClick={handleCreateFromPhoto}
+                onClick={() => processPromptOcr(uploadedImages)}
                 className="px-3 py-1.5 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold text-xs shrink-0 transition-colors"
               >
                 Thử đọc lại
