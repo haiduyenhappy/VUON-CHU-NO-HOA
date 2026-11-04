@@ -165,8 +165,11 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   // Keep prompt in sync if initialPrompt changes
   useEffect(() => {
     if (initialPrompt) {
-      setPromptText(initialPrompt);
-      setSelectedCurriculumTaskId(null);
+      const task = getManagedCurriculumTasks().find(t =>
+        t.prompt.trim() === initialPrompt.trim() || t.title.trim() === initialPrompt.trim()
+      );
+      setPromptText(task?.prompt || initialPrompt);
+      setSelectedCurriculumTaskId(task?.id || null);
       setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
     }
   }, [initialPrompt]);

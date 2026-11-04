@@ -10,7 +10,7 @@ import {
   GardenType,
   EssayGenre
 } from '../types';
-import { CURRICULUM_TASKS, GARDEN_INFOS } from '../data/curriculumData';
+import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT, GARDEN_INFOS } from '../data/curriculumData';
 import { OTHER_CREATIVE_TOPICS, OTHER_TOPICS_CATEGORIES } from '../data/otherTopicsData';
 import { TEACHER_CONFIG } from '../constants/teacherConfig';
 import { HoaNhoMascot } from './HoaNhoMascot';
@@ -82,6 +82,23 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const [selectedGardenFilter, setSelectedGardenFilter] = useState<GardenType | 'all'>('all');
   const [selectedOtherCategory, setSelectedOtherCategory] = useState<string>('all');
   const [activeTask, setActiveTask] = useState<WritingTask | null>(null);
+  // Cùng nguồn dữ liệu đã lưu với Ngân hàng đề giáo viên.
+  const [managedTasks, setManagedTasks] = useState(() => getManagedCurriculumTasks());
+  useEffect(() => {
+    const refresh = () => {
+      const latest = getManagedCurriculumTasks();
+      setManagedTasks(latest);
+      setActiveTask(previous => previous ? latest.find(task => task.id === previous.id) || previous : null);
+    };
+    window.addEventListener(LOCAL_TASKS_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener(LOCAL_TASKS_EVENT, refresh);
+      window.removeEventListener('storage', refresh);
+      window.removeEventListener('focus', refresh);
+    };
+  }, []);
   const [isIndependentMode, setIsIndependentMode] = useState<boolean>(false);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
   const [assignedTasks, setAssignedTasks] = useState<any[]>([]);
@@ -151,7 +168,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   const handleStartRevision = (sub: Submission) => {
     playSparkle(settings.soundEnabled);
     setRevisionSub(sub);
-    const matched = CURRICULUM_TASKS.find(t => t.id === sub.taskId);
+    const matched = managedTasks.find(t => t.id === sub.taskId);
     if (matched) {
       setActiveTask(matched);
     } else {
@@ -174,7 +191,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   };
 
   // Filter tasks based on activeGrade, volume, and garden
-  const filteredTasks = CURRICULUM_TASKS.filter(t => {
+  const filteredTasks = managedTasks.filter(t => {
     const matchGrade = (t.grade || 3) === activeGrade;
     const matchVolume = t.volume === (activeMainTab === 'volume2' ? 2 : 1);
     const matchGarden = selectedGardenFilter === 'all' || t.gardenType === selectedGardenFilter;
@@ -186,12 +203,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
     return t.category === selectedOtherCategory;
   });
 
-  // 1–2 Bài luyện viết gợi ý từ ngân hàng đề hiện có (CURRICULUM_TASKS) cho học sinh mới hoặc chưa có bài cô giao
+  // 1–2 Bài luyện viết gợi ý từ ngân hàng đề hiện có (ngân hàng đề đã cập nhật) cho học sinh mới hoặc chưa có bài cô giao
   // Ưu tiên bài đơn giản, gần gũi, đúng khối lớp học sinh và không trùng bài đã hoàn thành
   const recommendedPracticeTasks = useMemo(() => {
     const completedTaskIds = new Set(mySubmissions.map(s => s.taskId));
     // Lọc các bài của đúng khối lớp học sinh
-    const gradeTasks = CURRICULUM_TASKS.filter(t => (t.grade || 3) === activeGrade);
+    const gradeTasks = managedTasks.filter(t => (t.grade || 3) === activeGrade);
     // Ưu tiên bài chưa làm
     const uncompleted = gradeTasks.filter(t => !completedTaskIds.has(t.id));
     const pool = uncompleted.length > 0 ? uncompleted : gradeTasks;
@@ -202,7 +219,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       return (a.week || 1) - (b.week || 1);
     });
     return sorted.slice(0, 2);
-  }, [activeGrade, mySubmissions]);
+  }, [activeGrade, mySubmissions, managedTasks]);
 
   // Action: "🌸 Luyện viết với Hoa Nhỏ" -> Go directly to Trang 1 (Bản đồ ý tưởng)
   const handlePracticeWithHoaNho = (prompt: string, genre: EssayGenre = 'ke_su_viec', task?: WritingTask) => {
@@ -251,6 +268,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
       evaluationCriteria: ['Ý tưởng phong phú', 'Diễn đạt mạch lạc', 'Cảm xúc chân thật', 'Chữ viết và chính tả']
     };
 
+    const latestAssigned = managedTasks.find(t => t.id === assign.taskId || t.id === assign.id);
+    if (latestAssigned) Object.assign(convertedTask, latestAssigned);
+
     if (assign.submission && assign.submission.finalContent) {
       setEssayContent(assign.submission.finalContent);
       setFirstDraftContent(assign.submission.firstDraft || assign.submission.finalContent);
@@ -267,7 +287,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   // Start a new task
   const handleSelectTask = (task: WritingTask, independent: boolean = false) => {
     playPop(settings.soundEnabled);
-    setActiveTask(task);
+    setActiveTask(managedTasks.find(item => item.id === task.id) || task);
     setIsIndependentMode(independent);
     setSubmissionId(`sub-${Date.now()}`);
 
