@@ -1,15 +1,35 @@
-import { cert, getApps, initializeApp, applicationDefault } from 'firebase-admin/app';
+
+import {
+  cert,
+  getApps,
+  initializeApp,
+  applicationDefault
+} from 'firebase-admin/app';
+
 import { getAuth } from 'firebase-admin/auth';
+import { getFirestore } from 'firebase-admin/firestore';
+
+function initializeFirebaseAdmin() {
+  if (getApps().length > 0) return;
+
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
+
+  const credential = raw
+    ? cert(JSON.parse(raw))
+    : applicationDefault();
+
+  initializeApp({
+    credential,
+    projectId: 'vuon-chu-no-hoa-7e8d8'
+  });
+}
 
 export function getFirebaseAdminAuth() {
-  if (!getApps().length) {
-    const raw = process.env.FIREBASE_SERVICE_ACCOUNT_JSON;
-    if (raw) {
-      const credentials = JSON.parse(raw);
-      initializeApp({ credential: cert(credentials), projectId: 'vuon-chu-no-hoa-7e8d8' });
-    } else {
-      initializeApp({ credential: applicationDefault(), projectId: 'vuon-chu-no-hoa-7e8d8' });
-    }
-  }
+  initializeFirebaseAdmin();
   return getAuth();
+}
+
+export function getFirebaseAdminFirestore() {
+  initializeFirebaseAdmin();
+  return getFirestore();
 }
