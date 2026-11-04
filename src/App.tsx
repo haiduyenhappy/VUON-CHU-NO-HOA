@@ -20,6 +20,7 @@ import { ReadingGarden } from './components/ReadingGarden';
 import { ProgressGardenModal } from './components/ProgressGardenModal';
 import { ProgressJourneyPage } from './components/ProgressJourneyPage';
 import { IdeaMapPage } from './components/IdeaMapPage';
+import { IdeaMapErrorBoundary } from './components/IdeaMapErrorBoundary';
 import { EssayFeedbackPage } from './components/EssayFeedbackPage';
 import { playPop, playChime } from './utils/audio';
 
@@ -350,6 +351,7 @@ export default function App() {
 
         {/* TRANG 1: BẢN ĐỒ Ý TƯỞNG */}
         {currentView === 'idea_map' && (
+          <IdeaMapErrorBoundary onBack={() => setCurrentView(returnToView || 'student')}>
           <IdeaMapPage
             student={activeStudent || students[0]}
             settings={settings}
@@ -362,6 +364,7 @@ export default function App() {
               setCurrentView(returnToView || (currentUser?.role || 'home'));
             }}
           />
+          </IdeaMapErrorBoundary>
         )}
 
         {/* TRANG 2: CÔ GÓP Ý BÀI VĂN */}
