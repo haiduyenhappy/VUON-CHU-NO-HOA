@@ -260,11 +260,6 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
-    <div role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
-      <strong>{syncState === 'ready' ? 'Đồng bộ hoàn tất' : syncState === 'syncing' ? 'Đang đồng bộ' : syncState === 'error' ? 'Cần hỗ trợ đồng bộ' : 'Đang kiểm tra đồng bộ'}</strong>
-      <p className="mt-1">{syncDetail}</p>
-      {syncState === 'error' && firebaseAuth?.currentUser && <button type="button" onClick={uploadOldTasks} disabled={savingCloud} className="mt-2 rounded-lg border border-emerald-600 px-3 py-2 font-semibold">{savingCloud ? 'Đang thử lại...' : 'Thử đồng bộ lại'}</button>}
-    </div>
     <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
     <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
