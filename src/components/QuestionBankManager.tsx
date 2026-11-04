@@ -30,32 +30,45 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [loadingContent, setLoadingContent] = useState(false);
   const [readingImage, setReadingImage] = useState(false);
   const [imagePreview, setImagePreview] = useState('');
-  const importImage = async (file?: File) => {
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [generated, setGenerated] = useState(false);
+  const selectImage = (file?: File) => {
     if (!file) return;
-    if (!file.type.startsWith('image/')) { setMessage('Vui lòng chọn tệp ảnh.'); return; }
+    if (!file.type.startsWith('image/')) { setMessage('Vui lòng chọn ảnh JPG, PNG hoặc WEBP.'); return; }
     if (file.size > 8 * 1024 * 1024) { setMessage('Ảnh quá lớn. Vui lòng chọn ảnh dưới 8 MB.'); return; }
+    setSelectedImage(file);
+    setImagePreview(URL.createObjectURL(file));
+    setGenerated(false);
+    setMessage('Đã chọn ảnh. Cô chọn lớp, tập rồi bấm Tạo bài.');
+  };
+  const generateFromImage = async () => {
+    if (!draft || !selectedImage || readingImage) {
+      setMessage('Cô chọn ảnh đề bài trước khi bấm Tạo bài.'); return;
+    }
     setReadingImage(true);
-    setMessage('');
+    setMessage('Đang đọc ảnh và tạo thông tin bài học…');
     try {
       const imageData = await new Promise<string>((resolve, reject) => {
         const reader = new FileReader();
         reader.onload = () => resolve(String(reader.result || ''));
         reader.onerror = () => reject(new Error('Không mở được ảnh.'));
-        reader.readAsDataURL(file);
+        reader.readAsDataURL(selectedImage);
       });
-      setImagePreview(imageData);
-      const recognizedPrompt = (await recognizeVietnameseImages([imageData])).trim();
-      setDraft(prev => {
-        const recognizedGrade = prev?.grade || 3;
-        return { ...(prev || newTask()), prompt: recognizedPrompt,
-          quickWishes: getWritingWishes({ prompt: recognizedPrompt, grade: recognizedGrade }) };
-      });
-      setMessage('Đã nhận dạng chữ trong ảnh. Cô kiểm tra đề bài, sau đó dùng chức năng tạo nội dung để bổ sung gợi ý.');
+      const prompt = (await recognizeVietnameseImages([imageData])).trim();
+      if (!prompt) throw new Error('Ảnh chưa nhận dạng được chữ. Cô thử ảnh rõ hơn.');
+      const title = prompt.split(/\n/).map(v => v.trim()).find(Boolean)?.slice(0, 100) || 'Bài viết mới';
+      const next: ManagedWritingTask = {
+        ...draft, title, prompt,
+        quickWishes: getWritingWishes({ prompt, grade: draft.grade }),
+        suggestedQuestions: [], directions: [], requirements: [], mindMap: [], outline: [],
+        words: [], images: [], examples: [], evaluationCriteria: []
+      };
+      setDraft(next);
+      setGenerated(true);
+      setMessage('Đã nhận dạng đề bài. Cô kiểm tra nội dung và các gợi ý bên dưới trước khi lưu.');
+      await loadActualContent(next);
     } catch (error) {
-      const rawMessage = error instanceof Error ? error.message : '';
-      setMessage(/Unexpected token|DOCTYPE|not valid JSON|SyntaxError|Failed to fetch/i.test(rawMessage)
-        ? 'Chưa đọc được ảnh. Cô vui lòng thử lại hoặc nhập đề bài bằng tay.'
-        : rawMessage || 'Không đọc được ảnh.');
+      setMessage(error instanceof Error ? error.message : 'Không đọc được ảnh. Cô thử ảnh rõ hơn.');
     } finally { setReadingImage(false); }
   };
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
@@ -122,7 +135,8 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const edit = (t: ManagedWritingTask) => {
     const copy = JSON.parse(JSON.stringify(t)) as ManagedWritingTask;
     setDraft(copy); setPreview(false); setMessage(''); setImagePreview('');
-    void loadActualContent(copy);
+    setSelectedImage(null); setGenerated(!!copy.id);
+    if (copy.id) void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
   const generateQuickWishes = () => {
@@ -134,6 +148,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
 
   const save = () => {
     if (!draft) return;
+    if (!draft.id && !generated) { setMessage('Cô hãy tạo bài từ ảnh trước khi lưu.'); return; }
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
@@ -154,15 +169,22 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
       <div className="max-h-[600px] overflow-y-auto space-y-2 rounded-xl border p-2">{visible.map(t => <button key={t.id} className={`w-full text-left rounded-xl border p-3 ${draft?.id === t.id ? 'border-emerald-600 bg-emerald-50' : ''}`} onClick={() => edit(t)}><span className="text-xs text-stone-500">Lớp {t.grade} · {t.id} · Tập {t.volume}</span><div className="font-semibold">{t.title}</div><div className="text-sm line-clamp-2">{t.prompt}</div></button>)}{!visible.length && <p className="p-3">Không có bài phù hợp.</p>}</div>
       <div className="space-y-3 min-w-0">{draft ? <>
-        <div className="flex justify-between items-center gap-2"><strong>{draft.id ? `Chỉnh sửa ${draft.id}` : 'Thêm bài mới'}</strong><button className="rounded-xl border px-3 py-2" onClick={() => setPreview(v => !v)}>{preview ? 'Chỉnh sửa' : 'Xem trước'}</button></div>
-        {!draft.id && <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-2">
-          <label className="block font-semibold text-emerald-900" htmlFor="vcnh-task-image">Tải ảnh đề bài</label>
-          <input id="vcnh-task-image" type="file" accept="image/*" className="block w-full rounded-xl border bg-white p-3" disabled={readingImage}
-            onChange={e => { void importImage(e.target.files?.[0]); e.target.value = ''; }} />
-          {readingImage && <p role="status" className="text-emerald-800">Đang đọc đề bài và chuẩn bị các mục để cô kiểm tra…</p>}
-          {imagePreview && <img src={imagePreview} alt="Ảnh đề bài vừa tải lên" className="max-h-48 w-auto max-w-full rounded-xl border object-contain" />}
-        </div>}
-        {loadingContent && <p role="status" className="rounded-xl bg-sky-50 p-3 text-sky-900">Đang tải nội dung bài từ bộ phân tích đề…</p>}
+        <div className="flex justify-between items-center gap-2"><strong>{draft.id ? `Chỉnh sửa ${draft.id}` : 'Thêm bài mới'}</strong><button className="rounded-xl border px-3 py-2" disabled={!draft.id && !generated} onClick={() => setPreview(v => !v)}>{preview ? 'Chỉnh sửa' : 'Xem trước'}</button></div>
+                 {!draft.id && !generated && !preview && <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-4">
+           <h4 className="text-lg font-bold text-emerald-900">Tạo bài từ ảnh SGK</h4>
+           <label className="block font-semibold text-emerald-900" htmlFor="vcnh-task-image">1. Chụp hoặc tải ảnh đề bài</label>
+           <input id="vcnh-task-image" type="file" accept="image/*" className="block w-full rounded-xl border bg-white p-3" disabled={readingImage}
+             onChange={e => { selectImage(e.target.files?.[0]); e.target.value = ''; }} />
+           {imagePreview && <img src={imagePreview} alt="Ảnh đề bài vừa chọn" className="max-h-56 w-auto max-w-full rounded-xl border object-contain" />}
+           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+             <label className="font-semibold">2. Chọn lớp<select className="mt-1 w-full rounded-xl border bg-white p-3" value={draft.grade} onChange={e => change('grade', Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label>
+             <label className="font-semibold">3. Chọn tập<select className="mt-1 w-full rounded-xl border bg-white p-3" value={draft.volume} onChange={e => change('volume', Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label>
+           </div>
+           <button type="button" disabled={!selectedImage || readingImage} onClick={() => void generateFromImage()} className="w-full rounded-xl bg-emerald-700 px-5 py-3 text-lg font-bold text-white disabled:opacity-50">{readingImage ? 'Đang tạo bài…' : '✨ Tạo bài'}</button>
+           <p className="text-sm text-stone-600">Các thông tin và gợi ý sẽ xuất hiện bên dưới sau khi tạo bài.</p>
+         </div>}
+         {!draft.id && generated && imagePreview && <img src={imagePreview} alt="Ảnh đề bài" className="max-h-48 max-w-full rounded-xl border object-contain" />}
+{loadingContent && <p role="status" className="rounded-xl bg-sky-50 p-3 text-sky-900">Đang tải nội dung bài từ bộ phân tích đề…</p>}
         {preview ? <div className="rounded-xl bg-emerald-50 p-4 space-y-3"><strong>{draft.title}</strong><p>{draft.prompt}</p>{listFields.map(f => <div key={f.key}><strong>{f.label}</strong><ul className="list-disc pl-6">{((draft[f.key] as string[] | undefined) || []).map((s,i) => <li key={i}>{s}</li>)}</ul></div>)}</div> : <>
           <div className="grid grid-cols-2 gap-2"><label>Lớp<select className="w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade', Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label>Tập<select className="w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume', Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
           <label className="block">Tên bài<input className="block w-full rounded-xl border p-3" value={draft.title} onChange={e => change('title', e.target.value)}/></label>
@@ -206,7 +228,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
           </div>
           <div className="rounded-2xl border p-4"><label className="block font-semibold">Tiêu chí đánh giá<textarea className="mt-2 block w-full rounded-xl border p-3 font-normal" rows={4} value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label></div>
         </>}
-        <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>
+        {(!!draft.id || generated) && <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save}>Lưu bài</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>}
       </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
     </div>
     {message && <p role="status" className="rounded-xl bg-amber-50 p-3 text-amber-900">{message}</p>}
