@@ -2,7 +2,7 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
 import { analyzePromptSemantics } from '../utils/promptAnalyzerEngine';
-import { subscribeCurriculum, saveCurriculumToCloud, importLocalEditsToCloud } from '../lib/curriculumSync';
+import { subscribeCurriculum, saveCurriculumToCloud } from '../lib/curriculumSync';
 
 const lines = (v: string) => v.split('\n').map(s => s.trim()).filter(Boolean);
 const listFields: { key: keyof ManagedWritingTask; label: string }[] = [
@@ -117,17 +117,10 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     catch (error) { setMessage(`Chưa lưu được thay đổi: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`); }
     finally { setSaving(false); }
   };
-  const importPreviousEdits = async () => {
-    if (!window.confirm('Chuyển các bài đã sửa trên trình duyệt này lên Firebase? Các bài đã có trên Firebase sẽ không bị ghi đè.')) return;
-    setSaving(true);
-    try { const result = await importLocalEditsToCloud(); setMessage(`Đã chuyển ${result.imported} bài; bỏ qua ${result.skipped} bài đã tồn tại hoặc không hợp lệ.`); }
-    catch (error) { setMessage(`Không chuyển được dữ liệu cũ: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`); }
-    finally { setSaving(false); }
-  };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
     {syncError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-red-800">{syncError}</p>}
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
-    <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button disabled={saving} className="rounded-xl border border-emerald-600 px-4 py-2 text-emerald-800 disabled:opacity-50" onClick={() => void importPreviousEdits()}>Chuyển bài đã sửa trước đây lên Firebase</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
+    <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
     <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
