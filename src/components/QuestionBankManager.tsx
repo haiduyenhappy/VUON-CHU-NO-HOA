@@ -46,8 +46,15 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ image: imageData, grade: draft?.grade || 3 })
       });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || 'Không đọc được nội dung trong ảnh.');
+      const contentType = response.headers.get('content-type') || '';
+      if (!contentType.toLowerCase().includes('application/json')) {
+        throw new Error('Chức năng đọc ảnh chưa sẵn sàng. Cô có thể nhập đề bài bằng tay.');
+      }
+      const data = await response.json().catch(() => null);
+      if (!data || typeof data !== 'object') {
+        throw new Error('Chưa nhận được nội dung đề bài. Cô vui lòng thử lại.');
+      }
+      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Chưa đọc được ảnh. Cô vui lòng thử lại.');
       if (!data.prompt || !String(data.prompt).trim()) throw new Error('Chưa nhận diện được đề bài.');
       const fields = ['directions','requirements','quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'] as const;
       setDraft(prev => {
@@ -62,7 +69,10 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       });
       setMessage('Đã đọc ảnh. Cô xem và chỉnh sửa nội dung trước khi lưu bài.');
     } catch (error) {
-      setMessage(error instanceof Error ? error.message : 'Không đọc được ảnh.');
+      const rawMessage = error instanceof Error ? error.message : '';
+      setMessage(/Unexpected token|DOCTYPE|not valid JSON|SyntaxError|Failed to fetch/i.test(rawMessage)
+        ? 'Chưa đọc được ảnh. Cô vui lòng thử lại hoặc nhập đề bài bằng tay.'
+        : rawMessage || 'Không đọc được ảnh.');
     } finally { setReadingImage(false); }
   };
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
