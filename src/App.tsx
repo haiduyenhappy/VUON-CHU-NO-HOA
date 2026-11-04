@@ -1,6 +1,6 @@
-import { subscribeCurriculum } from './lib/curriculumSync';
 import { signOut } from 'firebase/auth';
 import { firebaseAuth } from './lib/firebase';
+import { subscribeCurriculum } from './lib/curriculumSync';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -25,10 +25,12 @@ import { EssayFeedbackPage } from './components/EssayFeedbackPage';
 import { playPop, playChime } from './utils/audio';
 
 export default function App() {
-  // Đồng bộ ngân hàng bài ngay từ trang đầu, cho cả học sinh và giáo viên.
+  // Load the shared question bank on every device, including student sessions.
   useEffect(() => {
-    return subscribeCurriculum(error => console.error('[Đồng bộ ngân hàng bài]', error));
+    const stop = subscribeCurriculum(error => console.warn('Curriculum sync:', error));
+    return () => stop();
   }, []);
+
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
       const saved = localStorage.getItem('vuonchu_auth_session');
