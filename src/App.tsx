@@ -1,3 +1,4 @@
+import { subscribeCurriculum } from './lib/curriculumSync';
 import { signOut } from 'firebase/auth';
 import { firebaseAuth } from './lib/firebase';
 /**
@@ -20,11 +21,14 @@ import { ReadingGarden } from './components/ReadingGarden';
 import { ProgressGardenModal } from './components/ProgressGardenModal';
 import { ProgressJourneyPage } from './components/ProgressJourneyPage';
 import { IdeaMapPage } from './components/IdeaMapPage';
-import { IdeaMapErrorBoundary } from './components/IdeaMapErrorBoundary';
 import { EssayFeedbackPage } from './components/EssayFeedbackPage';
 import { playPop, playChime } from './utils/audio';
 
 export default function App() {
+  // Đồng bộ ngân hàng bài ngay từ trang đầu, cho cả học sinh và giáo viên.
+  useEffect(() => {
+    return subscribeCurriculum(error => console.error('[Đồng bộ ngân hàng bài]', error));
+  }, []);
   const [currentUser, setCurrentUser] = useState<AuthUser | null>(() => {
     try {
       const saved = localStorage.getItem('vuonchu_auth_session');
@@ -351,7 +355,6 @@ export default function App() {
 
         {/* TRANG 1: BẢN ĐỒ Ý TƯỞNG */}
         {currentView === 'idea_map' && (
-          <IdeaMapErrorBoundary onBack={() => setCurrentView(returnToView || 'student')}>
           <IdeaMapPage
             student={activeStudent || students[0]}
             settings={settings}
@@ -364,7 +367,6 @@ export default function App() {
               setCurrentView(returnToView || (currentUser?.role || 'home'));
             }}
           />
-          </IdeaMapErrorBoundary>
         )}
 
         {/* TRANG 2: CÔ GÓP Ý BÀI VĂN */}
