@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
 import dotenv from 'dotenv';
+import { getFirebaseAdminAuth, getFirebaseAdminFirestore } from './src/lib/firebaseAdmin.ts';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_STUDENTS } from './src/data/studentsData.ts';
@@ -736,40 +737,70 @@ let memoryDb: DatabaseStructure = {
   auditLogs: SEED_AUDIT_LOGS
 };
 
-// Centralized persistence: Firestore is the source of truth in production.
-// Never silently fall back to /tmp or memory when Firestore is unavailable.
+// Firestore persistence. Split arrays into bounded documents rather than one
+// document per table (Firestore documents have a 1 MiB size limit).
 const DB_KEYS = ['students', 'submissions', 'teachers', 'classes', 'assignments', 'auditLogs'] as const;
-const DB_COLLECTION = 'vcnh_server_data_v1';
-type DatabaseSnapshot = { versions: Record<string, number>; original: Record<string, string> };
+const DB_COLLECTION = 'vcnh_server_data_v2';
+const CHUNK_LIMIT_BYTES = 180_000;
+type DatabaseSnapshot = { versions: Record<string, number>; original: Record<string, string>; chunkCounts: Record<string, number> };
 const dbSnapshots = new WeakMap<DatabaseStructure, DatabaseSnapshot>();
+
+function splitRecords(records: any[], key: string): any[][] {
+  const chunks: any[][] = [];
+  let current: any[] = [];
+  let bytes = 2;
+  for (const record of records) {
+    const recordBytes = Buffer.byteLength(JSON.stringify(record), 'utf8') + 1;
+    if (recordBytes > CHUNK_LIMIT_BYTES) throw new Error(`Bản ghi ${key} vượt giới hạn lưu trữ`);
+    if (current.length && bytes + recordBytes > CHUNK_LIMIT_BYTES) {
+      chunks.push(current);
+      current = [];
+      bytes = 2;
+    }
+    current.push(record);
+    bytes += recordBytes;
+  }
+  if (current.length) chunks.push(current);
+  return chunks;
+}
 
 async function loadDatabase(): Promise<DatabaseStructure> {
   const firestore = getFirebaseAdminFirestore();
-  const refs = DB_KEYS.map(key => firestore.collection(DB_COLLECTION).doc(key));
-  const snapshots = await firestore.getAll(...refs);
-  const present = snapshots.filter(s => s.exists);
+  const collection = firestore.collection(DB_COLLECTION);
+  const metas = await firestore.getAll(...DB_KEYS.map(key => collection.doc(`${key}__meta`)));
+  const present = metas.filter(s => s.exists);
   if (present.length !== 0 && present.length !== DB_KEYS.length) {
     throw new Error('Firestore database incomplete; refusing to overwrite records');
   }
   const result = {} as DatabaseStructure;
   const versions: Record<string, number> = {};
   const original: Record<string, string> = {};
+  const chunkCounts: Record<string, number> = {};
   for (let i = 0; i < DB_KEYS.length; i++) {
     const key = DB_KEYS[i];
     if (present.length === 0) {
       (result as any)[key] = structuredClone(memoryDb[key]);
       versions[key] = 0;
+      chunkCounts[key] = 0;
     } else {
-      const data = snapshots[i].data();
-      if (!data || !Array.isArray(data.items) || !Number.isInteger(data.version)) {
-        throw new Error('Invalid Firestore document: ' + key);
+      const meta = metas[i].data();
+      if (!meta || !Number.isInteger(meta.version) || !Number.isInteger(meta.chunkCount) || meta.chunkCount < 0 || meta.chunkCount > 400) {
+        throw new Error('Invalid Firestore metadata: ' + key);
       }
-      (result as any)[key] = data.items;
-      versions[key] = data.version;
+      const refs = Array.from({length: meta.chunkCount}, (_, j) => collection.doc(`${key}__${j}`));
+      const docs = refs.length ? await firestore.getAll(...refs) : [];
+      const items: any[] = [];
+      for (const doc of docs) {
+        if (!doc.exists || !Array.isArray(doc.data()?.items)) throw new Error('Missing Firestore data chunk: ' + doc.ref.id);
+        items.push(...doc.data()!.items);
+      }
+      (result as any)[key] = items;
+      versions[key] = meta.version;
+      chunkCounts[key] = meta.chunkCount;
     }
     original[key] = JSON.stringify((result as any)[key]);
   }
-  dbSnapshots.set(result, { versions, original });
+  dbSnapshots.set(result, { versions, original, chunkCounts });
   return result;
 }
 
@@ -778,36 +809,40 @@ async function saveDatabase(data: DatabaseStructure): Promise<void> {
   if (!snapshot) throw new Error('Untracked database state');
   const changed = DB_KEYS.filter(key => JSON.stringify(data[key]) !== snapshot.original[key]);
   if (changed.length === 0) return;
-  const firestore = getFirebaseAdminFirestore();
-  const refs = DB_KEYS.map(key => firestore.collection(DB_COLLECTION).doc(key));
-  await firestore.runTransaction(async tx => {
-    // Read all six documents first, before performing any writes.
-    const current = await tx.getAll(...refs);
-    const present = current.filter(s => s.exists);
-    if (present.length !== 0 && present.length !== DB_KEYS.length) {
-      throw new Error('Firestore database incomplete; refusing to overwrite records');
-    }
+  const collection = getFirebaseAdminFirestore().collection(DB_COLLECTION);
+  const chunks = Object.fromEntries(changed.map(key => [key, splitRecords(data[key], key)])) as Record<string, any[][]>;
+  const totalWrites = DB_KEYS.reduce((sum, key) => sum + (snapshot.versions[key] === 0 || changed.includes(key) ? 1 + Math.max(splitRecords(data[key], key).length, snapshot.chunkCounts[key]) : 0), 0);
+  if (totalWrites > 450) throw new Error('Quá nhiều dữ liệu trong một lần cập nhật');
+  await getFirebaseAdminFirestore().runTransaction(async tx => {
+    const metas = await tx.getAll(...DB_KEYS.map(key => collection.doc(`${key}__meta`)));
+    const present = metas.filter(s => s.exists);
+    if (present.length !== 0 && present.length !== DB_KEYS.length) throw new Error('Firestore metadata incomplete');
     for (let i = 0; i < DB_KEYS.length; i++) {
       const key = DB_KEYS[i];
       if (!changed.includes(key)) continue;
-      const version = current[i].exists ? Number(current[i].data()?.version) : 0;
+      const version = metas[i].exists ? Number(metas[i].data()?.version) : 0;
       if (version !== snapshot.versions[key]) {
         const error = new Error('Dữ liệu vừa thay đổi trên thiết bị khác. Vui lòng tải lại trang.');
         (error as any).status = 409;
         throw error;
       }
     }
-    // On the first write, initialize all documents together.
-    const keysToWrite = present.length === 0 ? DB_KEYS : changed;
-    for (const key of keysToWrite) {
-      const index = DB_KEYS.indexOf(key);
-      const version = snapshot.versions[key];
-      tx.set(refs[index], { items: data[key], version: version + 1 });
+    // Metadata for all tables is created on first write, including empty tables.
+    for (const key of DB_KEYS) {
+      if (present.length && !changed.includes(key)) continue;
+      const pieces = changed.includes(key) ? chunks[key] : splitRecords(data[key], key);
+      const previousCount = snapshot.chunkCounts[key];
+      tx.set(collection.doc(`${key}__meta`), {version: snapshot.versions[key] + 1, chunkCount: pieces.length});
+      for (let j = 0; j < pieces.length; j++) tx.set(collection.doc(`${key}__${j}`), {items: pieces[j]});
+      for (let j = pieces.length; j < previousCount; j++) tx.delete(collection.doc(`${key}__${j}`));
     }
   });
-  for (const key of changed) snapshot.original[key] = JSON.stringify(data[key]);
   for (const key of DB_KEYS) {
-    if (snapshot.versions[key] === 0 || changed.includes(key)) snapshot.versions[key]++;
+    if (snapshot.versions[key] === 0 || changed.includes(key)) {
+      snapshot.versions[key]++;
+      snapshot.original[key] = JSON.stringify(data[key]);
+      snapshot.chunkCounts[key] = splitRecords(data[key], key).length;
+    }
   }
 }
 
