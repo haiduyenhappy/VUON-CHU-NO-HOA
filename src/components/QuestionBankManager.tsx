@@ -96,29 +96,50 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
+  // Lưu tại thiết bị trước; kết nối trực tuyến không được phép khóa chức năng biên soạn.
   const save = async () => {
     if (!draft || saving) return;
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
     setSaving(true);
     try {
-      // Chỉ báo thành công khi Firebase xác nhận đã lưu.
-      await saveCurriculumToCloud(updated);
       saveManagedCurriculumTask(updated);
-      setDraft(updated); setMessage('Đã lưu lên Firebase. Học sinh sẽ nhận bài mới khi mở hoặc làm mới danh sách đề.');
-    } catch (error) { setMessage(`Chưa lưu đồng bộ: ${error instanceof Error ? error.message : 'Lỗi không xác định'}. Bài cũ không bị thay đổi.`); }
-    finally { setSaving(false); }
+      setDraft(updated);
+      setMessage('Đã lưu bài trên thiết bị này.');
+    } catch {
+      setMessage('Không lưu được bài trên thiết bị. Vui lòng kiểm tra dung lượng trình duyệt.');
+      setSaving(false);
+      return;
+    }
+    try {
+      await saveCurriculumToCloud(updated);
+      setMessage('Đã lưu bài và cập nhật cho học sinh.');
+    } catch {
+      // Giữ bản lưu trên thiết bị, không báo sai rằng các thiết bị khác đã được cập nhật.
+      setMessage('Đã lưu bài trên thiết bị này. Nội dung trên thiết bị khác sẽ được cập nhật khi kết nối dữ liệu hoạt động.');
+    } finally { setSaving(false); }
   };
   const toggleDeleted = async () => {
     if (!draft?.id || saving) return;
     const next = { ...draft, deleted: !draft.deleted, updatedAt: new Date().toISOString(), updatedBy: editorName };
     setSaving(true);
-    try { await saveCurriculumToCloud(next); saveManagedCurriculumTask(next); setDraft(null); setMessage(next.deleted ? 'Đã ẩn bài khỏi học sinh.' : 'Đã khôi phục bài.'); }
-    catch (error) { setMessage(`Chưa lưu được thay đổi: ${error instanceof Error ? error.message : 'Lỗi không xác định'}`); }
-    finally { setSaving(false); }
+    try {
+      saveManagedCurriculumTask(next);
+      setDraft(null);
+      setMessage(next.deleted ? 'Đã chuyển bài vào mục đã xóa trên thiết bị này.' : 'Đã khôi phục bài trên thiết bị này.');
+    } catch {
+      setMessage('Không lưu được thay đổi trên thiết bị.');
+      setSaving(false);
+      return;
+    }
+    try {
+      await saveCurriculumToCloud(next);
+      setMessage(next.deleted ? 'Đã ẩn bài khỏi danh sách học sinh.' : 'Đã khôi phục bài.');
+    } catch {
+      setMessage('Đã lưu thay đổi trên thiết bị này. Các thiết bị khác sẽ được cập nhật khi kết nối dữ liệu hoạt động.');
+    } finally { setSaving(false); }
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
-    {syncError && <p role="alert" className="rounded-xl border border-red-300 bg-red-50 p-3 text-red-800">{syncError}</p>}
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
     <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
