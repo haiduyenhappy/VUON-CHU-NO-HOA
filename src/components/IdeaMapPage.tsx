@@ -1,3 +1,4 @@
+import { recognizeVietnameseImages } from '../utils/browserOcr';
 import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT } from '../data/curriculumData';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
@@ -550,14 +551,20 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }, 900);
 
     try {
-      const res = await fetch('/api/ai/ocr-textbook', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ images: imagesToProcess })
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data?.error || 'Không đọc được ảnh. Vui lòng thử lại.');
-      if (!Array.isArray(data?.exercises) || data.exercises.length === 0) throw new Error('Ảnh chưa có bài tập nhận dạng được.');
+      const recognizedText = await recognizeVietnameseImages(imagesToProcess);
+      // OCR không suy diễn nội dung: giữ nguyên văn bản để giáo viên xác nhận.
+      // Chỉ tách khi ảnh có đánh số bài rõ ràng.
+      const blocks = recognizedText.split(/\n(?=(?:Bài\s*tập|Bài|Câu)\s*\d+[.:)]\s*)/iu).map(v => v.trim()).filter(Boolean);
+      const exercises: TextbookExercise[] = blocks.map((block, idx) => ({
+        exercise_id: `Nội dung ${idx + 1}`,
+        question_text: block,
+        sub_questions: [], related_prompts: [], uncertain_spans: [],
+        ready_for_confirmation: true
+      }));
+      const data: TextbookOcrResult = {
+        exercises,
+        overall_quality_note: 'Đọc ảnh trực tiếp trên thiết bị. Con hãy kiểm tra và sửa chữ nhận dạng trước khi xác nhận; các bài chưa được AI phân loại.'
+      };
       clearInterval(stepInterval);
       setOcrStepMessage(stepMessages[4]);
       setDetectedOcrResult(data);

@@ -1,3 +1,4 @@
+import { recognizeVietnameseImages } from '../utils/browserOcr';
 import React, { useEffect, useMemo, useState } from 'react';
 import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
@@ -43,41 +44,17 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         reader.readAsDataURL(file);
       });
       setImagePreview(imageData);
-      const response = await fetch('/api/ai/import-writing-task-image', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ image: imageData, grade: draft?.grade || 3 })
-      });
-      const contentType = response.headers.get('content-type') || '';
-      if (!contentType.toLowerCase().includes('application/json')) {
-        throw new Error('Chức năng đọc ảnh chưa sẵn sàng. Cô có thể nhập đề bài bằng tay.');
-      }
-      const data = await response.json().catch(() => null);
-      if (!data || typeof data !== 'object') {
-        throw new Error('Chưa nhận được nội dung đề bài. Cô vui lòng thử lại.');
-      }
-      if (!response.ok) throw new Error(typeof data.error === 'string' ? data.error : 'Chưa đọc được ảnh. Cô vui lòng thử lại.');
-      if (!data.prompt || !String(data.prompt).trim()) throw new Error('Chưa nhận diện được đề bài.');
-      const fields = ['directions','requirements','quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'] as const;
+      const recognizedPrompt = (await recognizeVietnameseImages([imageData])).trim();
       setDraft(prev => {
-        const recognizedPrompt = String(data.prompt).trim();
-        const recognizedGrade = Number.isInteger(data.grade) && data.grade >= 1 && data.grade <= 5 ? data.grade : (prev?.grade || 3);
-        const next: ManagedWritingTask = { ...(prev || newTask()),
-          title: String(data.title || prev?.title || '').trim(),
-          prompt: recognizedPrompt,
+        const recognizedGrade = prev?.grade || 3;
+        return { ...(prev || newTask()), prompt: recognizedPrompt,
           quickWishes: getWritingWishes({ prompt: recognizedPrompt, grade: recognizedGrade }) };
-        if (Number.isInteger(data.grade) && data.grade >= 1 && data.grade <= 5) next.grade = data.grade;
-        for (const key of fields) {
-          if (Array.isArray(data[key]) && data[key].some((v: unknown) => typeof v === 'string' && v.trim()))
-            (next as any)[key] = data[key].filter((v: unknown) => typeof v === 'string').map((v: string) => v.trim());
-        }
-        if (!next.quickWishes?.length) next.quickWishes = getWritingWishes({ prompt: recognizedPrompt, grade: recognizedGrade });
-        return next;
       });
-      setMessage('Đã đọc ảnh. Cô xem và chỉnh sửa nội dung trước khi lưu bài.');
+      setMessage('Đã nhận dạng chữ trong ảnh. Cô kiểm tra đề bài, sau đó dùng chức năng tạo nội dung để bổ sung gợi ý.');
     } catch (error) {
       const rawMessage = error instanceof Error ? error.message : '';
       setMessage(/Unexpected token|DOCTYPE|not valid JSON|SyntaxError|Failed to fetch/i.test(rawMessage)
-        ? 'Không kết nối được máy chủ đọc ảnh. Vui lòng kiểm tra API trên Vercel.'
+        ? 'Chưa đọc được ảnh. Cô vui lòng thử lại hoặc nhập đề bài bằng tay.'
         : rawMessage || 'Không đọc được ảnh.');
     } finally { setReadingImage(false); }
   };
