@@ -3,6 +3,7 @@ import path from 'path';
 import fs from 'fs';
 import { createPublicKey, verify as verifySignature } from 'node:crypto';
 import dotenv from 'dotenv';
+import { getFirebaseAdminAuth } from './src/lib/firebaseAdmin.ts';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI, Type } from '@google/genai';
 import { INITIAL_STUDENTS } from './src/data/studentsData.ts';
@@ -1157,7 +1158,7 @@ app.get('/api/students', (req, res) => {
 });
 
 // 3. Authenticate with flexible username/password/code support
-app.post('/api/auth', (req, res) => {
+app.post('/api/auth', async (req, res) => {
   const { role, code, studentId, username, identifier, password } = req.body;
   const db = loadDatabase();
   const rawInput = (username || studentId || identifier || code || '').trim();
@@ -1204,8 +1205,10 @@ app.post('/api/auth', (req, res) => {
     }
 
     // 3. Verify password
-    const validPass = matchedTeacher.temporaryPassword || '2026';
-    const isPassOk = rawPass === validPass || rawPass === '2026' || rawPass === 'cogaovietvan' || rawPass === 'leductho' || (matchedTeacher.temporaryPassword && rawPass === matchedTeacher.temporaryPassword);
+    // Chỉ chấp nhận mật khẩu gắn với chính tài khoản, không dùng mật khẩu chung để vượt xác thực.
+    const configuredPassword = matchedTeacher.temporaryPassword ||
+      (matchedTeacher.id === 'GV001' ? process.env.VCNH_DUYEN_PASSWORD : undefined);
+    const isPassOk = Boolean(configuredPassword && rawPass === configuredPassword);
 
     if (!isPassOk) {
       return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
@@ -1215,9 +1218,22 @@ app.post('/api/auth', (req, res) => {
     matchedTeacher.lastLogin = new Date().toLocaleString('vi-VN');
     saveDatabase(db);
 
+    // Custom Token được ký bởi Firebase Admin trên máy chủ, không cấp từ trình duyệt.
+    let firebaseCustomToken: string;
+    try {
+      const firebaseRole = matchedTeacher.role === 'SUPER_ADMIN' ? 'admin' : 'teacher';
+      firebaseCustomToken = await getFirebaseAdminAuth().createCustomToken(
+        `vcnh_teacher_${matchedTeacher.id}`,
+        { role: firebaseRole, teacherId: matchedTeacher.id }
+      );
+    } catch (error) {
+      console.error('Firebase Admin không thể cấp token:', error);
+      return res.status(503).json({ success: false, message: 'Chưa thể kết nối quyền lưu ngân hàng đề. Vui lòng liên hệ quản trị hệ thống.' });
+    }
     const token = `tok_${matchedTeacher.id}_${Date.now()}`;
     return res.json({
       success: true,
+      firebaseCustomToken,
       role: 'teacher',
       teacherRole: matchedTeacher.role, // "SUPER_ADMIN" hoặc "TEACHER"
       teacherId: matchedTeacher.id,
