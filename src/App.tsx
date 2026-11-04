@@ -1,3 +1,5 @@
+import { signOut } from 'firebase/auth';
+import { firebaseAuth } from './lib/firebase';
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -155,6 +157,7 @@ export default function App() {
   const handleLogout = () => {
     playPop(settings.soundEnabled);
     setCurrentUser(null);
+    if (firebaseAuth) void signOut(firebaseAuth).catch(console.error);
     try {
       localStorage.removeItem('vuonchu_auth_session');
     } catch (e) {}
