@@ -32,6 +32,20 @@ const familyActivitySupport = (prompt: string) => {
     criteria: ['Kể đúng một hoạt động cùng người thân theo yêu cầu đề.', 'Các việc được kể theo trình tự dễ hiểu.', 'Có chi tiết thực tế và cảm xúc của bản thân.', 'Dùng từ và viết câu phù hợp với lớp học.']
   };
 };
+// Chỉ tạo nội dung mẫu khi xác định chắc chắn dạng đề; không suy đoán yêu cầu SGK.
+const sportsActivitySupport = (prompt: string) => {
+  const p = prompt.toLocaleLowerCase('vi');
+  if (!/(thể thao|trò chơi|vui chơi)/.test(p) || !/(tham gia|đã chơi|hoạt động)/.test(p)) return null;
+  return {
+    questions: ['Em đã tham gia hoạt động thể thao hoặc trò chơi nào?', 'Hoạt động diễn ra ở đâu và khi nào?', 'Ai cùng tham gia với em?', 'Em đã làm gì lúc bắt đầu?', 'Trong lúc tham gia, điều gì khiến em nhớ nhất?', 'Kết thúc hoạt động, em cảm thấy thế nào?'],
+    branches: ['Thời gian và địa điểm\nHoạt động diễn ra khi nào?\nỞ đâu?', 'Người cùng tham gia\nEm chơi cùng ai?\nMọi người làm gì?', 'Bắt đầu hoạt động\nEm chuẩn bị những gì?\nHoạt động bắt đầu ra sao?', 'Diễn biến và kết quả\nEm đã làm những gì?\nĐiều gì đáng nhớ nhất?', 'Cảm xúc và ý nghĩa\nEm cảm thấy thế nào?\nEm học được điều gì?'],
+    outline: ['Giới thiệu tên hoạt động thể thao hoặc trò chơi em đã tham gia.\nNêu thời gian, địa điểm hoặc người tham gia nếu em nhớ.', 'Kể hoạt động bắt đầu như thế nào.\nKể những việc em trực tiếp tham gia theo trình tự.\nChọn một chi tiết đáng nhớ hoặc kết quả để kể rõ.', 'Nêu cảm xúc sau hoạt động.\nChia sẻ điều em thích hoặc bài học em rút ra.'],
+    words: ['hào hứng: mong chờ được tham gia', 'sôi nổi: không khí vui và náo nhiệt', 'phấn khởi: cảm giác vui sau hoạt động', 'đoàn kết: cùng nhau hợp tác'],
+    images: ['Tiếng cổ vũ vang lên quanh sân chơi', 'Những nụ cười sau khi hoạt động kết thúc'],
+    examples: ['Em rất hào hứng khi được tham gia hoạt động cùng các bạn.', 'Sau hoạt động, em cảm thấy vui và thêm yêu những giờ sinh hoạt tập thể.'],
+    criteria: ['Kể đúng hoạt động thể thao hoặc trò chơi đã tham gia.', 'Nêu rõ các việc theo trình tự dễ hiểu.', 'Có chi tiết thực tế và cảm xúc của bản thân.', 'Dùng từ và viết câu phù hợp trình độ lớp học.']
+  };
+};
 const newTask = (): ManagedWritingTask => ({ id: '', grade: 3, volume: 1, week: 1, title: '', prompt: '', gardenType: 'ke_chuyen', genre: 'ke_su_viec', suggestedQuestions: [], evaluationCriteria: [] });
 export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorName }) => {
   const [tasks, setTasks] = useState<ManagedWritingTask[]>(() => getManagedCurriculumTasks(true));
@@ -92,18 +106,17 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     const fill = (existing: string[] | undefined, incoming: string[]) =>
       existing?.some(v => v.trim()) ? existing : incoming.filter(v => v.trim());
     const semantic = analyzePromptSemantics(task.prompt, task.grade);
-    const semanticDirections = semantic.detectedDirections?.map(d =>
-      [d.title, d.scope].filter(Boolean).join(' – ')) || [];
-    const defaultDirection = [semantic.coreSubject, semantic.writingScope].filter(Boolean).join(' – ');
+    const semanticDirections = semantic.detectedDirections?.map(d => d.title?.trim()).filter(Boolean) || [];
+    const defaultDirection = semantic.coreSubject || task.prompt;
     // Không để trống hướng viết khi đề chỉ có một hướng.
     setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt
       ? { ...prev, directions: fill(prev.directions, semanticDirections.length ? semanticDirections : [defaultDirection]) }
       : prev);
-    const alreadyComplete = task.mindMap?.filter(Boolean).length === 5 &&
+    const alreadyComplete = task.suggestedQuestions?.some(Boolean) && task.mindMap?.filter(Boolean).length === 5 &&
       task.outline?.filter(Boolean).length === 3 && task.words?.some(Boolean) &&
       task.images?.some(Boolean) && task.examples?.some(Boolean);
     if (alreadyComplete) return;
-    const family = familyActivitySupport(task.prompt);
+    const family = familyActivitySupport(task.prompt) || sportsActivitySupport(task.prompt);
     if (family) setDraft(prev => prev?.prompt === task.prompt ? {
       ...prev, suggestedQuestions: fill(prev.suggestedQuestions, family.questions),
       mindMap: fill(prev.mindMap, family.branches), outline: fill(prev.outline, family.outline),
@@ -134,13 +147,12 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         ? [sectionTexts[0], sectionTexts.slice(1, -1).join('\n'), sectionTexts[sectionTexts.length - 1]]
         : baseOutline.some(Boolean) ? baseOutline : sectionTexts;
       const bank = data.vocabularySuggestions;
-      const generatedDirections = (data.detectedDirections || []).map(d =>
-        [d.title, d.scope].filter(Boolean).join(' – '));
+      const generatedDirections = (data.detectedDirections || []).map(d => d.title?.trim()).filter(Boolean) as string[];
       setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt ? {
         ...prev,
         directions: fill(prev.directions, generatedDirections.length ? generatedDirections :
           [data.writingScope || semantic.writingScope || data.coreSubject || semantic.coreSubject]),
-        requirements: fill(prev.requirements, data.specificRequirements || []),
+        requirements: fill(prev.requirements, (data.specificRequirements || []).filter(v => task.prompt.toLocaleLowerCase('vi').includes(v.toLocaleLowerCase('vi')))),
         mindMap: fill(prev.mindMap, branches.length === 5 ? branches : []),
         outline: fill(prev.outline, outline.length === 3 ? outline : []),
         words: fill(prev.words, (bank?.goodWords || []).map(w => `${w.word}: ${w.meaningAndUsage}`)),
@@ -148,9 +160,9 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         examples: fill(prev.examples, (bank?.sampleSentences || []).map(e =>
           `${e.label}: ${e.sentence} — ${e.whyItIsGood}`))
       } : prev);
-      setMessage('');
+      setMessage('Đã nạp nội dung. Cô kiểm tra từng mục trước khi lưu.');
     } catch {
-      setMessage(family ? 'Đã nạp gợi ý cho đề kể hoạt động cùng người thân. Cô kiểm tra và chỉnh sửa trước khi lưu.' : 'Chưa tạo đủ gợi ý: bộ phân tích đề không phản hồi. Cô kiểm tra nội dung trước khi lưu.');
+      setMessage(family ? 'Đã tạo gợi ý theo dạng đề được nhận diện. Cô kiểm tra và chỉnh sửa trước khi lưu.' : 'Chưa tạo đủ gợi ý: bộ phân tích đề không phản hồi. Cô kiểm tra nội dung trước khi lưu.');
     } finally { setLoadingContent(false); }
   };
   const edit = (t: ManagedWritingTask) => {
@@ -170,7 +182,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const save = () => {
     if (!draft) return;
     if (!draft.id && !generated) { setMessage('Cô hãy tạo bài từ ảnh trước khi lưu.'); return; }
-    if (!draft.mindMap?.some(Boolean) || !draft.outline?.some(Boolean) || !draft.suggestedQuestions?.some(Boolean)) { setMessage('Chưa đủ sơ đồ, dàn ý hoặc câu hỏi gợi ý. Cô bổ sung trước khi lưu.'); return; }
+    if (draft.mindMap?.filter(Boolean).length !== 5 || draft.outline?.filter(Boolean).length !== 3 || !draft.suggestedQuestions?.some(Boolean) || !draft.words?.some(Boolean) || !draft.evaluationCriteria?.some(Boolean)) { setMessage('Chưa đủ 5 nhánh, 3 phần dàn ý, câu hỏi gợi ý, từ ngữ hoặc tiêu chí đánh giá. Cô kiểm tra trước khi lưu.'); return; }
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
@@ -241,7 +253,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <div className="space-y-3">{['Phần 1 – Mở đầu','Phần 2 – Nội dung chính','Phần 3 – Kết thúc'].map((name,n) => <label key={n} className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-semibold">{name}<textarea rows={5} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={(draft.outline || [])[n] || ''} onChange={e => {const a=[...(draft.outline || [])];while(a.length<3)a.push('');a[n]=e.target.value;change('outline',a);}}/></label>)}</div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
-            <h4 className="text-lg font-bold">🌼 7. Hoa Nhỏ khơi mở kỷ niệm thật của con</h4>
+            <h4 className="text-lg font-bold">🌼 7. Hoa Nhỏ khơi mở trải nghiệm thật của con</h4>
             <p className="text-sm text-stone-600">Những câu hỏi này giúp học sinh tự nhớ lại trải nghiệm, không viết bài thay học sinh.</p>
             <div className="space-y-2">{(draft.suggestedQuestions || []).map((q,n) => <p key={n} className="rounded-xl border bg-white p-3">{n+1}. {q}</p>)}{!draft.suggestedQuestions?.length && <p className="text-amber-800">Chưa có câu hỏi khơi mở phù hợp; cô cần bổ sung trước khi lưu.</p>}</div>
           </div>
