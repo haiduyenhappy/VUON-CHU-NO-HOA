@@ -189,20 +189,12 @@ export const LoginView: React.FC<LoginViewProps> = ({
         return;
       }
 
-      // Một lần đăng nhập: tự xác thực Firebase bằng token do máy chủ cấp.
-      if (role === 'teacher') {
-        if (!firebaseAuth || !data.firebaseCustomToken) {
-          setErrorMsg('Chưa kết nối được Firebase để lưu ngân hàng đề.');
-          setIsLoading(false);
-          return;
-        }
+      // Firebase đồng bộ nền: không chặn quyền truy cập ứng dụng khi thiếu cấu hình.
+      if (role === 'teacher' && firebaseAuth && data.firebaseCustomToken) {
         try {
           await signInWithCustomToken(firebaseAuth, data.firebaseCustomToken);
         } catch (error) {
-          console.error('Firebase sign-in failed:', error);
-          setErrorMsg('Không xác thực được quyền giáo viên trên Firebase.');
-          setIsLoading(false);
-          return;
+          console.warn('Firebase sync unavailable; teacher app login remains valid.', error);
         }
       }
       // Successful auth - build authUser
