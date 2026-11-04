@@ -1,3 +1,5 @@
+import { onAuthStateChanged } from 'firebase/auth';
+import { firebaseAuth } from '../lib/firebase';
 import { saveCurriculumToCloud, importLocalEditsToCloud } from '../lib/curriculumSync';
 import { recognizeVietnameseImages } from '../utils/browserOcr';
 import React, { useEffect, useMemo, useState } from 'react';
@@ -51,6 +53,8 @@ const newTask = (): ManagedWritingTask => ({ id: '', grade: 3, volume: 1, week: 
 export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorName }) => {
   const [tasks, setTasks] = useState<ManagedWritingTask[]>(() => getManagedCurriculumTasks(true));
   const [draft, setDraft] = useState<ManagedWritingTask | null>(null);
+  const [syncState, setSyncState] = useState<'waiting' | 'syncing' | 'ready' | 'error'>('waiting');
+  const [syncDetail, setSyncDetail] = useState('Bài cũ trên máy được giữ nguyên cho đến khi đồng bộ thành công.');
   const [query, setQuery] = useState('');
   const [grade, setGrade] = useState(0);
   const [showDeleted, setShowDeleted] = useState(false);
@@ -102,6 +106,39 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     } finally { setReadingImage(false); }
   };
   useEffect(() => { const refresh = () => setTasks(getManagedCurriculumTasks(true)); window.addEventListener(LOCAL_TASKS_EVENT, refresh); window.addEventListener('storage', refresh); return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); }; }, []);
+  // Tự chuyển bài cũ sau khi phiên Firebase được thiết lập; không yêu cầu giáo viên thao tác kỹ thuật.
+  useEffect(() => {
+    if (!firebaseAuth) {
+      setSyncState('error');
+      setSyncDetail('Hệ thống đồng bộ chưa được cấu hình. Bài cũ vẫn được giữ trên máy này.');
+      return;
+    }
+    let active = true;
+    let running = false;
+    const unsubscribe = onAuthStateChanged(firebaseAuth, async user => {
+      if (!active) return;
+      if (!user) {
+        setSyncState('waiting');
+        setSyncDetail('Đang chờ hệ thống xác nhận phiên đăng nhập giáo viên. Bài cũ vẫn được giữ trên máy.');
+        return;
+      }
+      if (running) return;
+      running = true;
+      setSyncState('syncing');
+      setSyncDetail('Đang đồng bộ bài đã lưu trên máy...');
+      try {
+        const result = await importLocalEditsToCloud();
+        if (!active) return;
+        setSyncState('ready');
+        setSyncDetail(`Đã đồng bộ ${result.imported} bài; bỏ qua ${result.skipped} bài đã có hoặc không hợp lệ.`);
+      } catch (error) {
+        if (!active) return;
+        setSyncState('error');
+        setSyncDetail('Chưa đồng bộ được: ' + (error instanceof Error ? error.message : 'Vui lòng thử lại sau.') + ' Bài trên máy vẫn được giữ nguyên.');
+      } finally { running = false; }
+    });
+    return () => { active = false; unsubscribe(); };
+  }, []);
   const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
   const loadActualContent = async (task: ManagedWritingTask) => {
     if (!task.prompt.trim()) return;
@@ -223,7 +260,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   };
   return <section className="space-y-4 rounded-2xl border border-emerald-200 bg-white p-4 sm:p-6">
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
-    <button type="button" onClick={uploadOldTasks} disabled={savingCloud} className="rounded-xl border border-emerald-600 px-4 py-2 font-bold text-emerald-800">{savingCloud ? 'Đang đồng bộ...' : 'Chuyển bài đã lưu trên máy này lên Firebase (chỉ cần một lần)'}</button>
+    <div role="status" aria-live="polite" className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-900">
+      <strong>{syncState === 'ready' ? 'Đồng bộ hoàn tất' : syncState === 'syncing' ? 'Đang đồng bộ' : syncState === 'error' ? 'Cần hỗ trợ đồng bộ' : 'Đang kiểm tra đồng bộ'}</strong>
+      <p className="mt-1">{syncDetail}</p>
+      {syncState === 'error' && firebaseAuth?.currentUser && <button type="button" onClick={uploadOldTasks} disabled={savingCloud} className="mt-2 rounded-lg border border-emerald-600 px-3 py-2 font-semibold">{savingCloud ? 'Đang thử lại...' : 'Thử đồng bộ lại'}</button>}
+    </div>
     <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
     <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
