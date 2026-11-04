@@ -716,16 +716,18 @@ export function readTaskOverrides(): Record<string, ManagedWritingTask> {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch { return {}; }
 }
-let remoteTaskOverrides: Record<string, ManagedWritingTask> = {};
-let remoteLoaded = false;
+// Remote changes are kept in memory and never overwrite the teacher's local backup.
+let remoteOverrides: Record<string, ManagedWritingTask> = {};
 export function setRemoteTaskOverrides(items: Record<string, ManagedWritingTask>): void {
-  remoteTaskOverrides = items;
-  remoteLoaded = true;
+  remoteOverrides = items;
   if (typeof window !== 'undefined') window.dispatchEvent(new Event(LOCAL_TASKS_EVENT));
 }
 export function getManagedCurriculumTasks(includeDeleted = false): ManagedWritingTask[] {
-  // Khi Firestore đã phản hồi, dữ liệu đám mây là nguồn chính trên mọi thiết bị.
-  const overrides = remoteLoaded ? remoteTaskOverrides : readTaskOverrides();
+  // Cloud is authoritative when a matching record exists; local-only edits remain visible.
+  const overrides = { ...readTaskOverrides() };
+  for (const task of Object.values(remoteOverrides)) {
+    if (task && typeof task.id === 'string') overrides[task.id] = task;
+  }
   const originalIds = new Set(CURRICULUM_TASKS.map(t => t.id));
   const merged = CURRICULUM_TASKS.map(t => ({ ...t, ...(overrides[t.id] || {}) }));
   for (const task of Object.values(overrides)) {
