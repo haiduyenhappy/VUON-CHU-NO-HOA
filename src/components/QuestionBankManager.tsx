@@ -95,7 +95,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
   // Lưu toàn bộ bản ghi theo mã bài cố định; không phụ thuộc dịch vụ bên ngoài.
   const save = () => {
-    if (!draft || saving) return;
+    if (!draft) return;
     if (!draft.title.trim() || !draft.prompt.trim()) {
       setMessage('Vui lòng nhập tên bài và đề bài.');
       return;
@@ -118,7 +118,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     }
   };
   const toggleDeleted = () => {
-    if (!draft?.id || saving) return;
+    if (!draft?.id) return;
     const next: ManagedWritingTask = {
       ...draft, deleted: !draft.deleted,
       updatedAt: new Date().toISOString(), updatedBy: editorName
