@@ -1,0 +1,13 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /vcnh_curriculum_overrides_v1/{taskId} {
+      // Chỉ dữ liệu đề bài (không chứa hồ sơ học sinh) được đọc công khai.
+      allow read: if true;
+      // Chỉ giáo viên có Firebase Custom Token do máy chủ phát hành.
+      allow create, update, delete: if request.auth != null
+        && request.auth.token.role == 'teacher'
+        && request.auth.token.teacherId is string;
+    }
+  }
+}
