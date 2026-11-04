@@ -1,3 +1,4 @@
+import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT } from '../data/curriculumData';
 import React, { useState, useRef, useEffect } from 'react';
 import { 
   Student, 
@@ -57,7 +58,6 @@ import {
   Share2
 } from 'lucide-react';
 import { TopicSelectionModal } from './TopicSelectionModal';
-import { getManagedCurriculumTasks } from '../data/curriculumData';
 import { detectGenre, getGenreLabel } from '../utils/genreDetector';
 import { getWritingWishes } from '../utils/writingWishEngine';
 import { isItemDescriptiveGrade1Prompt, isItemDescriptiveGrade2Prompt } from '../utils/promptAnalyzerEngine';
@@ -104,8 +104,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     initialPrompt || 'Viết một đoạn văn giới thiệu về bản thân em: họ tên, sở thích, ước mơ và một điểm đặc biệt của mình.'
   );
   const [lastAnalyzedPrompt, setLastAnalyzedPrompt] = useState<string>('');
-  // Mã bài ổn định dù giáo viên đổi tên hoặc sửa nguyên văn đề.
-  const [selectedCurriculumTaskId, setSelectedCurriculumTaskId] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<string[]>([]);
   const [isOcrLoading, setIsOcrLoading] = useState(false);
   const [uncertainWords, setUncertainWords] = useState<string[]>([]);
@@ -165,12 +163,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   // Keep prompt in sync if initialPrompt changes
   useEffect(() => {
     if (initialPrompt) {
-      const task = getManagedCurriculumTasks().find(t =>
-        t.prompt.trim() === initialPrompt.trim() || t.title.trim() === initialPrompt.trim()
-      );
-      setPromptText(task?.prompt || initialPrompt);
-      setSelectedCurriculumTaskId(task?.id || null);
-      setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
+      setPromptText(initialPrompt);
+      setSpecialWishes(getManagedCurriculumTasks().find(t => t.prompt.trim() === initialPrompt.trim())?.defaultWish ?? 'Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
     }
   }, [initialPrompt]);
 
@@ -197,7 +191,19 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     }
   }, [initialGrade]);
 
+  const [localTasksVersion, setLocalTasksVersion] = useState(0);
+  useEffect(() => {
+    const refresh = () => setLocalTasksVersion(v => v + 1);
+    window.addEventListener(LOCAL_TASKS_EVENT, refresh);
+    window.addEventListener('storage', refresh);
+    return () => { window.removeEventListener(LOCAL_TASKS_EVENT, refresh); window.removeEventListener('storage', refresh); };
+  }, []);
+  const editedTask = useMemo(() => {
+    void localTasksVersion;
+    return getManagedCurriculumTasks().find(t => t.grade === grade && t.prompt.trim() === promptText.trim());
+  }, [grade, promptText, localTasksVersion]);
   const [specialWishes, setSpecialWishes] = useState<string>('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
+
 
   // AI Understanding state ("HOA NHỎ CÙNG CON HIỂU ĐỀ")
   const [isUnderstandingLoading, setIsUnderstandingLoading] = useState(false);
@@ -388,8 +394,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
   const grade5ReadingPrompt = grade === 5 && /đọc sách/i.test(promptText) && /ý nghĩa|vai trò|lợi ích|quan trọng|khẳng định/i.test(promptText);
   const grade5GrandparentPrompt = grade === 5 && /ông\/bà|ông bà|ông hoặc bà|bà hoặc ông/i.test(promptText) && /tình cảm|cảm xúc|biết ơn|yêu quý|yêu thương/i.test(promptText);
   const grade5FarewellPrompt = grade === 5 && /mái trường tiểu học/i.test(promptText) && /tốt nghiệp|chia tay|biết ơn|kỉ niệm/i.test(promptText);
-  const grade5MoonPrompt = /đêm trăng rằm/i.test(promptText) && /miêu tả|tả/i.test(promptText);
-  const grade5WorkerPrompt = /người lao động bình dị/i.test(promptText) && /miêu tả|tả/i.test(promptText);
+  const grade5MoonPrompt = grade === 5 && /đêm trăng rằm/i.test(promptText) && /miêu tả|tả/i.test(promptText);
+  const grade5WorkerPrompt = grade === 5 && /người lao động bình dị/i.test(promptText) && /miêu tả|tả/i.test(promptText);
   const quickWishes = grade5MoonPrompt
     ? ['Chọn làng quê hoặc sân thượng giữa phố', 'Tả vầng trăng và ánh sáng trăng rằm', 'Tả cảnh vật, âm thanh ở nơi đã chọn', 'Bộc lộ cảm xúc trước vẻ đẹp đêm trăng']
     : grade5WorkerPrompt
@@ -402,6 +408,9 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     ? ['Nhớ một cử chỉ ông/bà dành cho con', 'Kể một kỉ niệm thật với ông/bà', 'Bày tỏ lòng yêu quý, kính trọng và biết ơn']
     : getWritingWishes({ prompt: promptText, grade, selectedObject: selectedObjectName });
 
+
+  const studentQuickWishes = editedTask?.quickWishes !== undefined ? editedTask.quickWishes : quickWishes;
+  const studentDifficultyDescriptions = editedTask?.difficultyOptions || ['Chuẩn SGK', 'Thêm quan sát', 'Từ ngữ gợi cảm', 'Ý tưởng mới lạ'];
 
   // Image Rotation (Canvas-based)
   const rotateImage = (dataUrl: string, degrees: 90 | 180 | 270): Promise<string> => {
@@ -696,38 +705,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
       if (resDeep.ok) {
         const deepData: PromptAnalysisData = await resDeep.json();
-        // Nội dung đã được giáo viên duyệt có ưu tiên cao hơn nội dung AI mới tạo.
-        const teacherTask = getManagedCurriculumTasks().find(t => t.grade === grade && (selectedCurriculumTaskId ? t.id === selectedCurriculumTaskId : t.prompt.trim() === promptText.trim()));
-        if (teacherTask) {
-          if (teacherTask.mindMap?.length === 5 && teacherTask.mindMap.every(Boolean)) {
-            deepData.branches = teacherTask.mindMap.map((value, index) => {
-              const [title, ...points] = value.split('\n').filter(Boolean);
-              const existing = deepData.branches?.[index];
-              return { id: existing?.id || `branch-${index + 1}`, title: title || `Nhánh ${index + 1}`,
-                icon: existing?.icon || '🌸', color: existing?.color || 'pink', points };
-            });
-          }
-          if (teacherTask.outline?.length === 3 && teacherTask.outline.every(Boolean)) {
-            const [moDoan, phatTrienDoan, ketDoan] = teacherTask.outline.map(t => t.split('\n').filter(Boolean));
-            deepData.outline = { moDoan, phatTrienDoan, ketDoan };
-          }
-          if (teacherTask.words?.length || teacherTask.images?.length || teacherTask.examples?.length) {
-            const bank = deepData.vocabularySuggestions || { goodWords: [], imageries: [], sampleSentences: [], creativeIdeas: [] };
-            if (teacherTask.words?.some(Boolean)) bank.goodWords = teacherTask.words.filter(Boolean).map(word => ({ word, meaningAndUsage: '' }));
-            if (teacherTask.images?.some(Boolean)) bank.imageries = teacherTask.images.filter(Boolean).map(example => ({ type: 'Hình ảnh', example, explanation: '' }));
-            if (teacherTask.examples?.some(Boolean)) bank.sampleSentences = teacherTask.examples.filter(Boolean).map(sentence => ({ type: 'mieu_ta' as const, label: 'Câu gợi ý', sentence, whyItIsGood: '' }));
-            deepData.vocabularySuggestions = bank;
-          }
-          if (teacherTask.requirements?.some(Boolean)) deepData.specificRequirements = teacherTask.requirements.filter(Boolean);
-          if (teacherTask.directions?.some(Boolean)) {
-            const approved = teacherTask.directions.filter(v => v.trim()).map((value, index) => {
-              const [title, ...scope] = value.split(' – ');
-              return { id: `teacher-direction-${index + 1}`, title: title.trim(), mainObject: title.trim(), scope: scope.join(' – ').trim() };
-            });
-            deepData.detectedDirections = approved;
-            deepData.hasMultipleDirections = approved.length > 1;
-          }
-        }
 
         // Kiểm tra tránh race condition nếu học sinh đã sửa đề mới hơn
         if (currentVersion !== promptVersionRef.current) return;
@@ -735,11 +712,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         setLastAnalyzedPrompt(promptText.trim());
         setHasMultipleDirections(deepData.hasMultipleDirections || false);
         setDetectedDirections(deepData.detectedDirections || []);
-        // Giữ lựa chọn người học khi máy chủ trả về thiếu ID hướng viết.
-        // Tránh quay lại màn hình chọn hướng sau khi đã bấm chọn.
-        const confirmedDirectionId = deepData.selectedDirectionId || dirIdToSend || null;
-        setSelectedDirectionId(confirmedDirectionId);
-        setSelectedDirectionTitle(deepData.selectedDirectionTitle || deepData.detectedDirections?.find(d => d.id === confirmedDirectionId)?.title || '');
+        setSelectedDirectionId(deepData.selectedDirectionId || null);
+        setSelectedDirectionTitle(deepData.selectedDirectionTitle || '');
 
         setChoiceType(deepData.choiceType || 'none');
         setObjectChoiceQuestion(deepData.objectChoiceQuestion || 'Con muốn tả đồ vật nào?');
@@ -782,7 +756,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
         // TRƯỜNG HỢP ĐỀ CÓ 2 HƯỚNG VÀ CHƯA CHỌN:
         // Hướng dẫn học sinh chọn hướng trước, KHÔNG tự ý tạo dàn ý
-        if (deepData.hasMultipleDirections && !confirmedDirectionId) {
+        if (deepData.hasMultipleDirections && !deepData.selectedDirectionId) {
           setMindMapBranches([]);
           setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
           setActiveOutline([]);
@@ -790,7 +764,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
           setUnderstanding({
             target: promptText.trim(),
-            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài có nhiều hướng viết. Con hãy chọn một hướng mình yêu thích nhé!',
+            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!',
             contentRequirements: deepData.specificRequirements || [
               'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
             ],
@@ -1358,7 +1332,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
             onChange={(e) => {
               const val = e.target.value;
               setPromptText(val);
-              setSelectedCurriculumTaskId(null);
               setHasCheckedPrompt(true);
               // Xóa sạch kết quả phân tích cũ ngay lập tức để không bị lẫn lộn giữa các đề
               promptVersionRef.current++;
@@ -1950,7 +1923,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
         {/* Quick wish pills */}
         <div className="flex flex-wrap gap-2">
-          {quickWishes.map((w, idx) => {
+          {studentQuickWishes.map((w, idx) => {
             const isSelected = specialWishes.includes(w);
             return (
               <button
@@ -1999,10 +1972,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             {[
-              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: 'Chuẩn SGK' },
-              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: 'Thêm quan sát' },
-              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: 'Từ ngữ gợi cảm' },
-              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: 'Ý tưởng mới lạ' }
+              { id: 'co_ban', label: 'Cơ bản', icon: '🌱', desc: studentDifficultyDescriptions[0] },
+              { id: 'mo_rong', label: 'Mở rộng', icon: '🌿', desc: studentDifficultyDescriptions[1] },
+              { id: 'nang_cao', label: 'Nâng cao', icon: '⭐', desc: studentDifficultyDescriptions[2] },
+              { id: 'sang_tao', label: 'Sáng tạo', icon: '✨', desc: studentDifficultyDescriptions[3] }
             ].map((dl) => (
               <button
                 key={dl.id}
@@ -2408,10 +2381,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               <div className="p-4 bg-white/95 rounded-2xl border-2 border-pink-300 shadow-xs space-y-2">
                 <div className="flex items-center gap-2 text-pink-900 font-extrabold text-sm sm:text-base font-display">
                   <span>✨</span>
-                  <span>Đề bài có nhiều hướng viết. Con hãy chọn một hướng mình yêu thích nhé!</span>
+                  <span>Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!</span>
                 </div>
                 <p className="text-xs sm:text-sm text-stone-600 font-medium">
-                  Hoa Nhỏ đã nhận ra các hướng viết phù hợp với đề bài. Con hãy chọn một hướng để lập sơ đồ 5 nhánh và dàn ý riêng cho hướng đó:
+                  Hoa Nhỏ đã phân tích thấy đề bài mở ra 2 hướng viết khác nhau. Con hãy bấm chọn một hướng dưới đây để cùng Hoa Nhỏ lập sơ đồ 5 nhánh và dàn ý bám sát hướng đó:
                 </p>
               </div>
 
@@ -2432,8 +2405,8 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
                         {dir.title}
                       </h4>
                       <div className="space-y-1 text-xs text-stone-700 bg-stone-50 p-3 rounded-xl border border-stone-200">
-                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject?.trim() || dir.title}</p>
-                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope?.trim() || (dir.id === 'chai_nhua' || dir.id === 'giay_bao' ? 'Nêu vật liệu, dụng cụ, các bước làm theo đúng thứ tự và cách sử dụng an toàn.' : `Tập trung vào ${dir.mainObject?.trim() || dir.title.toLowerCase()} và các yêu cầu cụ thể của đề bài.`)}</p>
+                        <p><strong className="text-purple-900">• Đối tượng chính:</strong> {dir.mainObject || dir.title}</p>
+                        <p><strong className="text-purple-900">• Phạm vi viết:</strong> {dir.scope || `Viết đúng nội dung của hướng “${dir.title}”, không trộn với hướng khác.`}</p>
                       </div>
                     </div>
 
@@ -3417,7 +3390,6 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         soundEnabled={settings.soundEnabled}
         onSelectTopic={(topic) => {
           setPromptText(topic.prompt);
-          setSelectedCurriculumTaskId(topic.taskId || null);
           setSpecialWishes('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
           if (topic.grade && topic.grade >= 1 && topic.grade <= 5) {
             setGrade(topic.grade);
