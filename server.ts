@@ -811,7 +811,11 @@ async function saveDatabase(data: DatabaseStructure): Promise<void> {
   if (changed.length === 0) return;
   const collection = getFirebaseAdminFirestore().collection(DB_COLLECTION);
   const chunks = Object.fromEntries(changed.map(key => [key, splitRecords(data[key], key)])) as Record<string, any[][]>;
-  const totalWrites = DB_KEYS.reduce((sum, key) => sum + (snapshot.versions[key] === 0 || changed.includes(key) ? 1 + Math.max(splitRecords(data[key], key).length, snapshot.chunkCounts[key]) : 0), 0);
+  const firstWrite = DB_KEYS.every(key => snapshot.versions[key] === 0);
+  const totalWrites = DB_KEYS.reduce((sum, key) => {
+    if (!firstWrite && !changed.includes(key)) return sum;
+    return sum + 1 + Math.max(splitRecords(data[key], key).length, snapshot.chunkCounts[key]);
+  }, 0);
   if (totalWrites > 450) throw new Error('Quá nhiều dữ liệu trong một lần cập nhật');
   await getFirebaseAdminFirestore().runTransaction(async tx => {
     const metas = await tx.getAll(...DB_KEYS.map(key => collection.doc(`${key}__meta`)));
