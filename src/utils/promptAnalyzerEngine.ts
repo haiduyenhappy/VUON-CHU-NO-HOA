@@ -1719,6 +1719,67 @@ export function buildGenreStructure(
   const promptRaw = semantics.taskAnalysis?.originalPrompt || semantics.coreSubject || '';
   const pLower = promptRaw.toLowerCase();
 
+  // Bản tin về phong trào: tách khỏi thể loại THÔNG BÁO.
+  // Chỉ gợi ý khung đưa tin; tuyệt đối không tự dựng sự kiện, thời gian, kết quả.
+  const isSchoolMovementNews = /bản tin|đưa tin/i.test(promptRaw) &&
+    /kế hoạch nhỏ|đôi bạn cùng tiến/i.test(promptRaw);
+  if (isSchoolMovementNews) {
+    const chosen = `${semantics.selectedDirection?.title || ''} ${semantics.selectedObjectName || ''}`.toLocaleLowerCase('vi-VN');
+    const isDoiBan = /đôi bạn cùng tiến/.test(chosen);
+    const isKeHoach = /kế hoạch nhỏ/.test(chosen);
+    const movement = isDoiBan ? 'Đôi bạn cùng tiến' : isKeHoach ? 'Kế hoạch nhỏ' : '';
+    const movementName = movement || 'phong trào con chọn';
+    const activity = isDoiBan
+      ? ['Các bạn đã giúp nhau học tập bằng những cách nào?', 'Những bạn hoặc nhóm bạn nào tham gia?', 'Kết quả học tập, sự tiến bộ được ghi nhận ra sao?']
+      : ['Học sinh đã tham gia những hoạt động gì (thu gom giấy, sách hoặc hoạt động thực tế khác)?', 'Những lớp, chi đội nào tham gia?', 'Kết quả thu gom, đóng góp thực tế là gì?'];
+    const resultWords = isDoiBan
+      ? ['cùng tiến bộ', 'hỗ trợ học tập', 'trao đổi bài', 'giúp đỡ bạn', 'kết quả học tập']
+      : ['hưởng ứng', 'thu gom', 'đóng góp', 'tái chế', 'kết quả phong trào'];
+    const branches: MindMapBranch[] = [
+      { id: 'br-1', title: '📰 Tiêu đề bản tin', icon: '📰', color: 'emerald', points: [`Nêu đúng tên ${movementName}`, 'Viết tiêu đề ngắn, thể hiện nội dung chính'] },
+      { id: 'br-2', title: '🏫 Ai, ở đâu?', icon: '🏫', color: 'purple', points: ['Trường hoặc lớp nào tổ chức?', 'Ai phát động và ai tham gia?'] },
+      { id: 'br-3', title: '📋 Hoạt động chính', icon: '📋', color: 'amber', points: activity },
+      { id: 'br-4', title: '🗓️ Thời điểm', icon: '🗓️', color: 'sky', points: ['Hoạt động diễn ra khi nào?', 'Địa điểm cụ thể ở đâu? Chỉ ghi khi biết chính xác'] },
+      { id: 'br-5', title: '📈 Kết quả & ý nghĩa', icon: '📈', color: 'rose', points: ['Kết quả thực tế được ghi nhận là gì?', 'Phong trào đem lại lợi ích gì?'] }
+    ];
+    const sec1 = [`Đặt tiêu đề bản tin ngắn gọn về ${movementName}.`, 'Nêu trường/lớp và thời điểm tổ chức nếu con biết rõ.'];
+    const sec2 = ['Nêu đơn vị phát động, những người tham gia.', ...activity, 'Chọn một hoặc hai thông tin tiêu biểu, đúng sự thật.'];
+    const sec3 = ['Nêu kết quả thực tế (chỉ dùng số liệu đã được xác nhận).', 'Khép lại bằng ý nghĩa của phong trào, không chuyển thành lời thông báo hay kể kỷ niệm.'];
+    const outline: DetailedOutlineGroup = {
+      moDoan: sec1, phatTrienDoan: sec2, ketDoan: sec3, genre: 'thong_bao',
+      sections: [
+        { id: 'sec-1', title: 'Phần 1. Tiêu đề và thông tin mở đầu bản tin', icon: '📰', guideNote: 'Nêu sự kiện thật, không tự đặt tên trường hoặc thời gian', bulletPoints: sec1 },
+        { id: 'sec-2', title: 'Phần 2. Diễn biến và hoạt động nổi bật', icon: '📋', guideNote: 'Đưa thông tin chính xác, khách quan về phong trào', bulletPoints: sec2 },
+        { id: 'sec-3', title: 'Phần 3. Kết quả và ý nghĩa', icon: '📈', guideNote: 'Chỉ nêu kết quả có căn cứ', bulletPoints: sec3 }
+      ]
+    };
+    const vocabularySuggestions: VocabularyImageryBank = {
+      goodWords: resultWords.map(word => ({ word, meaningAndUsage: `Dùng khi thông tin về ${movementName} phù hợp với thực tế.` })),
+      imageries: [
+        { type: 'Cách đưa tin', example: `Phong trào ${movementName} được triển khai tại [tên trường] vào [thời điểm].`, explanation: 'Điền thông tin đã xác minh, không tự bịa.' },
+        { type: 'Thông tin kết quả', example: 'Theo thông tin từ [nguồn], hoạt động đã đạt [kết quả thực tế].', explanation: 'Chỉ dùng khi có nguồn và kết quả chính xác.' }
+      ],
+      sampleSentences: [
+        { type: 'mo_bai', label: 'Câu mở đầu bản tin', sentence: `Trường [tên trường] đã tổ chức phong trào ${movementName} vào [thời điểm].`, whyItIsGood: 'Giới thiệu đúng hoạt động, nơi tổ chức và thời điểm.' },
+        { type: 'mieu_ta', label: 'Câu đưa tin hoạt động', sentence: isDoiBan ? 'Trong phong trào, các bạn học sinh [nêu cách giúp nhau học tập thực tế].' : 'Hưởng ứng phong trào, các bạn học sinh [nêu hoạt động thu gom hoặc đóng góp thực tế].', whyItIsGood: 'Nêu việc làm cụ thể, không lạc sang kể kỷ niệm.' },
+        { type: 'ket_bai', label: 'Câu kết bản tin', sentence: 'Hoạt động đã [nêu kết quả xác thực] và góp phần [nêu ý nghĩa phù hợp].', whyItIsGood: 'Kết bằng kết quả và ý nghĩa có căn cứ.' }
+      ],
+      creativeIdeas: ['Chỉ dùng sự kiện và số liệu có thật.', 'Dùng câu ngắn, rõ ràng, khách quan; không viết thành thông báo.']
+    };
+    return {
+      branches, outline,
+      socraticQuestions: [
+        `Con chọn đưa tin về phong trào nào: “Kế hoạch nhỏ” hay “Đôi bạn cùng tiến”?`,
+        'Phong trào diễn ra ở trường nào và khi nào?',
+        ...activity,
+        'Con biết kết quả này từ đâu? Nếu chưa biết, hãy hỏi thầy cô để xác nhận.'
+      ],
+      hoaNhoUnderstand: `Đề yêu cầu viết BẢN TIN NGẮN đưa tin về ${movementName}, không phải bản thông báo. Con cần cho biết ai tổ chức, hoạt động gì, diễn ra khi nào, ở đâu và kết quả thực tế. Chưa có dữ kiện thì để trống hoặc hỏi thầy cô, không tự đặt ra.`,
+      specificRequirements: ['Nhiệm vụ: Viết bản tin ngắn, không viết thông báo', 'Nội dung: Hoạt động và kết quả thực tế của phong trào đã chọn', 'Cách viết: Ngắn gọn, khách quan, chính xác', 'Không tự tạo tên trường, lớp, thời gian, địa điểm hay số liệu'],
+      vocabularySuggestions
+    };
+  }
+
   // CD07 – Miêu tả một con vật trong nhà (3–5 câu): ba hướng, một đoạn văn.
   const isThreePets = /3\s*[-–—]\s*5\s*câu/u.test(promptRaw) &&
     /chú cún/u.test(promptRaw) && /chú mèo/u.test(promptRaw) && /chú thỏ/u.test(promptRaw);
