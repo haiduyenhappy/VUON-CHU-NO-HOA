@@ -231,7 +231,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       await saveCurriculumToCloud(updated);
       saveManagedCurriculumTask(updated);
       setDraft(updated);
-      setMessage('Đã lưu và đồng bộ bài lên Firebase. Học sinh có thể xem trên thiết bị khác.');
+      setMessage(''); // Lưu thành công: không hiển thị thông báo kỹ thuật.
     } catch (error) {
       setMessage('Chưa đồng bộ được lên Firebase; bài chưa được lưu. ' + (error instanceof Error ? error.message : 'Vui lòng thử lại.'));
     } finally { setSavingCloud(false); }
