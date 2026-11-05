@@ -1082,7 +1082,7 @@ app.post('/api/auth', async (req, res) => {
 
     // 3. Verify password
     const validPass = matchedTeacher.temporaryPassword || '2026';
-    const isPassOk = rawPass === validPass || rawPass === '2026' || rawPass === 'cogaovietvan' || rawPass === 'leductho' || (matchedTeacher.temporaryPassword && rawPass === matchedTeacher.temporaryPassword);
+    const isPassOk = Boolean(rawPass) && rawPass === validPass;
 
     if (!isPassOk) {
       return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
@@ -1092,8 +1092,24 @@ app.post('/api/auth', async (req, res) => {
     matchedTeacher.lastLogin = new Date().toLocaleString('vi-VN');
     await saveDatabase(db);
 
+    // Mint a Firebase custom token only after successful application authentication.
+    // Firebase sign-in is automatic in LoginView; no second login screen is required.
+    let firebaseCustomToken: string;
+    try {
+      firebaseCustomToken = await getFirebaseAdminAuth().createCustomToken(
+        `teacher_${matchedTeacher.id}`,
+        { role: 'teacher', teacherId: String(matchedTeacher.id) }
+      );
+    } catch (error) {
+      console.error('Firebase custom token issuance failed:', error);
+      return res.status(503).json({
+        success: false,
+        message: 'Chưa kết nối được hệ thống lưu bài. Vui lòng thử đăng nhập lại.'
+      });
+    }
     const token = `tok_${matchedTeacher.id}_${Date.now()}`;
     return res.json({
+      firebaseCustomToken,
       success: true,
       role: 'teacher',
       teacherRole: matchedTeacher.role, // "SUPER_ADMIN" hoặc "TEACHER"
