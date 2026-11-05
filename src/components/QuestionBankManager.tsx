@@ -139,7 +139,44 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     });
     return () => { active = false; unsubscribe(); };
   }, []);
-  const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted]);
+  // Chỉ đổi mã hiển thị; không sửa ID lưu trên Firebase hay liên kết bài đã giao.
+  const displayTaskCodes = useMemo(() => {
+    const codes: Record<string, string> = {};
+    const groups = new Map<string, ManagedWritingTask[]>();
+    for (const task of tasks) {
+      const key = `${task.grade}-${task.volume}`;
+      groups.set(key, [...(groups.get(key) || []), task]);
+    }
+    for (const group of groups.values()) {
+      const isStandard = (t: ManagedWritingTask) => {
+        const prefix = `g${t.grade}-t${t.volume}-`;
+        const suffix = t.id.startsWith(prefix) ? t.id.slice(prefix.length) : '';
+        return suffix.length > 0 && /^[0-9]+$/.test(suffix);
+      };
+      const used = new Set(group.filter(isStandard).map(t => Number(t.id.split('-').pop())));
+      let next = Math.max(0, ...used) + 1;
+      for (const task of group.filter(t => !isStandard(t)).sort((a, b) => a.id.localeCompare(b.id))) {
+        while (used.has(next)) next++;
+        codes[task.id] = `g${task.grade}-t${task.volume}-${String(next).padStart(2, '0')}`;
+        used.add(next++);
+      }
+    }
+    return codes;
+  }, [tasks]);
+  // Mã trình bày thống nhất cho mọi bài, kể cả bài giáo viên vừa thêm.
+  const nextDisplayCode = (task: ManagedWritingTask) => {
+    if (task.id) return displayTaskCodes[task.id] || task.id;
+    const prefix = `g${task.grade}-t${task.volume}-`;
+    const used = new Set(tasks.filter(t => t.grade === task.grade && t.volume === task.volume)
+      .map(t => displayTaskCodes[t.id] || t.id)
+      .filter(code => code.startsWith(prefix))
+      .map(code => Number(code.slice(prefix.length)))
+      .filter(Number.isInteger));
+    let n = 1;
+    while (used.has(n)) n++;
+    return `${prefix}${String(n).padStart(2, '0')}`;
+  };
+  const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${displayTaskCodes[t.id] || ''} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted, displayTaskCodes]);
   const loadActualContent = async (task: ManagedWritingTask) => {
     if (!task.prompt.trim()) return;
     const fill = (existing: string[] | undefined, incoming: string[]) =>
@@ -264,9 +301,9 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
     <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
-      <div className="max-h-[600px] overflow-y-auto space-y-2 rounded-xl border p-2">{visible.map(t => <button key={t.id} className={`w-full text-left rounded-xl border p-3 ${draft?.id === t.id ? 'border-emerald-600 bg-emerald-50' : ''}`} onClick={() => edit(t)}><span className="text-xs text-stone-500">Lớp {t.grade} · {t.id} · Tập {t.volume}</span><div className="font-semibold">{t.title}</div><div className="text-sm line-clamp-2">{t.prompt}</div></button>)}{!visible.length && <p className="p-3">Không có bài phù hợp.</p>}</div>
+      <div className="max-h-[600px] overflow-y-auto space-y-2 rounded-xl border p-2">{visible.map(t => <button key={t.id} className={`w-full text-left rounded-xl border p-3 ${draft?.id === t.id ? 'border-emerald-600 bg-emerald-50' : ''}`} onClick={() => edit(t)}><span className="text-xs text-stone-500">Lớp {t.grade} · {displayTaskCodes[t.id] || t.id} · Tập {t.volume}</span><div className="font-semibold">{t.title}</div><div className="text-sm line-clamp-2">{t.prompt}</div></button>)}{!visible.length && <p className="p-3">Không có bài phù hợp.</p>}</div>
       <div className="space-y-3 min-w-0">{draft ? <>
-        <div className="flex justify-between items-center gap-2"><strong>{draft.id ? `Chỉnh sửa ${draft.id}` : 'Thêm bài mới'}</strong><button className="rounded-xl border px-3 py-2" disabled={!draft.id && !generated} onClick={() => setPreview(v => !v)}>{preview ? 'Chỉnh sửa' : 'Xem trước'}</button></div>
+        <div className="flex justify-between items-center gap-2"><strong>{draft.id ? `Chỉnh sửa ${nextDisplayCode(draft)}` : `Thêm bài mới · ${nextDisplayCode(draft)} (dự kiến)`}</strong><button className="rounded-xl border px-3 py-2" disabled={!draft.id && !generated} onClick={() => setPreview(v => !v)}>{preview ? 'Chỉnh sửa' : 'Xem trước'}</button></div>
                  {!draft.id && !generated && !preview && <div className="rounded-2xl border border-emerald-200 bg-emerald-50/50 p-4 space-y-4">
            <h4 className="text-lg font-bold text-emerald-900">Tạo bài từ ảnh SGK</h4>
            <label className="block font-semibold text-emerald-900" htmlFor="vcnh-task-image">1. Chụp hoặc tải ảnh đề bài</label>
