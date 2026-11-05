@@ -49,6 +49,33 @@ const sportsActivitySupport = (prompt: string) => {
     criteria: ['Kể đúng hoạt động thể thao hoặc trò chơi đã tham gia.', 'Nêu rõ các việc theo trình tự dễ hiểu.', 'Có chi tiết thực tế và cảm xúc của bản thân.', 'Dùng từ và viết câu phù hợp trình độ lớp học.']
   };
 };
+// Học liệu biên tập riêng cho đề bản tin hai phong trào; không bịa dữ kiện sự kiện.
+const phongTraoNewsSupport = (prompt: string) => {
+  const p = prompt.toLocaleLowerCase('vi');
+  if (!p.includes('bản tin') || !p.includes('kế hoạch nhỏ') || !p.includes('đôi bạn cùng tiến')) return null;
+  return {
+    directions: ['Đưa tin về phong trào “Kế hoạch nhỏ” của trường em', 'Đưa tin về phong trào “Đôi bạn cùng tiến” của trường em'],
+    quickWishes: ['Nêu rõ tên phong trào em chọn', 'Chỉ đưa thông tin em biết hoặc đã kiểm chứng', 'Cho biết hoạt động nổi bật và kết quả thực tế', 'Viết ngắn gọn, rõ ràng như một bản tin'],
+    defaultWish: 'Viết bản tin ngắn, khách quan, đúng thông tin thực tế.',
+    suggestedQuestions: ['Em chọn đưa tin về phong trào nào?', 'Phong trào được tổ chức ở trường em khi nào và do ai phát động (nếu em biết)?', 'Học sinh đã thực hiện những hoạt động cụ thể nào?', 'Kết quả thực tế của phong trào là gì? Nếu chưa biết, em cần hỏi ai để xác minh?', 'Phong trào mang lại ích lợi gì cho học sinh hoặc nhà trường?'],
+    mindMap: [
+      'Tên phong trào và tiêu đề bản tin\nChọn Kế hoạch nhỏ hoặc Đôi bạn cùng tiến\nĐặt tiêu đề nêu đúng sự kiện',
+      'Thời gian, địa điểm, đơn vị tổ chức\nHoạt động diễn ra khi nào, ở đâu?\nAi phát động hoặc tổ chức? Chỉ ghi điều em biết',
+      'Người tham gia\nNhững lớp hoặc học sinh nào tham gia?\nCó ai phụ trách, hỗ trợ?',
+      'Hoạt động nổi bật\nKế hoạch nhỏ: thu gom, phân loại, đóng góp những gì?\nĐôi bạn cùng tiến: các bạn học nhóm, kèm nhau ra sao?',
+      'Kết quả và ý nghĩa\nKết quả đã được xác nhận là gì?\nPhong trào giúp ích như thế nào?'
+    ],
+    outline: [
+      'Đặt tiêu đề bản tin ngắn gọn, nêu tên phong trào đã chọn.\nGiới thiệu hoạt động diễn ra tại trường em; nêu thời gian nếu đã xác minh.',
+      'Nêu người tham gia và cách tổ chức.\nNếu chọn Kế hoạch nhỏ: đưa tin hoạt động thu gom, đóng góp và kết quả thực tế.\nNếu chọn Đôi bạn cùng tiến: đưa tin hoạt động hỗ trợ học tập và kết quả thực tế.\nChỉ chọn một hướng; không ghép hai phong trào thành một sự kiện.',
+      'Nêu kết quả hoặc ý nghĩa thiết thực của phong trào.\nKhông tự thêm số liệu, tên lớp, ngày tháng hoặc thành tích khi chưa có thông tin.'
+    ],
+    words: ['phát động: bắt đầu triển khai phong trào', 'hưởng ứng: tích cực tham gia hoạt động', 'thu gom: tập hợp giấy vụn hoặc vật liệu theo hoạt động thực tế', 'hỗ trợ học tập: giúp bạn cùng ôn bài, giải thích kiến thức', 'kết quả: điều đã đạt được và có thể kiểm chứng'],
+    images: ['Kế hoạch nhỏ: hình ảnh học sinh phân loại giấy vụn hoặc vật liệu thu gom (chỉ dùng nếu thực tế có)', 'Đôi bạn cùng tiến: hình ảnh hai bạn cùng trao đổi bài, học nhóm (chỉ dùng nếu thực tế có)'],
+    examples: ['Mở đầu: “Trường em vừa tổ chức phong trào [tên phong trào] nhằm [mục đích thực tế].”', 'Hoạt động: “Trong phong trào, các bạn học sinh đã [hoạt động thực tế].”', 'Kết quả: “Theo thông tin từ [nguồn xác minh], hoạt động đã [kết quả thực tế].”'],
+    evaluationCriteria: ['Đúng thể loại bản tin ngắn, không chuyển thành thông báo.', 'Chọn một phong trào và nêu rõ hoạt động thực tế.', 'Thông tin về thời gian, địa điểm, người tham gia, kết quả phải có căn cứ.', 'Câu văn rõ ràng, khách quan, phù hợp học sinh lớp 3.']
+  };
+};
 const newTask = (): ManagedWritingTask => ({ id: '', grade: 3, volume: 1, week: 1, title: '', prompt: '', gardenType: 'ke_chuyen', genre: 'ke_su_viec', suggestedQuestions: [], evaluationCriteria: [] });
 export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorName }) => {
   const [tasks, setTasks] = useState<ManagedWritingTask[]>(() => getManagedCurriculumTasks(true));
@@ -181,6 +208,16 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     if (!task.prompt.trim()) return;
     const fill = (existing: string[] | undefined, incoming: string[]) =>
       existing?.some(v => v.trim()) ? existing : incoming.filter(v => v.trim());
+    const news = phongTraoNewsSupport(task.prompt);
+    if (news) {
+      // Với đề đã xác định, dùng nội dung sư phạm có kiểm soát thay vì AI trả về rỗng hoặc sai thể loại.
+      setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt ? {
+        ...prev, ...news,
+        requirements: prev.requirements || []
+      } : prev);
+      setMessage('Đã tạo đủ 5 nhánh, 3 phần dàn ý và các gợi ý riêng cho hai phong trào. Cô kiểm tra rồi bấm Lưu bài.');
+      return;
+    }
     const semantic = analyzePromptSemantics(task.prompt, task.grade);
     const semanticDirections = semantic.detectedDirections?.map(d => d.title?.trim()).filter(Boolean) || [];
     const defaultDirection = semantic.coreSubject || task.prompt;
