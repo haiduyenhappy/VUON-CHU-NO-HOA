@@ -189,12 +189,21 @@ export const LoginView: React.FC<LoginViewProps> = ({
         return;
       }
 
-      // Firebase đồng bộ nền: không chặn quyền truy cập ứng dụng khi thiếu cấu hình.
-      if (role === 'teacher' && firebaseAuth && data.firebaseCustomToken) {
+      // Authenticate Firestore in the background with the same teacher credentials.
+      // Never claim a successful teacher login while cloud synchronization is unavailable.
+      if (role === 'teacher') {
+        if (!firebaseAuth || !data.firebaseCustomToken) {
+          setErrorMsg('Chưa kết nối được hệ thống lưu bài. Vui lòng thử lại.');
+          setIsLoading(false);
+          return;
+        }
         try {
           await signInWithCustomToken(firebaseAuth, data.firebaseCustomToken);
         } catch (error) {
-          console.warn('Firebase sync unavailable; teacher app login remains valid.', error);
+          console.error('Firebase sign-in failed:', error);
+          setErrorMsg('Không kết nối được dữ liệu bài tập. Vui lòng thử đăng nhập lại.');
+          setIsLoading(false);
+          return;
         }
       }
       // Successful auth - build authUser
