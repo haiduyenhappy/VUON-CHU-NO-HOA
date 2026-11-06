@@ -116,28 +116,35 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [activeWayId, setActiveWayId] = useState<string>('');
   const [wayMode, setWayMode] = useState(false);
   const wayFields: (keyof WritingDirectionContent)[] = ['quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'];
-  const activeWay = draft?.directionContents?.find(w => w.id === activeWayId);
+  const inferredTitles = draft ? inferExplicitWays(draft) : [];
+  const displayWays = draft && inferredTitles.length > 1 ? inferredTitles.map((title, index) => draft.directionContents?.find(w => w.title === title) || makeWayContent(title, index)) : (draft?.directionContents || []);
+  const multiWayVisible = inferredTitles.length > 1 || (draft?.directionContents?.length || 0) > 1;
+  const activeWay = displayWays.find(w => w.id === activeWayId) || displayWays[0];
   const updateWay = (key: keyof WritingDirectionContent, value: string[] | string) => {
     setDraft(prev => prev ? ({...prev, directionContents: (prev.directionContents || []).map(w =>
       w.id === activeWayId ? {...w, [key]: value} : w)}) : prev);
   };
   const syncWaysFromDirections = () => {
     if (!draft) return;
-    const titles = (draft.directions || []).map(v => v.trim()).filter(Boolean);
+    // Ưu tiên tách lựa chọn thực sự có trong đề, thay vì giữ một hướng sai của bài cũ.
+    const explicit = inferExplicitWays({...draft, directionContents: [], directions: []});
+    const typed = (draft.directions || []).map(v => v.trim()).filter(Boolean);
+    const titles = explicit.length > 1 ? explicit : typed;
     const previous = draft.directionContents || [];
     const next = titles.map((title, i) => {
-      const old = previous[i];
+      const old = previous.find(w => w.title.trim().toLocaleLowerCase('vi') === title.trim().toLocaleLowerCase('vi'));
       return old ? {...old, title} : makeWayContent(title, i);
     });
-    setDraft(prev => prev ? {...prev, directionContents: next} : prev);
-    setActiveWayId(prev => next.some(w => w.id === prev) ? prev : (next[0]?.id || ''));
+    setDraft(prev => prev ? {...prev, directions: titles, directionContents: next} : prev);
+    setActiveWayId(next[0]?.id || '');
     setWayMode(next.length > 1);
+    setMessage(next.length > 1 ? `Đã tạo ${next.length} hướng viết độc lập. Cô kiểm tra học liệu từng hướng trước khi lưu.` : 'Đề chưa có hai hướng rõ ràng. Cô nhập mỗi hướng một dòng.');
   };
 
   // Đồng bộ hướng viết ngay khi đề hoặc danh sách hướng thay đổi; không cần bấm nút thủ công.
   useEffect(() => {
     if (!draft) return;
-    const titles = inferExplicitWays(draft);
+    const titles = inferExplicitWays({...draft, directionContents: (draft.directionContents || []).length > 1 ? draft.directionContents : []});
     if (titles.length < 2) {
       if (wayMode) setWayMode(false);
       return;
@@ -149,7 +156,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         if (!prev) return prev;
         const existing = prev.directionContents || [];
         const next = titles.map((title, i) => {
-          const match = existing.find(w => w.title === title) || existing[i];
+          const match = existing.find(w => w.title.trim().toLocaleLowerCase('vi') === title.trim().toLocaleLowerCase('vi'));
           return match ? {...match, title} : makeWayContent(title, i);
         });
         return {...prev, directions: titles, directionContents: next};
@@ -435,8 +442,8 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const save = async () => {
     if (!draft) return;
     if (!draft.id && !generated) { setMessage('Cô hãy tạo bài từ ảnh trước khi lưu.'); return; }
-    if (!wayMode && (draft.mindMap?.filter(Boolean).length !== 5 || draft.outline?.filter(Boolean).length !== 3 || !draft.suggestedQuestions?.some(Boolean) || !draft.words?.some(Boolean) || !draft.evaluationCriteria?.some(Boolean))) { setMessage('Chưa đủ 5 nhánh, 3 phần dàn ý, câu hỏi gợi ý, từ ngữ hoặc tiêu chí đánh giá. Cô kiểm tra trước khi lưu.'); return; }
-    if (wayMode && (!draft.directionContents || draft.directionContents.length < 2 || draft.directionContents.some(w =>
+    if (!multiWayVisible && (draft.mindMap?.filter(Boolean).length !== 5 || draft.outline?.filter(Boolean).length !== 3 || !draft.suggestedQuestions?.some(Boolean) || !draft.words?.some(Boolean) || !draft.evaluationCriteria?.some(Boolean))) { setMessage('Chưa đủ 5 nhánh, 3 phần dàn ý, câu hỏi gợi ý, từ ngữ hoặc tiêu chí đánh giá. Cô kiểm tra trước khi lưu.'); return; }
+    if (multiWayVisible && (!draft.directionContents || draft.directionContents.length < 2 || draft.directionContents.some(w =>
       !w.title.trim() || (w.mindMap || []).filter(Boolean).length !== 5 || (w.outline || []).filter(Boolean).length !== 3 ||
       !(w.suggestedQuestions || []).some(Boolean) || !(w.words || []).some(Boolean) || !(w.evaluationCriteria || []).some(Boolean)))) {
       setMessage('Mỗi cách viết cần đủ 5 nhánh, 3 phần dàn ý, câu hỏi, từ ngữ và tiêu chí. Cô kiểm tra từng cách trước khi lưu.'); return;
@@ -511,7 +518,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <label className="block font-semibold">Tên bài<input className="mt-1 block w-full rounded-xl border p-3 font-normal" value={draft.title} onChange={e => change('title',e.target.value)}/></label>
             <label className="block font-semibold">Nội dung đề bài<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={draft.prompt} onChange={e => change('prompt',e.target.value)}/></label>
             <p className="text-sm text-stone-600">Cô kiểm tra nội dung nhận dạng từ ảnh. Nếu sửa đề, bấm “Tạo lại gợi ý” để cập nhật nội dung theo đề mới.</p>
-            <button type="button" disabled={loadingContent} className="rounded-xl border border-violet-300 px-4 py-2 font-semibold text-violet-800" onClick={() => { if (!draft.prompt.trim()) { setMessage('Cô nhập đề bài trước.'); return; } const t = {...draft, suggestedQuestions: [], directions: [], requirements: [], mindMap: [], outline: [], words: [], images: [], examples: [], evaluationCriteria: []}; setDraft(t); void loadActualContent(t); }}>Tạo lại gợi ý theo đề đã sửa</button>
+            <button type="button" disabled={loadingContent} className="rounded-xl border border-violet-300 px-4 py-2 font-semibold text-violet-800" onClick={() => { if (!draft.prompt.trim()) { setMessage('Cô nhập đề bài trước.'); return; } const t = {...draft, suggestedQuestions: [], directions: inferExplicitWays(draft).length > 1 ? inferExplicitWays(draft) : [], requirements: [], mindMap: [], outline: [], words: [], images: [], examples: [], evaluationCriteria: []}; setDraft(t); void loadActualContent(t); }}>Tạo lại gợi ý theo đề đã sửa</button>
           </div>
           <div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
             <h4 className="text-lg font-bold">📚 2. Chọn khối lớp và tập</h4>
@@ -521,9 +528,10 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <h4 className="text-lg font-bold">Các cách viết – chỉnh sửa học liệu riêng</h4>
             <p className="text-sm">Ứng dụng tự tách các hướng viết rõ ràng trong đề. Có thể sửa tên từng hướng dưới đây, sau đó bấm tạo lại khu vực chỉnh sửa. Mỗi hướng có dữ liệu riêng.</p>
             <label className="block font-semibold">Danh sách các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="mt-1 block w-full rounded-lg border bg-white p-2 font-normal" value={(draft.directions || []).join('\n')} onChange={e => change('directions', lines(e.target.value))}/></label>
-            <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={syncWaysFromDirections}>Cập nhật các hướng viết</button>
-            {wayMode && <>
-              <div className="flex flex-wrap gap-2">{(draft.directionContents || []).map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-3 py-2 font-semibold ${activeWayId === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
+            <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={syncWaysFromDirections}>Nhận diện từ đề và tạo các hướng viết</button>
+            {multiWayVisible && <p className="text-sm font-semibold text-emerald-800">Đã nhận diện {displayWays.length} cách viết. Chọn từng cách bên dưới để chỉnh sửa học liệu độc lập.</p>}
+            {multiWayVisible && <>
+              <div className="flex flex-wrap gap-2">{displayWays.map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-3 py-2 font-semibold ${activeWayId === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
               {activeWay && <div className="space-y-4 rounded-xl border bg-white p-3">
                 <h5 className="font-bold text-violet-900">Đang chỉnh sửa: {activeWay.title}</h5>
                 <label className="block font-semibold">Mong muốn mặc định<input className="mt-1 block w-full rounded-lg border p-2 font-normal" value={activeWay.defaultWish || ''} onChange={e=>updateWay('defaultWish',e.target.value)}/></label>
@@ -532,7 +540,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
               </div>}
             </>}
           </div>
-          {!wayMode && <>          <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
+          {!multiWayVisible && <>          <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold">🌟 3. Con muốn bài viết của mình có điều gì đặc biệt?</h4>
             <label className="block font-semibold">Gợi ý chọn nhanh cho học sinh<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.quickWishes || []).join('\n')} onChange={e => change('quickWishes',lines(e.target.value))}/></label>
             <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={generateQuickWishes}>Tạo gợi ý chọn nhanh</button>
