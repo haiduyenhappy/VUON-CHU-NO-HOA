@@ -703,7 +703,21 @@ export const CURRICULUM_TASKS: WritingTask[] = [
 // Chưa đồng bộ giữa các thiết bị/tài khoản; sẽ chuyển sang lưu máy chủ ở bước sau.
 export const LOCAL_TASKS_KEY = 'vcnh_curriculum_task_overrides_v2';
 export const LOCAL_TASKS_EVENT = 'vcnh-curriculum-updated';
+export type WritingDirectionContent = {
+  id: string;
+  title: string;
+  quickWishes?: string[];
+  defaultWish?: string;
+  suggestedQuestions?: string[];
+  mindMap?: string[];
+  outline?: string[];
+  words?: string[];
+  images?: string[];
+  examples?: string[];
+  evaluationCriteria?: string[];
+};
 export type ManagedWritingTask = WritingTask & {
+  directionContents?: WritingDirectionContent[];
   directions?: string[]; requirements?: string[]; mindMap?: string[];
   outline?: string[]; words?: string[]; images?: string[]; examples?: string[];
   quickWishes?: string[]; defaultWish?: string; difficultyOptions?: string[];
@@ -716,18 +730,8 @@ export function readTaskOverrides(): Record<string, ManagedWritingTask> {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch { return {}; }
 }
-// Remote changes are kept in memory and never overwrite the teacher's local backup.
-let remoteOverrides: Record<string, ManagedWritingTask> = {};
-export function setRemoteTaskOverrides(items: Record<string, ManagedWritingTask>): void {
-  remoteOverrides = items;
-  if (typeof window !== 'undefined') window.dispatchEvent(new Event(LOCAL_TASKS_EVENT));
-}
 export function getManagedCurriculumTasks(includeDeleted = false): ManagedWritingTask[] {
-  // Cloud is authoritative when a matching record exists; local-only edits remain visible.
-  const overrides = { ...readTaskOverrides() };
-  for (const task of Object.values(remoteOverrides)) {
-    if (task && typeof task.id === 'string') overrides[task.id] = task;
-  }
+  const overrides = readTaskOverrides();
   const originalIds = new Set(CURRICULUM_TASKS.map(t => t.id));
   const merged = CURRICULUM_TASKS.map(t => ({ ...t, ...(overrides[t.id] || {}) }));
   for (const task of Object.values(overrides)) {
