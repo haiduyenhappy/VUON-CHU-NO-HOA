@@ -20,6 +20,23 @@ export function getWritingWishes({ prompt, grade, selectedObject }: WritingWishC
   const has = (re: RegExp) => matches(text, re);
   const ideas: string[] = [];
 
+  // Ưu tiên nhiệm vụ giao tiếp trước từ khóa cảm xúc, người thân hoặc hoạt động.
+  // Chỉ đưa câu hỏi để học sinh tự cung cấp dữ kiện, không bịa nội dung.
+  if (has(/bản tin|đưa tin|tin ngắn/u)) {
+    const choices = has(/kế hoạch nhỏ/u) && has(/đôi bạn cùng tiến/u)
+      ? ['Chọn phong trào “Kế hoạch nhỏ” hoặc “Đôi bạn cùng tiến”'] : [];
+    return [...choices, 'Nêu tên sự kiện hoặc hoạt động con muốn đưa tin',
+      'Chọn thông tin có thật về thời gian, địa điểm và người tham gia',
+      'Nêu hoạt động nổi bật và kết quả con đã biết',
+      'Viết ngắn gọn, rõ ràng, không thêm thông tin chưa xác minh'];
+  }
+  if (has(/thông báo|viết thông báo/u)) return [
+    'Nêu rõ việc cần thông báo', 'Xác định người nhận thông báo',
+    'Nêu thời gian, địa điểm và việc cần làm nếu đề yêu cầu',
+    'Dùng lời văn ngắn gọn, chính xác'];
+  if (has(/viết đơn|đơn xin|đơn đề nghị/u)) return [
+    'Xác định người hoặc nơi nhận đơn', 'Nêu lí do viết đơn đúng sự thật',
+    'Trình bày mong muốn rõ ràng, lễ phép', 'Kiểm tra các thông tin cần thiết'];
   if (/hoạt động thể thao|trò chơi.*(?:tham gia|ở trường)|(?:tham gia|chơi).*trò chơi/u.test(text)) {
     const count = lengthHint(text);
     return [
