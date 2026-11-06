@@ -78,20 +78,51 @@ const phongTraoNewsSupport = (prompt: string) => {
 };
 // Nhận diện các lựa chọn tường minh, không suy diễn thành hướng viết khi đề không có lựa chọn.
 const inferExplicitWays = (task: ManagedWritingTask): string[] => {
-  // Ưu tiên các hướng đã được giáo viên lưu; không tự thay nội dung đã duyệt.
+  const prompt = (task.prompt || '').trim();
+  const p = prompt.toLocaleLowerCase('vi');
+  // Với bài cũ, đề gốc là nguồn xác định các lựa chọn, kể cả khi Firebase
+  // đang lưu thiếu một hướng trong directions/directionContents.
+  if (/bút\s*chì/.test(p) && /hộp\s*bút/.test(p) && /hoặc/.test(p))
+    return ['Viết về chiếc bút chì', 'Viết về hộp bút'];
+  if (/ngôi\s*trường/.test(p) && /góc\s*sân/.test(p) && /hoặc/.test(p))
+    return ['Tả ngôi trường của em', 'Tả một góc sân trường em yêu thích'];
+  if (/kế hoạch nhỏ/.test(p) && /đôi bạn cùng tiến/.test(p) && /hoặc/.test(p))
+    return ['Bản tin về phong trào Kế hoạch nhỏ', 'Bản tin về phong trào Đôi bạn cùng tiến'];
+  const semantic = (analyzePromptSemantics(prompt, task.grade).detectedDirections || [])
+    .map(d => d.title?.trim()).filter((v): v is string => !!v);
+  if (semantic.length > 1 && new Set(semantic.map(v => v.toLocaleLowerCase('vi'))).size === semantic.length)
+    return semantic;
   const saved = (task.directionContents || []).map(w => w.title?.trim()).filter((v): v is string => !!v);
   if (saved.length > 1) return saved;
-  const prompt = task.prompt.trim();
-  const p = prompt.toLocaleLowerCase('vi');
-  if (/bút chì/.test(p) && /hộp bút/.test(p) && /hoặc/.test(p)) return ['Viết về chiếc bút chì', 'Viết về hộp bút'];
-  if (/ngôi trường/.test(p) && /góc sân trường/.test(p) && /hoặc/.test(p)) return ['Tả ngôi trường của em', 'Tả một góc sân trường em yêu thích'];
-  if (/kế hoạch nhỏ/.test(p) && /đôi bạn cùng tiến/.test(p) && /hoặc/.test(p)) return ['Bản tin về phong trào Kế hoạch nhỏ', 'Bản tin về phong trào Đôi bạn cùng tiến'];
-  const detected = analyzePromptSemantics(prompt, task.grade).detectedDirections || [];
-  const semantic = detected.map(d => d.title?.trim()).filter((v): v is string => !!v);
-  if (semantic.length > 1 && new Set(semantic.map(v => v.toLocaleLowerCase('vi'))).size === semantic.length) return semantic;
-  // directions của bài cũ có thể chỉ là một lời hướng dẫn; không coi đó là hai cách viết.
   const manual = (task.directions || []).map(v => v.trim()).filter(Boolean);
   return manual.length > 1 ? manual : [];
+};
+const wayKey = (s: string) => s.toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, ' ').trim();
+const sameWay = (a: string, b: string) => {
+  const x = wayKey(a), y = wayKey(b);
+  return x === y || (x.includes('but chi') && y.includes('but chi')) ||
+    (x.includes('hop but') && y.includes('hop but'));
+};
+const reconcileWays = (task: ManagedWritingTask, titles: string[]): WritingDirectionContent[] => {
+  const existing = task.directionContents || [];
+  return titles.map((title, index) => {
+    const old = existing.find(w => sameWay(w.title, title));
+    if (old) return {...old, title, id: `cach-${index + 1}`};
+    // Dữ liệu một hướng của bài cũ chỉ được chuyển sang hướng cùng đối tượng.
+    const legacy = (task.directions || []).length === 1 && sameWay(task.directions![0], title);
+    const base = makeWayContent(title, index);
+    if (!legacy) return base;
+    return {...base,
+      quickWishes: task.quickWishes?.length ? task.quickWishes : base.quickWishes,
+      defaultWish: task.defaultWish || base.defaultWish,
+      suggestedQuestions: task.suggestedQuestions?.length ? task.suggestedQuestions : base.suggestedQuestions,
+      mindMap: task.mindMap?.length === 5 ? task.mindMap : base.mindMap,
+      outline: task.outline?.length === 3 ? task.outline : base.outline,
+      words: task.words?.length ? task.words : base.words,
+      images: task.images || [], examples: task.examples || [],
+      evaluationCriteria: task.evaluationCriteria?.length ? task.evaluationCriteria : base.evaluationCriteria
+    };
+  });
 };
 const makeWayContent = (title: string, index: number): WritingDirectionContent => {
   const isPencil = /bút chì/i.test(title);
@@ -117,55 +148,47 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [wayMode, setWayMode] = useState(false);
   const wayFields: (keyof WritingDirectionContent)[] = ['quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'];
   const inferredTitles = draft ? inferExplicitWays(draft) : [];
-  const displayWays = draft && inferredTitles.length > 1 ? inferredTitles.map((title, index) => draft.directionContents?.find(w => w.title === title) || makeWayContent(title, index)) : (draft?.directionContents || []);
+  const displayWays = draft && inferredTitles.length > 1 ? reconcileWays(draft, inferredTitles) : (draft?.directionContents || []);
   const multiWayVisible = inferredTitles.length > 1 || (draft?.directionContents?.length || 0) > 1;
   const activeWay = displayWays.find(w => w.id === activeWayId) || displayWays[0];
   const updateWay = (key: keyof WritingDirectionContent, value: string[] | string) => {
     setDraft(prev => prev ? ({...prev, directionContents: (prev.directionContents || []).map(w =>
-      w.id === activeWayId ? {...w, [key]: value} : w)}) : prev);
+      w.id === (activeWay?.id || activeWayId) ? {...w, [key]: value} : w)}) : prev);
   };
+  // Cùng một bố cục mục 3–8, nhưng dữ liệu được lấy/lưu theo hướng đang chọn.
+  const wayValues = (key: keyof WritingDirectionContent): string[] =>
+    multiWayVisible ? ((activeWay?.[key] as string[] | undefined) || []) : ((draft?.[key as keyof ManagedWritingTask] as string[] | undefined) || []);
+  const setWayValues = (key: keyof WritingDirectionContent, value: string[]) => {
+    if (multiWayVisible) updateWay(key, value);
+    else change(key as keyof ManagedWritingTask, value);
+  };
+  const currentWish = multiWayVisible ? (activeWay?.defaultWish || '') : (draft?.defaultWish || '');
+  const setCurrentWish = (value: string) => multiWayVisible ? updateWay('defaultWish', value) : change('defaultWish', value);
   const syncWaysFromDirections = () => {
     if (!draft) return;
     // Ưu tiên tách lựa chọn thực sự có trong đề, thay vì giữ một hướng sai của bài cũ.
     const explicit = inferExplicitWays({...draft, directionContents: [], directions: []});
     const typed = (draft.directions || []).map(v => v.trim()).filter(Boolean);
     const titles = explicit.length > 1 ? explicit : typed;
-    const previous = draft.directionContents || [];
-    const next = titles.map((title, i) => {
-      const old = previous.find(w => w.title.trim().toLocaleLowerCase('vi') === title.trim().toLocaleLowerCase('vi'));
-      return old ? {...old, title} : makeWayContent(title, i);
-    });
+    const next = reconcileWays(draft, titles);
     setDraft(prev => prev ? {...prev, directions: titles, directionContents: next} : prev);
     setActiveWayId(next[0]?.id || '');
     setWayMode(next.length > 1);
     setMessage(next.length > 1 ? `Đã tạo ${next.length} hướng viết độc lập. Cô kiểm tra học liệu từng hướng trước khi lưu.` : 'Đề chưa có hai hướng rõ ràng. Cô nhập mỗi hướng một dòng.');
   };
 
-  // Đồng bộ hướng viết ngay khi đề hoặc danh sách hướng thay đổi; không cần bấm nút thủ công.
+  // Tự khôi phục hướng bị thiếu của bài cũ; không yêu cầu giáo viên bấm nút.
   useEffect(() => {
     if (!draft) return;
-    const titles = inferExplicitWays({...draft, directionContents: (draft.directionContents || []).length > 1 ? draft.directionContents : []});
-    if (titles.length < 2) {
-      if (wayMode) setWayMode(false);
-      return;
-    }
+    const titles = inferExplicitWays(draft);
+    if (titles.length < 2) { if (wayMode) setWayMode(false); return; }
     const current = draft.directionContents || [];
     const same = current.length === titles.length && current.every((w, i) => w.title === titles[i]);
-    if (!same) {
-      setDraft(prev => {
-        if (!prev) return prev;
-        const existing = prev.directionContents || [];
-        const next = titles.map((title, i) => {
-          const match = existing.find(w => w.title.trim().toLocaleLowerCase('vi') === title.trim().toLocaleLowerCase('vi'));
-          return match ? {...match, title} : makeWayContent(title, i);
-        });
-        return {...prev, directions: titles, directionContents: next};
-      });
+    if (!same || (draft.directions || []).join('\n') !== titles.join('\n')) {
+      setDraft(prev => prev ? {...prev, directions: titles, directionContents: reconcileWays(prev, titles)} : prev);
     }
     if (!wayMode) setWayMode(true);
-    if (!activeWayId || !current.some(w => w.id === activeWayId)) {
-      setActiveWayId(current[0]?.id || 'cach-1');
-    }
+    if (!current.some(w => w.id === activeWayId)) setActiveWayId('cach-1');
   }, [draft?.prompt, draft?.grade, draft?.directions?.join('\n'), draft?.directionContents?.length]);
 
   const [syncState, setSyncState] = useState<'waiting' | 'syncing' | 'ready' | 'error'>('waiting');
@@ -329,7 +352,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     const defaultDirection = semantic.coreSubject || task.prompt;
     // Không để trống hướng viết khi đề chỉ có một hướng.
     setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt
-      ? { ...prev, directions: fill(prev.directions, semanticDirections.length ? semanticDirections : [defaultDirection]) }
+      ? { ...prev, directions: inferExplicitWays(prev).length > 1 ? inferExplicitWays(prev) : fill(prev.directions, semanticDirections.length ? semanticDirections : [defaultDirection]) }
       : prev);
     const alreadyComplete = task.suggestedQuestions?.some(Boolean) && task.mindMap?.filter(Boolean).length === 5 &&
       task.outline?.filter(Boolean).length === 3 && task.words?.some(Boolean) &&
@@ -376,7 +399,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt ? {
         ...prev,
         quickWishes: fill(prev.quickWishes, getWritingWishes({prompt: task.prompt, grade: task.grade})),
-        directions: fill(prev.directions, generatedDirections.length ? generatedDirections :
+        directions: inferExplicitWays(prev).length > 1 ? inferExplicitWays(prev) : fill(prev.directions, generatedDirections.length ? generatedDirections :
           [data.writingScope || semantic.writingScope || data.coreSubject || semantic.coreSubject]),
         requirements: fill(prev.requirements, (data.specificRequirements || []).filter(v => task.prompt.toLocaleLowerCase('vi').includes(v.toLocaleLowerCase('vi')))),
         mindMap: fill(prev.mindMap, branches.length === 5 ? branches : []),
@@ -400,13 +423,9 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     }
     const titles = inferExplicitWays(copy);
     if (titles.length > 1) {
-      const existingWays = copy.directionContents || [];
       copy.directions = titles;
-      copy.directionContents = titles.map((title, i) => {
-        const old = existingWays.find(w => w.title === title) || existingWays.find(w => w.id === `cach-${i+1}`) || existingWays[i];
-        return old ? { ...old, title } : makeWayContent(title, i);
-      });
-      setActiveWayId(copy.directionContents[0].id);
+      copy.directionContents = reconcileWays(copy, titles);
+      setActiveWayId('cach-1');
       setWayMode(true);
     } else {
       setActiveWayId('');
@@ -417,25 +436,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     if (copy.id) void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
-  // Tạo nhiều hướng ngay khi giáo viên thay danh sách; vẫn giữ dữ liệu đã chỉnh sửa.
-  useEffect(() => {
-    if (!draft) return;
-    const titles = (draft.directions || []).map(v => v.trim()).filter(Boolean);
-    if (titles.length < 2) return;
-    const old = draft.directionContents || [];
-    if (old.length === titles.length && old.every((w, i) => w.title === titles[i])) return;
-    const next = titles.map((title, i) => {
-      const prior = old.find(w => w.title === title) || old[i];
-      return prior ? {...prior, title} : makeWayContent(title, i);
-    });
-    setDraft(prev => prev ? {...prev, directionContents: next} : prev);
-    setWayMode(true);
-    setActiveWayId(prev => next.some(w => w.id === prev) ? prev : next[0].id);
-  }, [draft?.directions]);
   const generateQuickWishes = () => {
     if (!draft?.prompt.trim()) { setMessage('Cô nhập đề bài trước khi tạo gợi ý.'); return; }
     const suggestions = getWritingWishes({ prompt: draft.prompt, grade: draft.grade });
-    setDraft(prev => prev ? { ...prev, quickWishes: suggestions } : prev);
+    if (multiWayVisible) updateWay('quickWishes', suggestions);
+    else setDraft(prev => prev ? { ...prev, quickWishes: suggestions } : prev);
     setMessage('Đã tạo gợi ý theo đề bài. Cô có thể chỉnh sửa trước khi lưu.');
   };
 
@@ -451,7 +456,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
-    const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
+    const updated = { ...draft, ...(multiWayVisible ? { directions: inferredTitles, directionContents: reconcileWays(draft, inferredTitles) } : {}), id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
     setSavingCloud(true);
     try {
       await saveCurriculumToCloud(updated);
@@ -526,52 +531,47 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
           </div>
           <div className="rounded-2xl border border-violet-300 bg-violet-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold">Các cách viết – chỉnh sửa học liệu riêng</h4>
-            <p className="text-sm">Ứng dụng tự tách các hướng viết rõ ràng trong đề. Có thể sửa tên từng hướng dưới đây, sau đó bấm tạo lại khu vực chỉnh sửa. Mỗi hướng có dữ liệu riêng.</p>
+            <p className="text-sm">Ứng dụng tự khôi phục các lựa chọn từ đề gốc, kể cả bài đã lưu trước đây. Mỗi hướng có học liệu riêng; cô kiểm tra rồi lưu bài để đồng bộ Firebase.</p>
             <label className="block font-semibold">Danh sách các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="mt-1 block w-full rounded-lg border bg-white p-2 font-normal" value={(draft.directions || []).join('\n')} onChange={e => change('directions', lines(e.target.value))}/></label>
-            <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={syncWaysFromDirections}>Nhận diện từ đề và tạo các hướng viết</button>
-            {multiWayVisible && <p className="text-sm font-semibold text-emerald-800">Đã nhận diện {displayWays.length} cách viết. Chọn từng cách bên dưới để chỉnh sửa học liệu độc lập.</p>}
-            {multiWayVisible && <>
-              <div className="flex flex-wrap gap-2">{displayWays.map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-3 py-2 font-semibold ${activeWayId === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
-              {activeWay && <div className="space-y-4 rounded-xl border bg-white p-3">
-                <h5 className="font-bold text-violet-900">Đang chỉnh sửa: {activeWay.title}</h5>
-                <label className="block font-semibold">Mong muốn mặc định<input className="mt-1 block w-full rounded-lg border p-2 font-normal" value={activeWay.defaultWish || ''} onChange={e=>updateWay('defaultWish',e.target.value)}/></label>
-                {(['quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'] as const).map((field) => <label key={field} className="block font-semibold">{{quickWishes:'3. Gợi ý chọn nhanh',suggestedQuestions:'4. Câu hỏi khơi mở',mindMap:'5. Sơ đồ tư duy – 5 nhánh',outline:'6. Dàn ý – 3 phần',words:'7. Từ hay',images:'7. Hình ảnh gợi ý',examples:'7. Câu mẫu',evaluationCriteria:'8. Tiêu chí đánh giá'}[field]}<textarea rows={field==='mindMap'?10:field==='outline'?7:4} className="mt-1 block w-full rounded-lg border p-2 font-normal" value={(activeWay[field] || []).join('\n')} onChange={e=>updateWay(field,lines(e.target.value))}/></label>)}
-                <p className="text-xs text-stone-600">Mỗi dòng là một ý. Sơ đồ cần 5 dòng và dàn ý cần 3 dòng. Chuyển cách viết không làm mất nội dung vừa nhập.</p>
-              </div>}
-            </>}
+            
+            {multiWayVisible && <div className="space-y-2">
+              <p className="font-semibold text-emerald-800">Đã nhận diện {displayWays.length} cách viết. Chọn hướng để chỉnh sửa đồng bộ mục 3–8.</p>
+              <div className="flex flex-wrap gap-2">{displayWays.map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-4 py-2 font-semibold ${activeWay?.id === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
+              <p className="text-sm text-stone-600">Đang chỉnh sửa: <strong>{activeWay?.title}</strong>. Mọi thay đổi phía dưới chỉ áp dụng cho hướng này.</p>
+            </div>}
           </div>
-          {!multiWayVisible && <>          <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
+                    <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold">🌟 3. Con muốn bài viết của mình có điều gì đặc biệt?</h4>
-            <label className="block font-semibold">Gợi ý chọn nhanh cho học sinh<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.quickWishes || []).join('\n')} onChange={e => change('quickWishes',lines(e.target.value))}/></label>
+            <label className="block font-semibold">Gợi ý chọn nhanh cho học sinh<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={wayValues('quickWishes').join('\n')} onChange={e => setWayValues('quickWishes',lines(e.target.value))}/></label>
             <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={generateQuickWishes}>Tạo gợi ý chọn nhanh</button>
-            <label className="block font-semibold">Mong muốn của học sinh<input className="mt-1 block w-full rounded-xl border p-3 font-normal" value={draft.defaultWish || ''} placeholder="Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên." onChange={e => change('defaultWish',e.target.value)}/></label>
+            <label className="block font-semibold">Mong muốn của học sinh<input className="mt-1 block w-full rounded-xl border p-3 font-normal" value={currentWish} placeholder="Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên." onChange={e => setCurrentWish(e.target.value)}/></label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{['Cơ bản','Mở rộng','Nâng cao','Sáng tạo'].map((name,n) => <label key={name} className="rounded-xl border bg-white p-3 font-semibold">{name}<input className="mt-2 block w-full rounded-lg border p-2 font-normal" value={draft.difficultyOptions?.[n] ?? ['Chuẩn SGK','Thêm quan sát','Từ ngữ gợi cảm','Ý tưởng mới lạ'][n]} onChange={e => { const a=[...(draft.difficultyOptions || ['Chuẩn SGK','Thêm quan sát','Từ ngữ gợi cảm','Ý tưởng mới lạ'])]; a[n]=e.target.value; change('difficultyOptions',a); }}/></label>)}</div>
           </div>
           <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold text-violet-900">🌸 4. Hoa Nhỏ cùng con hiểu đề</h4>
             <p className="text-sm">Đề gốc: {draft.prompt}</p>
-            {listFields.filter(f => ['directions','requirements','suggestedQuestions'].includes(f.key)).map(f => <label key={f.key} className="block font-semibold">{f.label}<textarea rows={4} className="mt-1 block w-full rounded-xl border bg-white p-3 font-normal" value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key,lines(e.target.value))}/></label>)}
+            {listFields.filter(f => (multiWayVisible ? ['requirements','suggestedQuestions'] : ['directions','requirements','suggestedQuestions']).includes(f.key)).map(f => <label key={f.key} className="block font-semibold">{f.label}<textarea rows={4} className="mt-1 block w-full rounded-xl border bg-white p-3 font-normal" value={(multiWayVisible && f.key === 'suggestedQuestions' ? wayValues('suggestedQuestions') : ((draft[f.key] as string[] | undefined) || [])).join('\n')} onChange={e => f.key === 'suggestedQuestions' ? setWayValues('suggestedQuestions',lines(e.target.value)) : change(f.key,lines(e.target.value))}/></label>)}
             <p className="text-sm text-stone-600">Không tự đặt thêm số câu hoặc yêu cầu không có trong đề.</p>
           </div>
           <div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
             <h4 className="text-lg font-bold">🗺️ 5. Sơ đồ tư duy 5 nhánh – Tỏa sáng ý tưởng</h4>
-            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">{[0,1,2,3,4].map(n => <label key={n} className={`rounded-xl border-2 p-3 ${['border-emerald-200 bg-emerald-50','border-violet-200 bg-violet-50','border-amber-200 bg-amber-50','border-sky-200 bg-sky-50','border-rose-200 bg-rose-50'][n]}`}><strong>Nhánh {n+1}</strong><textarea rows={8} className="mt-2 block w-full rounded-lg border bg-white p-2" value={(draft.mindMap || [])[n] || ''} onChange={e => {const a=[...(draft.mindMap || [])]; while(a.length<5)a.push(''); a[n]=e.target.value; change('mindMap',a);}}/></label>)}</div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-5 gap-3">{[0,1,2,3,4].map(n => <label key={n} className={`rounded-xl border-2 p-3 ${['border-emerald-200 bg-emerald-50','border-violet-200 bg-violet-50','border-amber-200 bg-amber-50','border-sky-200 bg-sky-50','border-rose-200 bg-rose-50'][n]}`}><strong>Nhánh {n+1}</strong><textarea rows={8} className="mt-2 block w-full rounded-lg border bg-white p-2" value={wayValues('mindMap')[n] || ''} onChange={e => {const a=[...wayValues('mindMap')]; while(a.length<5)a.push(''); a[n]=e.target.value; setWayValues('mindMap',a);}}/></label>)}</div>
           </div>
           <div className="rounded-2xl border border-emerald-200 bg-white p-4 space-y-3">
             <h4 className="text-lg font-bold">📋 6. Dàn ý chi tiết các phần của bài</h4>
-            <div className="space-y-3">{['Phần 1 – Mở đầu','Phần 2 – Nội dung chính','Phần 3 – Kết thúc'].map((name,n) => <label key={n} className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-semibold">{name}<textarea rows={5} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={(draft.outline || [])[n] || ''} onChange={e => {const a=[...(draft.outline || [])];while(a.length<3)a.push('');a[n]=e.target.value;change('outline',a);}}/></label>)}</div>
+            <div className="space-y-3">{['Phần 1 – Mở đầu','Phần 2 – Nội dung chính','Phần 3 – Kết thúc'].map((name,n) => <label key={n} className="block rounded-xl border border-emerald-200 bg-emerald-50 p-3 font-semibold">{name}<textarea rows={5} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={wayValues('outline')[n] || ''} onChange={e => {const a=[...wayValues('outline')];while(a.length<3)a.push('');a[n]=e.target.value;setWayValues('outline',a);}}/></label>)}</div>
           </div>
           <div className="rounded-2xl border border-amber-200 bg-amber-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold">🌼 7. Hoa Nhỏ khơi mở trải nghiệm thật của con</h4>
             <p className="text-sm text-stone-600">Những câu hỏi này giúp học sinh tự nhớ lại trải nghiệm, không viết bài thay học sinh.</p>
-            <div className="space-y-2">{(draft.suggestedQuestions || []).map((q,n) => <p key={n} className="rounded-xl border bg-white p-3">{n+1}. {q}</p>)}{!draft.suggestedQuestions?.length && <p className="text-amber-800">Chưa có câu hỏi khơi mở phù hợp; cô cần bổ sung trước khi lưu.</p>}</div>
+            <div className="space-y-2">{wayValues('suggestedQuestions').map((q,n) => <p key={n} className="rounded-xl border bg-white p-3">{n+1}. {q}</p>)}{!wayValues('suggestedQuestions').length && <p className="text-amber-800">Chưa có câu hỏi khơi mở phù hợp; cô cần bổ sung trước khi lưu.</p>}</div>
           </div>
           <div className="rounded-2xl border border-pink-200 bg-white p-4 space-y-3">
             <h4 className="text-lg font-bold">🌸 8. Kho từ ngữ và hình ảnh sáng tạo</h4>
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{listFields.filter(f => ['words','images','examples'].includes(f.key)).map(f => <label key={f.key} className="rounded-xl border bg-pink-50 p-3 font-semibold">{f.label}<textarea rows={7} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key,lines(e.target.value))}/></label>)}</div>
-            <label className="block font-semibold">Tiêu chí đánh giá<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{listFields.filter(f => ['words','images','examples'].includes(f.key)).map(f => <label key={f.key} className="rounded-xl border bg-pink-50 p-3 font-semibold">{f.label}<textarea rows={7} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={wayValues(f.key as keyof WritingDirectionContent).join('\n')} onChange={e => setWayValues(f.key as keyof WritingDirectionContent,lines(e.target.value))}/></label>)}</div>
+            <label className="block font-semibold">Tiêu chí đánh giá<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={wayValues('evaluationCriteria').join('\n')} onChange={e => setWayValues('evaluationCriteria',lines(e.target.value))}/></label>
           </div>
-          </>}
+          
         </>)}
         {(!!draft.id || generated) && <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save} disabled={savingCloud}>{savingCloud ? 'Đang đồng bộ...' : 'Lưu bài'}</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted} disabled={savingCloud}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>}
       </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
