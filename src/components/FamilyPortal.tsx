@@ -68,10 +68,10 @@ export const FamilyPortal: React.FC<FamilyPortalProps> = ({
               onBackToGarden();
             }}
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-rose-950 border-2 border-rose-300 font-extrabold text-xs sm:text-sm shadow-xs transition-all hover:scale-102"
-            title="Quay lại vườn hoa chính"
+            title="Quay lại trang trước" aria-label="Quay lại trang trước"
           >
             <ArrowLeft className="w-4 h-4 text-rose-700" />
-            <span>← Quay lại</span>
+            
           </button>
 
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white border-2 border-rose-400 flex items-center justify-center text-2xl sm:text-3xl shadow-xs">

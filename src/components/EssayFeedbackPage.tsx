@@ -362,10 +362,10 @@ export const EssayFeedbackPage: React.FC<EssayFeedbackPageProps> = ({
               onBackToIdeaMap();
             }}
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2 sm:py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-purple-900 border-2 border-purple-200 font-extrabold text-xs sm:text-sm shadow-xs transition-all min-h-[42px]"
-            title="Quay lại Bản đồ ý tưởng mà không mất bài viết"
+            title="Quay lại trang trước" aria-label="Quay lại trang trước"
           >
             <ArrowLeft className="w-4 h-4 text-purple-700" />
-            <span>← Quay lại</span>
+            
           </button>
 
           <div className="w-10 h-10 sm:w-14 sm:h-14 rounded-2xl bg-white border-2 border-pink-300 flex items-center justify-center text-xl sm:text-3xl shadow-xs shrink-0">

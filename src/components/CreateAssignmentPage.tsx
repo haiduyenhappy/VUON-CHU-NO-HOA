@@ -350,10 +350,10 @@ export const CreateAssignmentPage: React.FC<CreateAssignmentPageProps> = ({
               onBack();
             }}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-800 font-extrabold text-sm sm:text-base border border-stone-300 transition-all cursor-pointer"
-            title="Quay lại danh sách bài tập"
+            title="Quay lại trang trước" aria-label="Quay lại trang trước"
           >
             <ArrowLeft className="w-5 h-5 text-emerald-800" />
-            <span>Quay lại</span>
+            
           </button>
 
           <div>
@@ -917,7 +917,7 @@ export const CreateAssignmentPage: React.FC<CreateAssignmentPageProps> = ({
             }}
             className="px-5 py-3 rounded-2xl bg-stone-100 hover:bg-stone-200 text-stone-700 font-extrabold text-sm sm:text-base border border-stone-300 transition-colors cursor-pointer"
           >
-            ← Quay lại danh sách
+            ←
           </button>
 
           <div className="flex items-center gap-3">

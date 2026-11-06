@@ -297,7 +297,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
             className="inline-flex items-center gap-2 px-3.5 py-2 rounded-full bg-white/90 hover:bg-white text-stone-700 hover:text-stone-900 border-2 border-stone-200 font-bold text-xs sm:text-sm shadow-xs transition-all min-h-[40px] cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span>← Về Vườn Chữ Nở Hoa</span>
+            
           </button>
 
           <span className={`text-[11px] sm:text-xs font-black px-3 py-1 rounded-full shadow-xs uppercase tracking-wider ${config.badgeBg} truncate max-w-full`}>

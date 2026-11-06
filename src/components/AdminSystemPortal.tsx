@@ -1,5 +1,5 @@
 import { firebaseAuth } from '../lib/firebase';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { 
   TeacherAccount, 
   Classroom, 
@@ -87,7 +87,21 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
     assignedClassIds: ['L3A'],
     createdAt: new Date().toISOString()
   };
-  const [activeTab, setActiveTab] = useState<'overview' | 'teachers' | 'classes' | 'reports' | 'audit' | 'demoLogin'>('overview');
+  const [activeTab, rawSetActiveTab] = useState<'overview' | 'teachers' | 'classes' | 'reports' | 'audit' | 'demoLogin'>('overview');
+  type PortalTab = 'overview' | 'teachers' | 'classes' | 'reports' | 'audit' | 'demoLogin';
+  const tabRef = useRef<PortalTab>('overview');
+  const tabHistory = useRef<PortalTab[]>([]);
+  const setActiveTab = (next: PortalTab) => {
+    if (next === tabRef.current) return;
+    tabHistory.current.push(tabRef.current);
+    tabRef.current = next;
+    rawSetActiveTab(next);
+  };
+  const backFromPortal = () => {
+    const previous = tabHistory.current.pop();
+    if (previous) { tabRef.current = previous; rawSetActiveTab(previous); }
+    else onBackToHome();
+  };
   const [demoConfig, setDemoConfig] = useState({enabled:true,student:['HS001','HS002','HS020'],teacher:['haiduyen','vanminh'],family:['PH001','PH002','PH020']});
   const [demoSaving, setDemoSaving] = useState(false);
   useEffect(() => { fetch('/api/demo-login-config').then(r=>r.json()).then(d=>{if(d.success)setDemoConfig(d.config)}).catch(()=>{}); }, []);
@@ -671,12 +685,12 @@ export const AdminSystemPortal: React.FC<AdminSystemPortalProps> = ({
           <button
             onClick={() => {
               playPop(settings.soundEnabled);
-              onBackToHome();
+              backFromPortal();
             }}
             className="flex items-center gap-1.5 px-3.5 py-2.5 rounded-2xl bg-white/10 hover:bg-white/20 text-white text-xs sm:text-sm font-bold transition-colors"
           >
             <ArrowLeft className="w-4 h-4" />
-            <span className="hidden sm:inline">Trang chủ</span>
+            
           </button>
         </div>
       </div>

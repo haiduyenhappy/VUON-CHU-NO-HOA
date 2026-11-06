@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { QuestionBankManager } from './QuestionBankManager';
@@ -84,7 +84,21 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         : (teacherId === 'GV002' ? ['L4B'] : ['L3A']));
 
   // Navigation tabs within Teacher Portal
-  const [activeTab, setActiveTab] = useState<'reviews' | 'accounts' | 'classes' | 'assignments' | 'bank' | 'profile'>('reviews');
+  const [activeTab, rawSetActiveTab] = useState<'reviews' | 'accounts' | 'classes' | 'assignments' | 'bank' | 'profile'>('reviews');
+  type PortalTab = 'reviews' | 'accounts' | 'classes' | 'assignments' | 'bank' | 'profile';
+  const tabRef = useRef<PortalTab>('reviews');
+  const tabHistory = useRef<PortalTab[]>([]);
+  const setActiveTab = (next: PortalTab) => {
+    if (next === tabRef.current) return;
+    tabHistory.current.push(tabRef.current);
+    tabRef.current = next;
+    rawSetActiveTab(next);
+  };
+  const backFromPortal = () => {
+    const previous = tabHistory.current.pop();
+    if (previous) { tabRef.current = previous; rawSetActiveTab(previous); }
+    else onBackToGarden();
+  };
 
   // Multi-Class Management State
   const [assignedClasses, setAssignedClasses] = useState<Classroom[]>([]);
@@ -1055,13 +1069,13 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           <button
             onClick={() => {
               playPop(settings.soundEnabled);
-              onBackToGarden();
+              backFromPortal();
             }}
             className="flex items-center gap-1.5 px-3 sm:px-4 py-2.5 rounded-2xl bg-white hover:bg-stone-50 text-emerald-950 border-2 border-emerald-300 font-extrabold text-xs sm:text-sm shadow-xs transition-all hover:scale-102"
-            title="Quay lại vườn hoa chính"
+            title="Quay lại trang trước" aria-label="Quay lại trang trước"
           >
             <ArrowLeft className="w-4 h-4 text-emerald-700" />
-            <span>← Quay lại</span>
+            
           </button>
 
           <div className="w-12 h-12 sm:w-14 sm:h-14 rounded-2xl bg-white border-2 border-emerald-400 flex items-center justify-center text-2xl sm:text-3xl shadow-xs">
