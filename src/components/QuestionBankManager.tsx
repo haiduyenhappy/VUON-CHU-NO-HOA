@@ -85,6 +85,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [query, setQuery] = useState('');
   const [grade, setGrade] = useState(0);
   const [showDeleted, setShowDeleted] = useState(false);
+  const [reviewIncomplete, setReviewIncomplete] = useState(false);
   const [preview, setPreview] = useState(false);
   const [message, setMessage] = useState('');
   const [loadingContent, setLoadingContent] = useState(false);
@@ -203,7 +204,24 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     while (used.has(n)) n++;
     return `${prefix}${String(n).padStart(2, '0')}`;
   };
-  const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) && `${t.id} ${displayTaskCodes[t.id] || ''} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())), [tasks, query, grade, showDeleted, displayTaskCodes]);
+  // Một tiêu chuẩn kiểm tra chung cho tất cả đề 1–5, kể cả đề được thêm sau này.
+  const missingParts = (t: ManagedWritingTask): string[] => {
+    const missing: string[] = [];
+    if (!(t.quickWishes || []).some(v => v.trim())) missing.push('Gợi ý chọn nhanh');
+    if (!(t.directions || []).some(v => v.trim())) missing.push('Hướng viết');
+    if (!(t.suggestedQuestions || []).some(v => v.trim())) missing.push('Câu hỏi khơi mở');
+    if ((t.mindMap || []).filter(v => v.trim()).length !== 5) missing.push('Sơ đồ 5 nhánh');
+    if ((t.outline || []).filter(v => v.trim()).length !== 3) missing.push('Dàn ý 3 phần');
+    if (!(t.words || []).some(v => v.trim())) missing.push('Từ ngữ');
+    if (!(t.images || []).some(v => v.trim())) missing.push('Hình ảnh gợi ý');
+    if (!(t.examples || []).some(v => v.trim())) missing.push('Câu mẫu');
+    if (!(t.evaluationCriteria || []).some(v => v.trim())) missing.push('Tiêu chí');
+    return missing;
+  };
+  const visible = useMemo(() => tasks.filter(t => !!t.deleted === showDeleted && (!grade || t.grade === grade) &&
+    (!reviewIncomplete || missingParts(t).length > 0) &&
+    `${t.id} ${displayTaskCodes[t.id] || ''} ${t.title} ${t.prompt}`.toLowerCase().includes(query.toLowerCase())),
+    [tasks, query, grade, showDeleted, reviewIncomplete, displayTaskCodes]);
   const loadActualContent = async (task: ManagedWritingTask) => {
     if (!task.prompt.trim()) return;
     const fill = (existing: string[] | undefined, incoming: string[]) =>
@@ -228,10 +246,16 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     const alreadyComplete = task.suggestedQuestions?.some(Boolean) && task.mindMap?.filter(Boolean).length === 5 &&
       task.outline?.filter(Boolean).length === 3 && task.words?.some(Boolean) &&
       task.images?.some(Boolean) && task.examples?.some(Boolean);
-    if (alreadyComplete) return;
+    if (alreadyComplete) {
+      setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt ? {
+        ...prev, quickWishes: fill(prev.quickWishes, getWritingWishes({prompt: task.prompt, grade: task.grade}))
+      } : prev);
+      return;
+    }
     const family = familyActivitySupport(task.prompt) || sportsActivitySupport(task.prompt);
     if (family) setDraft(prev => prev?.prompt === task.prompt ? {
-      ...prev, suggestedQuestions: fill(prev.suggestedQuestions, family.questions),
+      ...prev, quickWishes: fill(prev.quickWishes, getWritingWishes({prompt: task.prompt, grade: task.grade})),
+      suggestedQuestions: fill(prev.suggestedQuestions, family.questions),
       mindMap: fill(prev.mindMap, family.branches), outline: fill(prev.outline, family.outline),
       words: fill(prev.words, family.words), images: fill(prev.images, family.images),
       examples: fill(prev.examples, family.examples), evaluationCriteria: fill(prev.evaluationCriteria, family.criteria)
@@ -263,6 +287,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       const generatedDirections = (data.detectedDirections || []).map(d => d.title?.trim()).filter(Boolean) as string[];
       setDraft(prev => prev?.id === task.id && prev.prompt === task.prompt ? {
         ...prev,
+        quickWishes: fill(prev.quickWishes, getWritingWishes({prompt: task.prompt, grade: task.grade})),
         directions: fill(prev.directions, generatedDirections.length ? generatedDirections :
           [data.writingScope || semantic.writingScope || data.coreSubject || semantic.coreSubject]),
         requirements: fill(prev.requirements, (data.specificRequirements || []).filter(v => task.prompt.toLocaleLowerCase('vi').includes(v.toLocaleLowerCase('vi')))),
@@ -280,6 +305,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   };
   const edit = (t: ManagedWritingTask) => {
     const copy = JSON.parse(JSON.stringify(t)) as ManagedWritingTask;
+    const oldGenericWishes = ['Con nhớ đến điều gì khi đọc đề?', 'Chọn một chi tiết con từng thấy hoặc trải qua', 'Nói điều con muốn chia sẻ nhất'];
+    if (!(copy.quickWishes || []).some(v => v.trim()) ||
+        (copy.quickWishes || []).every(v => oldGenericWishes.includes(v))) {
+      copy.quickWishes = getWritingWishes({prompt: copy.prompt, grade: copy.grade});
+    }
     setDraft(copy); setPreview(false); setMessage(''); setImagePreview('');
     setSelectedImage(null); setGenerated(!!copy.id);
     if (copy.id) void loadActualContent(copy);
@@ -336,7 +366,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     <h3 className="text-xl font-bold text-emerald-900">Ngân hàng đề lớp 1–5 – Quản lý bài tập</h3>
     <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-4 py-2 text-white font-bold" onClick={() => edit(newTask())}>+ Thêm bài</button><button className="rounded-xl border px-4 py-2" onClick={() => { setShowDeleted(v => !v); setDraft(null); }}>{showDeleted ? 'Xem bài đang dùng' : 'Xem bài đã xóa'}</button></div>
     <div className="flex flex-wrap gap-2"><input className="min-w-0 flex-1 rounded-xl border p-3" placeholder="Tìm theo mã, tên hoặc nội dung đề..." value={query} onChange={e => setQuery(e.target.value)}/><select className="rounded-xl border p-3" value={grade} onChange={e => setGrade(Number(e.target.value))}><option value={0}>Tất cả lớp</option>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></div>
-    <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.</p>
+    <label className="inline-flex items-center gap-2 rounded-lg border border-violet-200 px-3 py-2 text-sm font-semibold text-violet-900">
+      <input type="checkbox" checked={reviewIncomplete} onChange={e => setReviewIncomplete(e.target.checked)} />
+      Rà soát bài thiếu học liệu (lớp 1–5)
+    </label>
+    <p className="text-sm text-stone-600">Tìm thấy {visible.length} bài.{reviewIncomplete ? ' Chọn bài để tạo và duyệt gợi ý; chỉ lưu khi giáo viên xác nhận.' : ''}</p>
     <div className="grid gap-4 lg:grid-cols-[minmax(220px,1fr)_minmax(0,2fr)]">
       <div className="max-h-[600px] overflow-y-auto space-y-2 rounded-xl border p-2">{visible.map(t => <button key={t.id} className={`w-full text-left rounded-xl border p-3 ${draft?.id === t.id ? 'border-emerald-600 bg-emerald-50' : ''}`} onClick={() => edit(t)}><span className="text-xs text-stone-500">Lớp {t.grade} · {displayTaskCodes[t.id] || t.id} · Tập {t.volume}</span><div className="font-semibold">{t.title}</div><div className="text-sm line-clamp-2">{t.prompt}</div></button>)}{!visible.length && <p className="p-3">Không có bài phù hợp.</p>}</div>
       <div className="space-y-3 min-w-0">{draft ? <>
