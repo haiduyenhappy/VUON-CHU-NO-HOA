@@ -77,7 +77,7 @@ const phongTraoNewsSupport = (prompt: string) => {
   };
 };
 // Nhận diện các lựa chọn tường minh, không suy diễn thành hướng viết khi đề không có lựa chọn.
-const inferExplicitWays = (task: ManagedWritingTask): string[] => {
+export const inferExplicitWays = (task: ManagedWritingTask): string[] => {
   const prompt = (task.prompt || '').trim();
   const p = prompt.toLocaleLowerCase('vi');
   // Với bài cũ, đề gốc là nguồn xác định các lựa chọn, kể cả khi Firebase
@@ -433,7 +433,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     }
     setDraft(copy); setPreview(false); setMessage(''); setImagePreview('');
     setSelectedImage(null); setGenerated(!!copy.id);
-    if (copy.id) void loadActualContent(copy);
+    if (copy.id && !copy.suggestedQuestions?.some(Boolean)) void loadActualContent(copy);
   };
   const change = (key: keyof ManagedWritingTask, value: unknown) => setDraft(prev => prev ? ({ ...prev, [key]: value }) : prev);
   const generateQuickWishes = () => {
@@ -530,9 +530,9 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><label className="font-semibold">Lớp<select className="mt-1 block w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade',Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label className="font-semibold">Tập<select className="mt-1 block w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume',Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
           </div>
           <div className="rounded-2xl border border-violet-300 bg-violet-50/30 p-4 space-y-3">
-            <h4 className="text-lg font-bold">Các cách viết – chỉnh sửa học liệu riêng</h4>
-            <p className="text-sm">Ứng dụng tự khôi phục các lựa chọn từ đề gốc, kể cả bài đã lưu trước đây. Mỗi hướng có học liệu riêng; cô kiểm tra rồi lưu bài để đồng bộ Firebase.</p>
-            <label className="block font-semibold">Danh sách các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="mt-1 block w-full rounded-lg border bg-white p-2 font-normal" value={(draft.directions || []).join('\n')} onChange={e => change('directions', lines(e.target.value))}/></label>
+            <h4 className="text-lg font-bold">Các cách viết – chỉnh sửa học liệu riêng <span className="text-xs font-normal text-violet-700">Bản 06.11.2026-R2</span></h4>
+            <p className="text-sm">Khi sửa bài đã có, ứng dụng đọc lại đề gốc và khôi phục đầy đủ lựa chọn. Chọn một hướng ở dưới để chỉnh sửa riêng mục 3–8.</p>
+            <label className="block font-semibold">Danh sách các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="mt-1 block w-full rounded-lg border bg-white p-2 font-normal" value={(multiWayVisible ? inferredTitles : (draft.directions || [])).join('\n')} onChange={e => change('directions', lines(e.target.value))}/></label>
             
             {multiWayVisible && <div className="space-y-2">
               <p className="font-semibold text-emerald-800">Đã nhận diện {displayWays.length} cách viết. Chọn hướng để chỉnh sửa đồng bộ mục 3–8.</p>
