@@ -3,7 +3,7 @@ import { firebaseAuth } from '../lib/firebase';
 import { saveCurriculumToCloud, importLocalEditsToCloud } from '../lib/curriculumSync';
 import { recognizeVietnameseImages } from '../utils/browserOcr';
 import React, { useEffect, useMemo, useState } from 'react';
-import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask } from '../data/curriculumData';
+import { getManagedCurriculumTasks, saveManagedCurriculumTask, LOCAL_TASKS_EVENT, type ManagedWritingTask, type WritingDirectionContent } from '../data/curriculumData';
 import type { GardenType, EssayGenre, PromptAnalysisData } from '../types';
 import { analyzePromptSemantics } from '../utils/promptAnalyzerEngine';
 import { getWritingWishes } from '../utils/writingWishEngine';
@@ -80,6 +80,28 @@ const newTask = (): ManagedWritingTask => ({ id: '', grade: 3, volume: 1, week: 
 export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorName }) => {
   const [tasks, setTasks] = useState<ManagedWritingTask[]>(() => getManagedCurriculumTasks(true));
   const [draft, setDraft] = useState<ManagedWritingTask | null>(null);
+  const [activeWayId, setActiveWayId] = useState<string>('');
+  const [wayMode, setWayMode] = useState(false);
+  const wayFields: (keyof WritingDirectionContent)[] = ['quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'];
+  const activeWay = draft?.directionContents?.find(w => w.id === activeWayId);
+  const updateWay = (key: keyof WritingDirectionContent, value: string[] | string) => {
+    setDraft(prev => prev ? ({...prev, directionContents: (prev.directionContents || []).map(w =>
+      w.id === activeWayId ? {...w, [key]: value} : w)}) : prev);
+  };
+  const syncWaysFromDirections = () => {
+    if (!draft) return;
+    const titles = (draft.directions || []).map(v => v.trim()).filter(Boolean);
+    const previous = draft.directionContents || [];
+    const next = titles.map((title, i) => {
+      const old = previous[i];
+      return old ? {...old, title} : {id: `cach-${i+1}`, title,
+        quickWishes: [], suggestedQuestions: [], mindMap: [], outline: [], words: [], images: [], examples: [], evaluationCriteria: []};
+    });
+    setDraft(prev => prev ? {...prev, directionContents: next} : prev);
+    setActiveWayId(next[0]?.id || '');
+    setWayMode(next.length > 1);
+  };
+
   const [syncState, setSyncState] = useState<'waiting' | 'syncing' | 'ready' | 'error'>('waiting');
   const [syncDetail, setSyncDetail] = useState('Bài cũ trên máy được giữ nguyên cho đến khi đồng bộ thành công.');
   const [query, setQuery] = useState('');
@@ -310,6 +332,9 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
         (copy.quickWishes || []).every(v => oldGenericWishes.includes(v))) {
       copy.quickWishes = getWritingWishes({prompt: copy.prompt, grade: copy.grade});
     }
+    const existingWays = copy.directionContents || [];
+    setActiveWayId(existingWays[0]?.id || '');
+    setWayMode(existingWays.length > 1);
     setDraft(copy); setPreview(false); setMessage(''); setImagePreview('');
     setSelectedImage(null); setGenerated(!!copy.id);
     if (copy.id) void loadActualContent(copy);
@@ -325,7 +350,12 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const save = async () => {
     if (!draft) return;
     if (!draft.id && !generated) { setMessage('Cô hãy tạo bài từ ảnh trước khi lưu.'); return; }
-    if (draft.mindMap?.filter(Boolean).length !== 5 || draft.outline?.filter(Boolean).length !== 3 || !draft.suggestedQuestions?.some(Boolean) || !draft.words?.some(Boolean) || !draft.evaluationCriteria?.some(Boolean)) { setMessage('Chưa đủ 5 nhánh, 3 phần dàn ý, câu hỏi gợi ý, từ ngữ hoặc tiêu chí đánh giá. Cô kiểm tra trước khi lưu.'); return; }
+    if (!wayMode && (draft.mindMap?.filter(Boolean).length !== 5 || draft.outline?.filter(Boolean).length !== 3 || !draft.suggestedQuestions?.some(Boolean) || !draft.words?.some(Boolean) || !draft.evaluationCriteria?.some(Boolean))) { setMessage('Chưa đủ 5 nhánh, 3 phần dàn ý, câu hỏi gợi ý, từ ngữ hoặc tiêu chí đánh giá. Cô kiểm tra trước khi lưu.'); return; }
+    if (wayMode && (!draft.directionContents || draft.directionContents.length < 2 || draft.directionContents.some(w =>
+      !w.title.trim() || (w.mindMap || []).filter(Boolean).length !== 5 || (w.outline || []).filter(Boolean).length !== 3 ||
+      !(w.suggestedQuestions || []).some(Boolean) || !(w.words || []).some(Boolean) || !(w.evaluationCriteria || []).some(Boolean)))) {
+      setMessage('Mỗi cách viết cần đủ 5 nhánh, 3 phần dàn ý, câu hỏi, từ ngữ và tiêu chí. Cô kiểm tra từng cách trước khi lưu.'); return;
+    }
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
@@ -402,7 +432,22 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <h4 className="text-lg font-bold">📚 2. Chọn khối lớp và tập</h4>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><label className="font-semibold">Lớp<select className="mt-1 block w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade',Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label className="font-semibold">Tập<select className="mt-1 block w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume',Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
           </div>
-          <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
+          <div className="rounded-2xl border border-violet-300 bg-violet-50/30 p-4 space-y-3">
+            <h4 className="text-lg font-bold">Các cách viết – chỉnh sửa học liệu riêng</h4>
+            <p className="text-sm">Nhập mỗi hướng viết một dòng tại mục 4, sau đó bấm “Tạo khu vực chỉnh sửa theo các hướng”. Dữ liệu từng hướng được lưu riêng trong cùng một bài.</p>
+            <label className="block font-semibold">Danh sách các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="mt-1 block w-full rounded-lg border bg-white p-2 font-normal" value={(draft.directions || []).join('\n')} onChange={e => change('directions', lines(e.target.value))}/></label>
+            <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={syncWaysFromDirections}>Tạo khu vực chỉnh sửa theo các hướng</button>
+            {wayMode && <>
+              <div className="flex flex-wrap gap-2">{(draft.directionContents || []).map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-3 py-2 font-semibold ${activeWayId === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
+              {activeWay && <div className="space-y-4 rounded-xl border bg-white p-3">
+                <h5 className="font-bold text-violet-900">Đang chỉnh sửa: {activeWay.title}</h5>
+                <label className="block font-semibold">Mong muốn mặc định<input className="mt-1 block w-full rounded-lg border p-2 font-normal" value={activeWay.defaultWish || ''} onChange={e=>updateWay('defaultWish',e.target.value)}/></label>
+                {(['quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'] as const).map((field) => <label key={field} className="block font-semibold">{{quickWishes:'Gợi ý chọn nhanh',suggestedQuestions:'Câu hỏi khơi mở',mindMap:'Sơ đồ tư duy – 5 nhánh',outline:'Dàn ý – 3 phần',words:'Từ hay',images:'Hình ảnh gợi ý',examples:'Câu mẫu',evaluationCriteria:'Tiêu chí đánh giá'}[field]}<textarea rows={field==='mindMap'?10:field==='outline'?7:4} className="mt-1 block w-full rounded-lg border p-2 font-normal" value={(activeWay[field] || []).join('\n')} onChange={e=>updateWay(field,lines(e.target.value))}/></label>)}
+                <p className="text-xs text-stone-600">Mỗi dòng là một ý. Sơ đồ cần 5 dòng và dàn ý cần 3 dòng. Chuyển cách viết không làm mất nội dung vừa nhập.</p>
+              </div>}
+            </>}
+          </div>
+          {!wayMode && <>          <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold">🌟 3. Con muốn bài viết của mình có điều gì đặc biệt?</h4>
             <label className="block font-semibold">Gợi ý chọn nhanh cho học sinh<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.quickWishes || []).join('\n')} onChange={e => change('quickWishes',lines(e.target.value))}/></label>
             <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 text-white font-semibold" onClick={generateQuickWishes}>Tạo gợi ý chọn nhanh</button>
@@ -433,6 +478,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-3">{listFields.filter(f => ['words','images','examples'].includes(f.key)).map(f => <label key={f.key} className="rounded-xl border bg-pink-50 p-3 font-semibold">{f.label}<textarea rows={7} className="mt-2 block w-full rounded-lg border bg-white p-3 font-normal" value={((draft[f.key] as string[] | undefined) || []).join('\n')} onChange={e => change(f.key,lines(e.target.value))}/></label>)}</div>
             <label className="block font-semibold">Tiêu chí đánh giá<textarea rows={4} className="mt-1 block w-full rounded-xl border p-3 font-normal" value={(draft.evaluationCriteria || []).join('\n')} onChange={e => change('evaluationCriteria',lines(e.target.value))}/></label>
           </div>
+          </>}
         </>)}
         {(!!draft.id || generated) && <div className="flex flex-wrap gap-2"><button className="rounded-xl bg-emerald-700 px-5 py-3 text-white font-bold" onClick={save} disabled={savingCloud}>{savingCloud ? 'Đang đồng bộ...' : 'Lưu bài'}</button>{draft.id && <button className="rounded-xl border border-red-300 px-4 py-3 text-red-700" onClick={toggleDeleted} disabled={savingCloud}>{draft.deleted ? 'Khôi phục' : 'Xóa bài'}</button>}<button className="rounded-xl border px-4 py-3" onClick={() => setDraft(null)}>Đóng</button></div>}
       </> : <p className="rounded-xl bg-stone-50 p-5">Chọn bài trong danh sách để xem và chỉnh sửa.</p>}</div>
