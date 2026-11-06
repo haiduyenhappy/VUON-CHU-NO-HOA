@@ -730,8 +730,18 @@ export function readTaskOverrides(): Record<string, ManagedWritingTask> {
     return value && typeof value === 'object' && !Array.isArray(value) ? value : {};
   } catch { return {}; }
 }
+// Firestore snapshot is the shared source of truth; local overrides remain a fallback
+// until the remote snapshot is received.
+let remoteTaskOverrides: Record<string, ManagedWritingTask> | null = null;
+export function setRemoteTaskOverrides(items: Record<string, ManagedWritingTask>): void {
+  remoteTaskOverrides = items;
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(LOCAL_TASKS_EVENT));
+}
 export function getManagedCurriculumTasks(includeDeleted = false): ManagedWritingTask[] {
-  const overrides = readTaskOverrides();
+  const local = readTaskOverrides();
+  const overrides = remoteTaskOverrides === null ? local : Object.fromEntries(
+    Object.entries(remoteTaskOverrides).map(([key, task]) => [task.id, task])
+  );
   const originalIds = new Set(CURRICULUM_TASKS.map(t => t.id));
   const merged = CURRICULUM_TASKS.map(t => ({ ...t, ...(overrides[t.id] || {}) }));
   for (const task of Object.values(overrides)) {
