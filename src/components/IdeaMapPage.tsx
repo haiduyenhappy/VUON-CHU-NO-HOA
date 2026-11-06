@@ -1,4 +1,4 @@
-import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT } from '../data/curriculumData';
+import { getManagedCurriculumTasks, LOCAL_TASKS_EVENT, type WritingDirectionContent } from '../data/curriculumData';
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   Student, 
@@ -202,6 +202,17 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
     void localTasksVersion;
     return getManagedCurriculumTasks().find(t => t.grade === grade && t.prompt.trim() === promptText.trim());
   }, [grade, promptText, localTasksVersion]);
+  // Nội dung giáo viên duyệt có quyền ưu tiên khi học sinh chọn hướng viết.
+  const managedDirections = useMemo(() => (editedTask?.directionContents || []).filter(w => w.title.trim()), [editedTask]);
+  const resolveManagedWay = (id: string | null, available: PromptDirection[]): WritingDirectionContent | undefined => {
+    if (!id || managedDirections.length < 2) return undefined;
+    const position = available.findIndex(d => d.id === id);
+    const normalized = (v: string) => v.toLocaleLowerCase('vi').normalize('NFC').trim();
+    const title = available[position]?.title || '';
+    return managedDirections.find(w => w.id === id) ||
+      managedDirections.find(w => normalized(w.title) === normalized(title)) ||
+      (position >= 0 && available.length === managedDirections.length ? managedDirections[position] : undefined);
+  };
   const [specialWishes, setSpecialWishes] = useState<string>('Viết đúng yêu cầu đề bài, dùng lời văn tự nhiên.');
 
 
@@ -715,12 +726,19 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
         if (currentVersion !== promptVersionRef.current) return;
 
         setLastAnalyzedPrompt(promptText.trim());
-        setHasMultipleDirections(deepData.hasMultipleDirections || false);
-        setDetectedDirections(deepData.detectedDirections || []);
-        setSelectedDirectionId(deepData.selectedDirectionId || null);
-        setSelectedDirectionTitle(deepData.selectedDirectionTitle || '');
+        const teacherDirections: PromptDirection[] = managedDirections.length > 1
+          ? managedDirections.map((w, i) => ({ id: w.id || `cach-${i+1}`, title: w.title,
+              mainObject: w.title, scope: `Chỉ viết về ${w.title}; không trộn hướng khác.`, icon: '🌸' })) : [];
+        const displayDirections = teacherDirections.length > 1 ? teacherDirections : (deepData.detectedDirections || []);
+        const selectedTeacherWay = resolveManagedWay(dirIdToSend, displayDirections);
+        const displaySelectedId = selectedTeacherWay ? (dirIdToSend || selectedTeacherWay.id) : deepData.selectedDirectionId;
+        const displayHasMultiple = displayDirections.length > 1 || !!deepData.hasMultipleDirections;
+        setHasMultipleDirections(displayHasMultiple);
+        setDetectedDirections(displayDirections);
+        setSelectedDirectionId(displaySelectedId || null);
+        setSelectedDirectionTitle(selectedTeacherWay?.title || deepData.selectedDirectionTitle || '');
 
-        setChoiceType(deepData.choiceType || 'none');
+        setChoiceType(teacherDirections.length > 1 ? 'direction_selection' : (deepData.choiceType || 'none'));
         setObjectChoiceQuestion(deepData.objectChoiceQuestion || 'Con muốn tả đồ vật nào?');
         setAvailableObjects(deepData.availableObjects || []);
         setSelectedObjectId(deepData.selectedObjectId || null);
@@ -761,7 +779,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
         // TRƯỜNG HỢP ĐỀ CÓ 2 HƯỚNG VÀ CHƯA CHỌN:
         // Hướng dẫn học sinh chọn hướng trước, KHÔNG tự ý tạo dàn ý
-        if (deepData.hasMultipleDirections && !deepData.selectedDirectionId) {
+        if (displayHasMultiple && !displaySelectedId) {
           setMindMapBranches([]);
           setDetailedOutline({ moDoan: [], phatTrienDoan: [], ketDoan: [] });
           setActiveOutline([]);
@@ -769,7 +787,7 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
 
           setUnderstanding({
             target: promptText.trim(),
-            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!',
+            genreEvaluation: deepData.hoaNhoUnderstand || 'Đề bài có nhiều cách viết. Con hãy chọn một cách mà mình yêu thích nhé!',
             contentRequirements: deepData.specificRequirements || [
               'Con hãy chọn một trong hai hướng viết bên trên để bắt đầu lập dàn ý nhé!'
             ],
@@ -806,6 +824,32 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
           }
           if (deepData.vocabularySuggestions) {
             setVocabBank(deepData.vocabularySuggestions);
+          }
+          if (selectedTeacherWay) {
+            const way = selectedTeacherWay;
+            if (way.mindMap?.length === 5 && way.mindMap.every(Boolean)) {
+              setMindMapBranches(way.mindMap.map((value, i) => {
+                const [title, ...points] = value.split('\n').map(v => v.trim()).filter(Boolean);
+                return { id: `teacher-${i+1}`, title: title || `Nhánh ${i+1}`,
+                  icon: ['🌱','🌸','📝','⭐','💡'][i], color: ['green','purple','yellow','blue','pink'][i], points };
+              }));
+            }
+            if (way.outline?.length === 3 && way.outline.every(Boolean)) {
+              const outline = { moDoan: [way.outline[0]], phatTrienDoan: [way.outline[1]], ketDoan: [way.outline[2]] };
+              setDetailedOutline(outline);
+              const items = way.outline.map((content,i) => ({ id: String(i+1),
+                section: ['Mở đầu','Nội dung chính','Kết thúc'][i], content }));
+              setActiveOutline(items);
+              setInitialOutlineBackup(items);
+            }
+            if (way.words?.length || way.images?.length || way.examples?.length) {
+              setVocabBank({
+                goodWords: (way.words || []).map(v => { const n=v.indexOf(':'); return {word:n>=0?v.slice(0,n).trim():v,meaningAndUsage:n>=0?v.slice(n+1).trim():''}; }),
+                imageries: (way.images || []).map(v => ({type:'Gợi ý hình ảnh',example:v,explanation:'Quan sát thực tế trước khi sử dụng'})),
+                sampleSentences: (way.examples || []).map((v,i) => ({type:(['mo_bai','mieu_ta','ket_bai'][Math.min(i,2)] as 'mo_bai'|'mieu_ta'|'ket_bai'),label:'Gợi ý cách viết',sentence:v,whyItIsGood:'Chỉ tham khảo cách diễn đạt'})),
+                creativeIdeas: []
+              });
+            }
           }
           if (deepData.socraticQuestions && deepData.socraticQuestions.length > 0) {
             setSocraticQuestion(deepData.socraticQuestions[0]);
@@ -2386,10 +2430,10 @@ export const IdeaMapPage: React.FC<IdeaMapPageProps> = ({
               <div className="p-4 bg-white/95 rounded-2xl border-2 border-pink-300 shadow-xs space-y-2">
                 <div className="flex items-center gap-2 text-pink-900 font-extrabold text-sm sm:text-base font-display">
                   <span>✨</span>
-                  <span>Đề bài cho con hai cách viết. Con hãy chọn một cách mà mình yêu thích nhé!</span>
+                  <span>Đề bài có nhiều cách viết. Con hãy chọn một cách mà mình yêu thích nhé!</span>
                 </div>
                 <p className="text-xs sm:text-sm text-stone-600 font-medium">
-                  Hoa Nhỏ đã phân tích thấy đề bài mở ra 2 hướng viết khác nhau. Con hãy bấm chọn một hướng dưới đây để cùng Hoa Nhỏ lập sơ đồ 5 nhánh và dàn ý bám sát hướng đó:
+                  Hoa Nhỏ đã nhận diện các hướng viết khác nhau trong đề bài. Con hãy bấm chọn một hướng dưới đây để cùng Hoa Nhỏ lập sơ đồ 5 nhánh và dàn ý bám sát hướng đó:
                 </p>
               </div>
 

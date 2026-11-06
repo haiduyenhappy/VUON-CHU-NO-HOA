@@ -77,12 +77,15 @@ const phongTraoNewsSupport = (prompt: string) => {
   };
 };
 // Nhận diện các lựa chọn tường minh, không suy diễn thành hướng viết khi đề không có lựa chọn.
+// Nguồn chung: các hướng đã được giáo viên lưu được ưu tiên; bộ phân tích chỉ đề xuất.
 const inferExplicitWays = (task: ManagedWritingTask): string[] => {
-  const p = task.prompt.toLocaleLowerCase('vi');
-  if (/bút chì/.test(p) && /hộp bút/.test(p) && /hoặc/.test(p)) return ['Viết về chiếc bút chì', 'Viết về hộp bút'];
-  if (/ngôi trường/.test(p) && /góc sân trường/.test(p) && /hoặc/.test(p)) return ['Tả ngôi trường của em', 'Tả một góc sân trường em yêu thích'];
-  if (/kế hoạch nhỏ/.test(p) && /đôi bạn cùng tiến/.test(p) && /hoặc/.test(p)) return ['Bản tin về phong trào Kế hoạch nhỏ', 'Bản tin về phong trào Đôi bạn cùng tiến'];
-  return (task.directions || []).filter(Boolean);
+  const saved = (task.directionContents || []).map(w => w.title.trim()).filter(Boolean);
+  if (saved.length > 1) return saved;
+  const configured = (task.directions || []).map(v => v.trim()).filter(Boolean);
+  if (configured.length > 1) return configured;
+  const semantic = analyzePromptSemantics(task.prompt, task.grade);
+  const detected = (semantic.detectedDirections || []).map(d => d.title.trim()).filter(Boolean);
+  return semantic.hasMultipleDirections && detected.length > 1 ? detected : [];
 };
 const makeWayContent = (title: string, index: number): WritingDirectionContent => {
   const isPencil = /bút chì/i.test(title);
@@ -117,7 +120,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     const titles = (draft.directions || []).map(v => v.trim()).filter(Boolean);
     const previous = draft.directionContents || [];
     const next = titles.map((title, i) => {
-      const old = previous[i];
+      const old = previous.find(w => w.title.trim() === title) || previous.find(w => w.id === `cach-${i+1}` && w.title.trim() === title);
       return old ? {...old, title} : makeWayContent(title, i);
     });
     setDraft(prev => prev ? {...prev, directionContents: next} : prev);
@@ -360,7 +363,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       const existingWays = copy.directionContents || [];
       copy.directions = titles;
       copy.directionContents = titles.map((title, i) => {
-        const old = existingWays.find(w => w.id === `cach-${i+1}`) || existingWays[i];
+        const old = existingWays.find(w => w.title.trim() === title) || existingWays[i];
         return old ? { ...old, title } : makeWayContent(title, i);
       });
       setActiveWayId(copy.directionContents[0].id);
@@ -393,7 +396,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
-    const updated = { ...draft, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
+    const updated = { ...draft, directionContents: wayMode ? draft.directionContents : undefined, id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
     setSavingCloud(true);
     try {
       await saveCurriculumToCloud(updated);
