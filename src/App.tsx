@@ -6,7 +6,7 @@ import { subscribeCurriculum } from './lib/curriculumSync';
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Student, AppSettings, EssayGenre, OutlineItem, Submission, AuthUser } from './types';
 import { INITIAL_STUDENTS } from './data/studentsData';
 import { TEACHER_CONFIG } from './constants/teacherConfig';
@@ -39,7 +39,7 @@ export default function App() {
     return null;
   });
 
-  const [currentView, setCurrentView] = useState<AppView>(() => {
+  const [currentView, rawSetCurrentView] = useState<AppView>(() => {
     try {
       const saved = localStorage.getItem('vuonchu_auth_session');
       if (saved) {
@@ -51,6 +51,27 @@ export default function App() {
     } catch (e) {}
     return 'home';
   });
+
+  // Internal navigation history: back returns to the immediately preceding screen,
+  // not unconditionally to the home page. The stack is reset on sign-in/sign-out.
+  const viewRef = useRef<AppView>(currentView);
+  const viewHistory = useRef<AppView[]>([]);
+  const setCurrentView = (next: AppView) => {
+    const previous = viewRef.current;
+    if (next === previous) return;
+    viewHistory.current.push(previous);
+    viewRef.current = next;
+    rawSetCurrentView(next);
+  };
+  const goBack = () => {
+    const previous = viewHistory.current.pop();
+    const fallback: AppView = currentUser?.role === 'teacher' ? 'teacher'
+      : currentUser?.role === 'student' ? 'student'
+      : currentUser?.role === 'family' ? 'family' : 'home';
+    const next = previous || (viewRef.current === fallback ? 'home' : fallback);
+    viewRef.current = next;
+    rawSetCurrentView(next);
+  };
 
   // Track the previous view so back buttons navigate to the exact caller without losing state or session
   const [returnToView, setReturnToView] = useState<AppView>('home');
@@ -140,6 +161,7 @@ export default function App() {
 
   // Login handler
   const handleLoginSuccess = (user: AuthUser) => {
+    viewHistory.current = [];
     setCurrentUser(user);
     try {
       localStorage.setItem('vuonchu_auth_session', JSON.stringify(user));
@@ -163,6 +185,7 @@ export default function App() {
   // Logout handler
   const handleLogout = () => {
     playPop(settings.soundEnabled);
+    viewHistory.current = [];
     setCurrentUser(null);
     if (firebaseAuth) void signOut(firebaseAuth).catch(console.error);
     try {
@@ -329,7 +352,7 @@ export default function App() {
             students={students}
             settings={settings}
             onLoginSuccess={handleLoginSuccess}
-            onBackToHome={() => setCurrentView('home')}
+            onBackToHome={goBack}
           />
         )}
 
@@ -340,7 +363,7 @@ export default function App() {
             students={students}
             settings={settings}
             onLoginSuccess={handleLoginSuccess}
-            onBackToHome={() => setCurrentView('home')}
+            onBackToHome={goBack}
           />
         )}
 
@@ -351,7 +374,7 @@ export default function App() {
             students={students}
             settings={settings}
             onLoginSuccess={handleLoginSuccess}
-            onBackToHome={() => setCurrentView('home')}
+            onBackToHome={goBack}
           />
         )}
 
@@ -366,7 +389,7 @@ export default function App() {
             onProceedToWrite={handleProceedToWrite}
             onBackToGarden={() => {
               playPop(settings.soundEnabled);
-              setCurrentView(returnToView || (currentUser?.role || 'home'));
+              goBack();
             }}
           />
         )}
@@ -382,10 +405,7 @@ export default function App() {
             initialSpecialWishes={sharedSpecialWishes}
             initialOutline={sharedOutline}
             initialEssayText={sharedEssayText}
-            onBackToIdeaMap={() => {
-              playPop(settings.soundEnabled);
-              setCurrentView('idea_map');
-            }}
+            onBackToIdeaMap={() => { playPop(settings.soundEnabled); goBack(); }}
             onSaveSubmission={handleSaveSubmission}
             onOpenProgressGarden={() => {
               setReturnToView('essay_feedback');
@@ -403,7 +423,7 @@ export default function App() {
             onResumeSubmission={handleResumeSubmission}
             onBack={() => {
               playPop(settings.soundEnabled);
-              setCurrentView(returnToView || (currentUser?.role || 'home'));
+              goBack();
             }}
           />
         )}
@@ -415,7 +435,7 @@ export default function App() {
               student={activeStudent}
               settings={settings}
               onUpdateStudent={handleUpdateStudent}
-              onBackToGarden={() => setCurrentView('home')}
+              onBackToGarden={goBack}
               onOpenProgressGarden={() => {
                 setReturnToView('student');
                 setCurrentView('progress_journey');
@@ -439,7 +459,7 @@ export default function App() {
               students={students}
               settings={settings}
               onLoginSuccess={handleLoginSuccess}
-              onBackToHome={() => setCurrentView('home')}
+              onBackToHome={goBack}
             />
           )
         )}
@@ -449,7 +469,7 @@ export default function App() {
           currentUser?.role === 'teacher' && currentUser.teacherRole === 'SUPER_ADMIN' ? (
             <AdminSystemPortal
               currentUser={currentUser}
-              onBackToHome={() => setCurrentView('home')}
+              onBackToHome={goBack}
               onGoToTeacherClass={() => setCurrentView('teacher')}
             />
           ) : (
@@ -458,7 +478,7 @@ export default function App() {
               students={students}
               settings={settings}
               onLoginSuccess={handleLoginSuccess}
-              onBackToHome={() => setCurrentView('home')}
+              onBackToHome={goBack}
             />
           )
         )}
@@ -470,7 +490,7 @@ export default function App() {
               currentUser={currentUser}
               students={students}
               settings={settings}
-              onBackToGarden={() => setCurrentView('home')}
+              onBackToGarden={goBack}
               onRefreshStudents={loadStudents}
               onGoToAdminSystem={() => setCurrentView('admin_system')}
             />
@@ -480,7 +500,7 @@ export default function App() {
               students={students}
               settings={settings}
               onLoginSuccess={handleLoginSuccess}
-              onBackToHome={() => setCurrentView('home')}
+              onBackToHome={goBack}
             />
           )
         )}
@@ -491,7 +511,7 @@ export default function App() {
             <FamilyPortal
               student={activeStudent}
               settings={settings}
-              onBackToGarden={() => setCurrentView('home')}
+              onBackToGarden={goBack}
               onOpenProgressGarden={() => {
                 setReturnToView('family');
                 setCurrentView('progress_journey');
@@ -503,7 +523,7 @@ export default function App() {
               students={students}
               settings={settings}
               onLoginSuccess={handleLoginSuccess}
-              onBackToHome={() => setCurrentView('home')}
+              onBackToHome={goBack}
             />
           )
         )}
@@ -514,7 +534,7 @@ export default function App() {
             settings={settings}
             onBack={() => {
               playPop(settings.soundEnabled);
-              setCurrentView(returnToView || 'home');
+              goBack();
             }}
           />
         )}
