@@ -88,6 +88,15 @@ export const inferExplicitWays = (task: ManagedWritingTask): string[] => {
     return ['Tả ngôi trường của em', 'Tả một góc sân trường em yêu thích'];
   if (/kế hoạch nhỏ/.test(p) && /đôi bạn cùng tiến/.test(p) && /hoặc/.test(p))
     return ['Bản tin về phong trào Kế hoạch nhỏ', 'Bản tin về phong trào Đôi bạn cùng tiến'];
+  // Bộ phân tích trả về availableObjects (không phải detectedDirections)
+  // cho các đề lựa chọn đối tượng như bố/mẹ/ông/bà, con vật, đồ vật.
+  const analysis = analyzePromptSemantics(prompt, task.grade);
+  const objectNames = (analysis.availableObjects || [])
+    .map(item => item.name?.trim()).filter((name): name is string => !!name);
+  if (objectNames.length > 1) {
+    const unique = [...new Map(objectNames.map(name => [wayKey(name), name])).values()];
+    if (unique.length > 1) return unique.map(name => `Viết về ${name.toLocaleLowerCase('vi')}`);
+  }
   const semantic = (analyzePromptSemantics(prompt, task.grade).detectedDirections || [])
     .map(d => d.title?.trim()).filter((v): v is string => !!v);
   if (semantic.length > 1 && new Set(semantic.map(v => v.toLocaleLowerCase('vi'))).size === semantic.length)
@@ -127,7 +136,22 @@ const reconcileWays = (task: ManagedWritingTask, titles: string[]): WritingDirec
 const makeWayContent = (title: string, index: number): WritingDirectionContent => {
   const isPencil = /bút chì/i.test(title);
   const isBox = /hộp bút/i.test(title);
-  const subject = isPencil ? 'chiếc bút chì' : isBox ? 'hộp bút' : title.toLocaleLowerCase('vi');
+  const familyMatch = title.match(/(?:viết về\s*)?(bố|mẹ|ông|bà)$/i);
+  const family = familyMatch?.[1]?.toLocaleLowerCase('vi');
+  const subject = isPencil ? 'chiếc bút chì' : isBox ? 'hộp bút' : family ? family : title.toLocaleLowerCase('vi');
+  if (family) return {
+    id: `cach-${index + 1}`, title,
+    quickWishes: [`Con chọn viết về ${family}`, `Nhớ một việc ${family} đã làm cho con`, `Nói tình cảm thật của con dành cho ${family}`],
+    defaultWish: `Viết 1–2 câu thể hiện tình cảm yêu thương với ${family}, bằng lời của con.`,
+    suggestedQuestions: [`${family.charAt(0).toUpperCase() + family.slice(1)} đã làm điều gì khiến con cảm thấy được yêu thương?`, `Con muốn nói điều gì với ${family}?`],
+    mindMap: [`Người con chọn\n${family}`, `Việc làm của ${family}\nCon nhớ việc gì?`, `Tình cảm của con\nCon yêu thương ${family} ra sao?`, `Lời muốn nói\nCon muốn nói gì với ${family}?`, `Viết 1–2 câu\nChọn một ý thật nhất để viết`],
+    outline: [`Chọn ${family} làm người con muốn viết về.`, `Viết 1 câu về tình cảm hoặc việc làm của ${family}; nếu cần, viết thêm 1 câu bày tỏ tình cảm của con.`, `Đọc lại và dừng ở 1–2 câu theo đề; không bắt buộc viết đoạn ba phần.`],
+    words: ['yêu thương', 'ấm áp', 'quan tâm', 'chăm sóc', 'kính yêu'],
+    images: [`Một việc có thật ${family} đã làm khiến con nhớ`],
+    examples: [`Con rất yêu ${family} vì ${family} luôn quan tâm đến con.`, `${family.charAt(0).toUpperCase() + family.slice(1)} ơi, con yêu ${family} nhiều lắm!`],
+    evaluationCriteria: [`Chỉ viết về ${family}, không trộn người thân khác.`, 'Đúng 1–2 câu theo đề.', 'Tình cảm chân thật, câu rõ nghĩa, có dấu câu.']
+  };
+
   return {
     id: `cach-${index + 1}`, title,
     quickWishes: [`Con muốn viết về ${subject}`, `Chọn một đặc điểm nổi bật của ${subject}`, 'Nói điều con thích nhất'],
