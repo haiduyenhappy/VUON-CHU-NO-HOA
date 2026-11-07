@@ -105,6 +105,7 @@ export const inferExplicitWays = (task: ManagedWritingTask): string[] => {
   if (saved.length > 1) return saved;
   const manual = (task.directions || []).map(v => v.trim()).filter(Boolean);
   return manual.length > 1 ? manual : [];
+
 };
 const wayKey = (s: string) => s.toLocaleLowerCase('vi').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/[^a-z0-9]+/g, ' ').trim();
 const sameWay = (a: string, b: string) => {
@@ -116,7 +117,7 @@ const reconcileWays = (task: ManagedWritingTask, titles: string[]): WritingDirec
   const existing = task.directionContents || [];
   return titles.map((title, index) => {
     const old = existing.find(w => sameWay(w.title, title));
-    if (old) return {...old, title, id: `cach-${index + 1}`};
+    if (old) return {...old, title};
     // Dữ liệu một hướng của bài cũ chỉ được chuyển sang hướng cùng đối tượng.
     const legacy = (task.directions || []).length === 1 && sameWay(task.directions![0], title);
     const base = makeWayContent(title, index);
@@ -170,10 +171,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
   const [draft, setDraft] = useState<ManagedWritingTask | null>(null);
   const [activeWayId, setActiveWayId] = useState<string>('');
   const [wayMode, setWayMode] = useState(false);
+  const [newWayTitle, setNewWayTitle] = useState('');
   const wayFields: (keyof WritingDirectionContent)[] = ['quickWishes','suggestedQuestions','mindMap','outline','words','images','examples','evaluationCriteria'];
   const inferredTitles = draft ? inferExplicitWays(draft) : [];
-  const displayWays = draft && inferredTitles.length > 1 ? reconcileWays(draft, inferredTitles) : (draft?.directionContents || []);
-  const multiWayVisible = inferredTitles.length > 1 || (draft?.directionContents?.length || 0) > 1;
+  const displayWays = draft?.directionContents || [];
+  const multiWayVisible = displayWays.length > 1;
   const activeWay = displayWays.find(w => w.id === activeWayId) || displayWays[0];
   const updateWay = (key: keyof WritingDirectionContent, value: string[] | string) => {
     setDraft(prev => prev ? ({...prev, directionContents: (prev.directionContents || []).map(w =>
@@ -201,19 +203,48 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     setMessage(next.length > 1 ? `Đã tạo ${next.length} hướng viết độc lập. Cô kiểm tra học liệu từng hướng trước khi lưu.` : 'Đề chưa có hai hướng rõ ràng. Cô nhập mỗi hướng một dòng.');
   };
 
-  // Tự khôi phục hướng bị thiếu của bài cũ; không yêu cầu giáo viên bấm nút.
-  useEffect(() => {
+  // Chỉ tự nhận diện khi mở bài hoặc khi giáo viên chủ động yêu cầu.
+  // Không ghi đè hướng giáo viên vừa thêm, đổi tên hoặc xóa trong khi chỉnh sửa.
+  const addWay = (titleInput: string) => {
     if (!draft) return;
-    const titles = inferExplicitWays(draft);
-    if (titles.length < 2) { if (wayMode) setWayMode(false); return; }
+    const title = titleInput.trim();
+    if (!title) { setMessage('Cô nhập tên hướng viết trước.'); return; }
     const current = draft.directionContents || [];
-    const same = current.length === titles.length && current.every((w, i) => w.title === titles[i]);
-    if (!same || (draft.directions || []).join('\n') !== titles.join('\n')) {
-      setDraft(prev => prev ? {...prev, directions: titles, directionContents: reconcileWays(prev, titles)} : prev);
+    if (current.some(w => sameWay(w.title, title))) { setMessage('Hướng viết này đã có.'); return; }
+    const id = `huong-${Date.now()}-${current.length}`;
+    const content = {...makeWayContent(title, current.length), id};
+    const next = [...current, content];
+    setDraft(prev => prev ? {...prev, directions: next.map(w => w.title), directionContents: next} : prev);
+    setActiveWayId(id); setWayMode(next.length > 1); setNewWayTitle(''); setMessage('Đã thêm hướng. Cô kiểm tra nội dung mục 3–8 rồi lưu bài.');
+  };
+  const renameWay = (id: string, title: string) => {
+    setDraft(prev => {
+      if (!prev) return prev;
+      const next = (prev.directionContents || []).map(w => w.id === id ? {...w, title} : w);
+      return {...prev, directionContents: next, directions: next.map(w => w.title)};
+    });
+  };
+  const removeWay = (id: string) => {
+    if (!draft) return;
+    if (!window.confirm('Xóa hướng viết này khỏi bài? Nội dung của các hướng khác được giữ nguyên.')) return;
+    const next = (draft.directionContents || []).filter(w => w.id !== id);
+    setDraft(prev => prev ? {...prev, directionContents: next, directions: next.map(w => w.title)} : prev);
+    setActiveWayId(next[0]?.id || ''); setWayMode(next.length > 1);
+  };
+  const detectWays = () => {
+    if (!draft?.prompt.trim()) { setMessage('Cô nhập đề bài trước.'); return; }
+    const titles = inferExplicitWays({...draft, directions: [], directionContents: []});
+    if (titles.length < 2) { setMessage('Chưa nhận diện được nhiều hướng. Cô có thể thêm từng hướng bằng ô bên dưới.'); return; }
+    const old = draft.directionContents || [];
+    const next = [...old];
+    for (const title of titles) if (!next.some(w => sameWay(w.title, title))) {
+      const candidate = reconcileWays(draft, [title])[0];
+      next.push({...candidate, id: `huong-${Date.now()}-${next.length}`});
     }
-    if (!wayMode) setWayMode(true);
-    if (!current.some(w => w.id === activeWayId)) setActiveWayId('cach-1');
-  }, [draft?.prompt, draft?.grade, draft?.directions?.join('\n'), draft?.directionContents?.length]);
+    setDraft(prev => prev ? {...prev, directions: next.map(w => w.title), directionContents: next} : prev);
+    setActiveWayId(next[0]?.id || ''); setWayMode(next.length > 1);
+    setMessage(`Đã có ${next.length} hướng viết. Cô kiểm tra từng hướng trước khi lưu.`);
+  };
 
   const [syncState, setSyncState] = useState<'waiting' | 'syncing' | 'ready' | 'error'>('waiting');
   const [syncDetail, setSyncDetail] = useState('Bài cũ trên máy được giữ nguyên cho đến khi đồng bộ thành công.');
@@ -449,13 +480,20 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
     if (titles.length > 1) {
       copy.directions = titles;
       copy.directionContents = reconcileWays(copy, titles);
-      setActiveWayId('cach-1');
-      setWayMode(true);
-    } else {
-      setActiveWayId('');
-      setWayMode(false);
+    } else if (!copy.directionContents?.length) {
+      const title = copy.directions?.[0] || copy.title || 'Hướng viết chính';
+      copy.directionContents = [{...makeWayContent(title, 0),
+        quickWishes: copy.quickWishes?.length ? copy.quickWishes : makeWayContent(title,0).quickWishes,
+        suggestedQuestions: copy.suggestedQuestions?.length ? copy.suggestedQuestions : makeWayContent(title,0).suggestedQuestions,
+        mindMap: copy.mindMap?.length === 5 ? copy.mindMap : makeWayContent(title,0).mindMap,
+        outline: copy.outline?.length === 3 ? copy.outline : makeWayContent(title,0).outline,
+        words: copy.words?.length ? copy.words : makeWayContent(title,0).words,
+        images: copy.images || [], examples: copy.examples || [],
+        evaluationCriteria: copy.evaluationCriteria?.length ? copy.evaluationCriteria : makeWayContent(title,0).evaluationCriteria}];
     }
-    setDraft(copy); setPreview(false); setMessage(''); setImagePreview('');
+    setActiveWayId(copy.directionContents?.[0]?.id || '');
+    setWayMode((copy.directionContents?.length || 0) > 1);
+    setNewWayTitle(''); setDraft(copy); setPreview(false); setMessage(''); setImagePreview('');
     setSelectedImage(null); setGenerated(!!copy.id);
     if (copy.id && !copy.suggestedQuestions?.some(Boolean)) void loadActualContent(copy);
   };
@@ -477,10 +515,11 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
       !(w.suggestedQuestions || []).some(Boolean) || !(w.words || []).some(Boolean) || !(w.evaluationCriteria || []).some(Boolean)))) {
       setMessage('Mỗi cách viết cần đủ 5 nhánh, 3 phần dàn ý, câu hỏi, từ ngữ và tiêu chí. Cô kiểm tra từng cách trước khi lưu.'); return;
     }
+    if (multiWayVisible && new Set(displayWays.map(w => wayKey(w.title))).size !== displayWays.length) { setMessage('Tên các hướng không được trùng nhau.'); return; }
     if (!draft.title.trim() || !draft.prompt.trim()) { setMessage('Vui lòng nhập tên bài và đề bài.'); return; }
     
     
-    const updated = { ...draft, ...(multiWayVisible ? { directions: inferredTitles, directionContents: reconcileWays(draft, inferredTitles) } : {}), id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
+    const updated = { ...draft, ...(multiWayVisible ? { directions: displayWays.map(w => w.title.trim()), directionContents: displayWays } : {}), id: draft.id || `GV-${Date.now()}`, updatedAt: new Date().toISOString(), updatedBy: editorName };
     setSavingCloud(true);
     try {
       await saveCurriculumToCloud(updated);
@@ -554,14 +593,17 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3"><label className="font-semibold">Lớp<select className="mt-1 block w-full rounded-xl border p-3" value={draft.grade} onChange={e => change('grade',Number(e.target.value))}>{[1,2,3,4,5].map(n => <option key={n} value={n}>Lớp {n}</option>)}</select></label><label className="font-semibold">Tập<select className="mt-1 block w-full rounded-xl border p-3" value={draft.volume} onChange={e => change('volume',Number(e.target.value))}><option value={1}>Tập 1</option><option value={2}>Tập 2</option></select></label></div>
           </div>
           <div className="rounded-2xl border border-violet-300 bg-violet-50/30 p-4 space-y-3">
-            <h4 className="text-lg font-bold">Các cách viết – chỉnh sửa học liệu riêng <span className="text-xs font-normal text-violet-700">Bản 06.11.2026-R2</span></h4>
-            <p className="text-sm">Khi sửa bài đã có, ứng dụng đọc lại đề gốc và khôi phục đầy đủ lựa chọn. Chọn một hướng ở dưới để chỉnh sửa riêng mục 3–8.</p>
-            <label className="block font-semibold">Danh sách các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="mt-1 block w-full rounded-lg border bg-white p-2 font-normal" value={(multiWayVisible ? inferredTitles : (draft.directions || [])).join('\n')} onChange={e => change('directions', lines(e.target.value))}/></label>
-            
-            {multiWayVisible && <div className="space-y-2">
-              <p className="font-semibold text-emerald-800">Đã nhận diện {displayWays.length} cách viết. Chọn hướng để chỉnh sửa đồng bộ mục 3–8.</p>
-              <div className="flex flex-wrap gap-2">{displayWays.map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-4 py-2 font-semibold ${activeWay?.id === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
-              <p className="text-sm text-stone-600">Đang chỉnh sửa: <strong>{activeWay?.title}</strong>. Mọi thay đổi phía dưới chỉ áp dụng cho hướng này.</p>
+            <h4 className="text-lg font-bold">Các hướng viết – học liệu riêng từng hướng</h4>
+            <p className="text-sm text-stone-600">Chọn hướng để sửa mục 3–8. Cô có thể thêm hướng mới cho bài đã có, hoặc tự nhận diện từ đề bài.</p>
+            <button type="button" className="rounded-xl border border-violet-400 bg-white px-4 py-2 font-semibold text-violet-800" onClick={detectWays}>Phân tích đề và đề xuất các hướng</button>
+            <div className="flex flex-wrap gap-2">{displayWays.map(w => <button key={w.id} type="button" onClick={() => setActiveWayId(w.id)} className={`rounded-xl border px-4 py-2 font-semibold ${activeWay?.id === w.id ? 'bg-violet-700 text-white' : 'bg-white'}`}>{w.title}</button>)}</div>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <input aria-label="Tên hướng viết mới" className="flex-1 rounded-xl border bg-white p-3" value={newWayTitle} onChange={e => setNewWayTitle(e.target.value)} placeholder="Ví dụ: Viết về bà" />
+              <button type="button" className="rounded-xl bg-violet-700 px-4 py-2 font-semibold text-white" onClick={() => addWay(newWayTitle)}>+ Thêm hướng</button>
+            </div>
+            {activeWay && <div className="rounded-xl border bg-white p-3 space-y-2">
+              <label className="block text-sm font-semibold">Tên hướng đang chọn<input className="mt-1 w-full rounded-lg border p-2 font-normal" value={activeWay.title} onChange={e => renameWay(activeWay.id, e.target.value)} /></label>
+              <div className="flex items-center justify-between gap-2"><span className="text-sm text-stone-600">Mục 3–8 bên dưới sẽ hiển thị theo hướng đang chọn.</span><button type="button" className="rounded-lg border border-rose-300 px-3 py-2 text-sm text-rose-700" onClick={() => removeWay(activeWay.id)}>Xóa hướng</button></div>
             </div>}
           </div>
                     <div className="rounded-2xl border border-pink-200 bg-pink-50/30 p-4 space-y-3">
@@ -574,7 +616,7 @@ export const QuestionBankManager: React.FC<{ editorName: string }> = ({ editorNa
           <div className="rounded-2xl border border-violet-200 bg-violet-50/30 p-4 space-y-3">
             <h4 className="text-lg font-bold text-violet-900">🌸 4. Hoa Nhỏ cùng con hiểu đề</h4>
             <p className="text-sm">Đề gốc: {draft.prompt}</p>
-            {listFields.filter(f => (multiWayVisible ? ['requirements','suggestedQuestions'] : ['directions','requirements','suggestedQuestions']).includes(f.key)).map(f => <label key={f.key} className="block font-semibold">{f.label}<textarea rows={4} className="mt-1 block w-full rounded-xl border bg-white p-3 font-normal" value={(multiWayVisible && f.key === 'suggestedQuestions' ? wayValues('suggestedQuestions') : ((draft[f.key] as string[] | undefined) || [])).join('\n')} onChange={e => f.key === 'suggestedQuestions' ? setWayValues('suggestedQuestions',lines(e.target.value)) : change(f.key,lines(e.target.value))}/></label>)}
+            {listFields.filter(f => ['requirements','suggestedQuestions'].includes(f.key)).map(f => <label key={f.key} className="block font-semibold">{f.label}<textarea rows={4} className="mt-1 block w-full rounded-xl border bg-white p-3 font-normal" value={(multiWayVisible && f.key === 'suggestedQuestions' ? wayValues('suggestedQuestions') : ((draft[f.key] as string[] | undefined) || [])).join('\n')} onChange={e => f.key === 'suggestedQuestions' ? setWayValues('suggestedQuestions',lines(e.target.value)) : change(f.key,lines(e.target.value))}/></label>)}
             <p className="text-sm text-stone-600">Không tự đặt thêm số câu hoặc yêu cầu không có trong đề.</p>
           </div>
           <div className="rounded-2xl border border-violet-200 bg-white p-4 space-y-3">
