@@ -22,6 +22,7 @@ import { ProgressGardenModal } from './components/ProgressGardenModal';
 import { ProgressJourneyPage } from './components/ProgressJourneyPage';
 import { IdeaMapPage } from './components/IdeaMapPage';
 import { EssayFeedbackPage } from './components/EssayFeedbackPage';
+import { ELearningLessonPage } from './components/ELearningLessonPage';
 import { playPop, playChime } from './utils/audio';
 
 export default function App() {
@@ -429,6 +430,9 @@ export default function App() {
         )}
 
         {/* GÓC HỌC TẬP CỦA EM (Tự động nhận diện sau đăng nhập, không chọn lại tên) */}
+        {currentView === 'elearning_lesson' && currentUser?.role === 'student' && activeStudent && (
+          <ELearningLessonPage studentId={activeStudent.id} onBack={goBack} />
+        )}
         {currentView === 'student' && (
           currentUser?.role === 'student' && activeStudent ? (
             <StudentPortal
@@ -436,6 +440,7 @@ export default function App() {
               settings={settings}
               onUpdateStudent={handleUpdateStudent}
               onBackToGarden={goBack}
+              onOpenELearning={() => setCurrentView('elearning_lesson')}
               onOpenProgressGarden={() => {
                 setReturnToView('student');
                 setCurrentView('progress_journey');
@@ -512,6 +517,7 @@ export default function App() {
               student={activeStudent}
               settings={settings}
               onBackToGarden={goBack}
+              onOpenELearning={() => setCurrentView('elearning_lesson')}
               onOpenProgressGarden={() => {
                 setReturnToView('family');
                 setCurrentView('progress_journey');
