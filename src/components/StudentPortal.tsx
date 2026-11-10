@@ -45,6 +45,7 @@ interface StudentPortalProps {
   settings: AppSettings;
   onUpdateStudent: (updatedStudent: Student) => void;
   onBackToGarden: () => void;
+  onOpenELearning: () => void;
   onOpenProgressGarden: () => void;
   onOpenReadingGarden: () => void;
   onGoToIdeaMap?: (prompt: string, grade: number, genre: EssayGenre) => void;
@@ -57,6 +58,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   settings,
   onUpdateStudent,
   onBackToGarden,
+  onOpenELearning,
   onOpenProgressGarden,
   onOpenReadingGarden,
   onGoToIdeaMap
@@ -579,6 +581,10 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
+      <div className="mb-4 rounded-2xl border-2 border-emerald-300 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
+        <div><h3 className="font-extrabold text-emerald-900 text-lg">Bài học E-learning · Lớp 3</h3><p className="text-sm text-stone-600">Ngôi trường hoặc một góc sân trường em yêu thích · 7 chặng tương tác</p></div>
+        <button onClick={onOpenELearning} className="rounded-xl bg-emerald-700 text-white font-bold px-5 py-3 hover:bg-emerald-800">Bắt đầu học</button>
+      </div>
       {/* Student Welcome & Garden Status Banner */}
       <div className="bg-gradient-to-r from-amber-100 via-rose-50 to-emerald-100 rounded-3xl p-4 sm:p-5 border-2 border-amber-300 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
