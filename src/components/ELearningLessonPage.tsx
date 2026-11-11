@@ -57,7 +57,7 @@ export const ELearningLessonPage: React.FC<{ studentId: string; onBack: () => vo
       {feedback && <p role="status" className="mb-4 rounded-xl bg-amber-50 border border-amber-200 p-3 text-amber-900">{feedback}</p>}
       {data.completed && <div className="mb-4 flex items-center gap-2 text-emerald-800 font-bold"><CheckCircle2/> Đã hoàn thành bài học trên thiết bị này</div>}
       <div className="flex flex-wrap justify-between gap-2"><button disabled={data.step===0} onClick={()=>{update({step:data.step-1})}} className="flex items-center gap-1 px-4 py-3 border rounded-xl font-semibold disabled:opacity-40"><ArrowLeft size={18}/> Trước</button><div className="flex gap-2"><button onClick={()=>{if(window.confirm('Em muốn bắt đầu lại bài học? Nội dung đã viết trên thiết bị này sẽ bị xóa.')){setData(blank());setFeedback('')}}} className="px-3 py-3 rounded-xl border" title="Làm lại"><RotateCcw size={18}/></button>{data.step<6?<button onClick={()=>{if(canAdvance) update({step:data.step+1}); else setFeedback('Em hãy hoàn thành các ô trả lời trước khi tiếp tục nhé.')}} className="flex items-center gap-2 px-5 py-3 bg-emerald-700 text-white rounded-xl font-bold">Tiếp theo <ArrowRight size={18}/></button>:<button onClick={finish} className="px-5 py-3 bg-emerald-700 text-white rounded-xl font-bold">Hoàn thành</button>}</div></div>
-      <p className="mt-4 text-xs text-stone-500">Phiên bản thử nghiệm: nội dung được lưu tự động trên trình duyệt này, chưa nộp bài lên Firebase và chưa đồng bộ Google Sheets.</p>
+      <p className="mt-4 text-xs text-stone-500">Tiến độ đang được lưu trên thiết bị này. Chức năng đồng bộ tài khoản sẽ được bổ sung ở bản tiếp theo.</p>
     </div>
   </section>;
 };
