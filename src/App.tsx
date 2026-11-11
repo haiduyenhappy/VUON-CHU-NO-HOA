@@ -14,6 +14,7 @@ import { Navbar, AppView } from './components/Navbar';
 import { GardenScene } from './components/GardenScene';
 import { LoginView } from './components/LoginView';
 import { StudentPortal } from './components/StudentPortal';
+import { ELearningLessonPage } from './components/ELearningLessonPage';
 import { TeacherPortal } from './components/TeacherPortal';
 import { AdminSystemPortal } from './components/AdminSystemPortal';
 import { FamilyPortal } from './components/FamilyPortal';
@@ -22,7 +23,6 @@ import { ProgressGardenModal } from './components/ProgressGardenModal';
 import { ProgressJourneyPage } from './components/ProgressJourneyPage';
 import { IdeaMapPage } from './components/IdeaMapPage';
 import { EssayFeedbackPage } from './components/EssayFeedbackPage';
-import { ELearningLessonPage } from './components/ELearningLessonPage';
 import { playPop, playChime } from './utils/audio';
 
 export default function App() {
@@ -77,6 +77,7 @@ export default function App() {
   // Track the previous view so back buttons navigate to the exact caller without losing state or session
   const [returnToView, setReturnToView] = useState<AppView>('home');
 
+  const [activeELearning, setActiveELearning] = useState<any>(null);
   const [students, setStudents] = useState<Student[]>(INITIAL_STUDENTS);
   const [activeStudent, setActiveStudent] = useState<Student | null>(() => {
     try {
@@ -430,8 +431,8 @@ export default function App() {
         )}
 
         {/* GÓC HỌC TẬP CỦA EM (Tự động nhận diện sau đăng nhập, không chọn lại tên) */}
-        {currentView === 'elearning_lesson' && currentUser?.role === 'student' && activeStudent && (
-          <ELearningLessonPage studentId={activeStudent.id} onBack={goBack} />
+        {currentView === 'elearning' && currentUser?.role === 'student' && activeStudent && activeELearning && (
+          <ELearningLessonPage studentId={activeStudent.id} assignment={activeELearning} onBack={goBack} />
         )}
         {currentView === 'student' && (
           currentUser?.role === 'student' && activeStudent ? (
@@ -440,7 +441,6 @@ export default function App() {
               settings={settings}
               onUpdateStudent={handleUpdateStudent}
               onBackToGarden={goBack}
-              onOpenELearning={() => setCurrentView('elearning_lesson')}
               onOpenProgressGarden={() => {
                 setReturnToView('student');
                 setCurrentView('progress_journey');
@@ -450,6 +450,7 @@ export default function App() {
                 setReturnToView('student');
                 setCurrentView('reading_garden');
               }}
+              onOpenELearning={(assignment) => { setActiveELearning(assignment); setCurrentView('elearning'); }}
               onGoToIdeaMap={(prompt, grade, genre) => {
                 setSharedPrompt(prompt);
                 setSharedGrade(grade);
@@ -517,7 +518,7 @@ export default function App() {
               student={activeStudent}
               settings={settings}
               onBackToGarden={goBack}
-              onOpenELearning={() => setCurrentView('elearning_lesson')}
+              onOpenELearning={() => setCurrentView('student')}
               onOpenProgressGarden={() => {
                 setReturnToView('family');
                 setCurrentView('progress_journey');
