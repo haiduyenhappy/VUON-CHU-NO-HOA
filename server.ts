@@ -5463,6 +5463,35 @@ app.get('/api/elearning/assignments', async (req,res) => {
   const auth = await getELearningStudent(req);
   if (!auth) return res.status(401).json({success:false,message:'Vui lòng đăng nhập học sinh.'});
   const grade = Number(auth.student.grade || String(auth.student.className || '').match(/[1-5]/)?.[0] || 0);
+  // Bài E-learning tuần 11 để nghiệm thu: tạo đúng một lần cho lớp đang đăng nhập.
+  // Bài này là học liệu kiểm thử theo chủ đề gần gũi, chưa xác nhận phân phối chương trình SGK của từng trường.
+  const testId = `EL-W11-2026-${auth.student.classId}`;
+  if (!auth.db.assignments.some(a => a.id === testId)) {
+    const lessonByGrade: Record<number, {title:string;prompt:string;genre:string}> = {
+      1:{title:'Tuần 11 – Đồ dùng học tập của em',prompt:'Viết 1–2 câu giới thiệu chiếc bút chì hoặc hộp bút của em.',genre:'ta_do_vat'},
+      2:{title:'Tuần 11 – Người thân em yêu quý',prompt:'Viết 3–4 câu kể về bố hoặc mẹ của em.',genre:'ke_nguoi'},
+      3:{title:'Tuần 11 – Mái trường thân yêu',prompt:'Viết đoạn văn về ngôi trường hoặc một góc sân trường mà em yêu thích.',genre:'ta_canh_vat'},
+      4:{title:'Tuần 11 – Một kỉ niệm đáng nhớ',prompt:'Viết đoạn văn kể một kỉ niệm đáng nhớ với bạn bè hoặc người thân.',genre:'ke_su_viec'},
+      5:{title:'Tuần 11 – Cảnh đẹp quanh em',prompt:'Viết đoạn văn tả cảnh sân trường hoặc công viên mà em yêu thích.',genre:'ta_canh_vat'}
+    };
+    const lesson = lessonByGrade[grade];
+    if (lesson && auth.student.classId) {
+      const teacher = auth.db.teachers.find((t:any) => t.assignedClassIds?.includes(auth.student.classId));
+      auth.db.assignments.push({
+        id:testId, classId:auth.student.classId, grade, title:lesson.title, prompt:lesson.prompt,
+        genre:lesson.genre, gardenType:'sac_mau', teacherId:teacher?.id || 'SYSTEM',
+        teacherName:teacher?.name || 'Bài học tuần 11', assignedDate:'2026-11-09',
+        dueDate:'2026-11-15', status:'active', isExam:false, isELearning:true,
+        instructions:'Bài học kiểm tra chức năng E-learning tuần 11. Em chọn một hướng và tự hoàn thành 7 chặng.'
+      } as ClassAssignment);
+      try { await saveDatabase(auth.db); }
+      catch (err:any) {
+        // Nếu có yêu cầu ghi đồng thời, tải lại bản mới; không ghi đè dữ liệu khác.
+        if (err?.status !== 409) throw err;
+        auth.db = await loadDatabase();
+      }
+    }
+  }
   const assignments = auth.db.assignments.filter(a => a.isELearning === true && a.status === 'active' && a.classId === auth.student.classId && Number(a.grade) === grade && (!a.assignedStudentIds?.length || a.assignedStudentIds.includes(auth.student.id)));
   res.json({success:true,assignments});
  } catch(e) {console.error('EL_ASSIGNMENTS',e);res.status(500).json({success:false,message:'Không tải được bài học.'});}
