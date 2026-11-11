@@ -81,7 +81,7 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
         if (!firebaseAuth) throw Error('Firebase chưa được cấu hình trên ứng dụng.');
         await firebaseAuth.authStateReady();
         const user=firebaseAuth.currentUser;
-        if(!user) throw Error('Phiên học sinh đã hết hạn. Em vui lòng đăng xuất và đăng nhập lại một lần.');
+        if(!user) throw Error('Chưa kết nối được dữ liệu bài học. Em bấm Thử lại nhé.');
         const token=await user.getIdToken();
         const r=await fetch('/api/elearning/assignments',{headers:{Authorization:`Bearer ${token}`}});
         const d=await r.json().catch(()=>({}));

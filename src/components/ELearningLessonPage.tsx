@@ -20,7 +20,7 @@ export const ELearningLessonPage: React.FC<{ studentId: string; assignment: any;
   const [syncState,setSyncState]=useState('Đang tải tiến độ...');
   const saveVersion=useRef(0);
   useEffect(()=>{let live=true;setLoaded(false);(async()=>{try{
-    const token=await firebaseAuth?.currentUser?.getIdToken();if(!token)throw Error('Chưa đăng nhập Firebase');
+    const token=await firebaseAuth?.currentUser?.getIdToken();if(!token)throw Error('Chưa kết nối được dữ liệu bài học');
     const r=await fetch(`/api/elearning/progress/${encodeURIComponent(assignment.id)}`,{headers:{Authorization:`Bearer ${token}`}});
     if(!r.ok)throw Error('Không đọc được tiến độ');const d=await r.json();
     if(live){setData(d.progress?{...blank(),...d.progress}:blank());setSyncState('Đã tải tiến độ từ Firebase');setLoaded(true);}
@@ -65,7 +65,7 @@ export const ELearningLessonPage: React.FC<{ studentId: string; assignment: any;
       <div className="flex gap-1 mb-2" aria-label={`Chặng ${data.step+1} trong 7 chặng`}>{stages.map((s, i) => <div key={s} className={`h-2 rounded-full flex-1 ${i <= data.step ? 'bg-emerald-500' : 'bg-stone-200'}`}/>)}</div>
       <div className="flex justify-between items-center mb-5"><strong className="text-emerald-900">{data.step+1}/7 · {stages[data.step]}</strong><button className="flex gap-2 items-center text-sm text-emerald-700 font-semibold" onClick={() => speak(`Chặng ${data.step+1}. ${stages[data.step]}. ${data.step===1?'Em chọn một trong hai hướng viết.':''}`)}><Volume2 size={18}/> Nghe hướng dẫn</button></div>
       <div className="bg-emerald-50 rounded-2xl p-4 sm:p-5 mb-5">
-        {data.step === 0 && <><h2 className="font-bold text-lg mb-2">Em yêu điều gì ở ngôi trường?</h2><p>Hãy nhớ lại một buổi đến trường: em nhìn thấy những gì, thích nơi nào và cảm thấy ra sao? Khi sẵn sàng, em bấm Tiếp theo.</p></>}
+        {data.step === 0 && <><h2 className="font-bold text-lg mb-2">Cùng khám phá đề bài nhé!</h2><p>Em đọc tên bài và nghĩ về những điều mình đã nhìn thấy hoặc trải nghiệm. Khi sẵn sàng, em bấm Tiếp theo.</p></>}
         {data.step === 1 && <><h2 className="font-bold text-lg mb-2">Đọc đề và chọn một hướng</h2><p className="mb-3">Đề bài: {assignment.prompt}</p><div className="grid sm:grid-cols-2 gap-3">{(schoolTask || /\s+hoặc\s+/i.test(assignment.prompt || '') ? (Object.keys(choices) as Direction[]) : ['school' as Direction]).map(k => <button key={k} onClick={() => update({ direction: k, ideas: ['', '', '', '', ''], outline: ['', '', ''], answers: ['', '', ''] })} className={`rounded-xl border-2 p-4 text-left font-bold ${data.direction === k ? 'border-emerald-600 bg-white' : 'border-emerald-200 bg-white/70'}`}>{data.direction === k ? '✓ ' : ''}{choices[k].name}</button>)}</div></>}
         {data.step === 2 && <><h2 className="font-bold text-lg mb-2">Sơ đồ 5 nhánh: {current.name}</h2><p className="mb-3">Mỗi nhánh ghi ít nhất một ý quan sát hoặc trải nghiệm thật của em.</p>{renderFields(data.ideas, current.ideas, 'ideas')}</>}
         {data.step === 3 && <><h2 className="font-bold text-lg mb-2">Lập dàn ý của em</h2><p className="mb-3">Dựa vào các ý đã ghi, em tự sắp xếp theo trình tự.</p>{renderFields(data.outline, ['Mở đoạn – Giới thiệu đối tượng', 'Thân đoạn – Những đặc điểm nổi bật', 'Kết đoạn – Tình cảm của em'], 'outline')}</>}
