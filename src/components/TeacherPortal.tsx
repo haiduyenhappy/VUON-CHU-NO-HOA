@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
+import { firebaseAuth } from '../lib/firebase';
 import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { QuestionBankManager } from './QuestionBankManager';
@@ -84,8 +85,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         : (teacherId === 'GV002' ? ['L4B'] : ['L3A']));
 
   // Navigation tabs within Teacher Portal
-  const [activeTab, rawSetActiveTab] = useState<'reviews' | 'accounts' | 'classes' | 'assignments' | 'bank' | 'profile'>('reviews');
-  type PortalTab = 'reviews' | 'accounts' | 'classes' | 'assignments' | 'bank' | 'profile';
+  const [activeTab, rawSetActiveTab] = useState<'reviews' | 'accounts' | 'classes' | 'assignments' | 'elearning' | 'bank' | 'profile'>('reviews');
+  type PortalTab = 'reviews' | 'accounts' | 'classes' | 'assignments' | 'elearning' | 'bank' | 'profile';
   const tabRef = useRef<PortalTab>('reviews');
   const tabHistory = useRef<PortalTab[]>([]);
   const setActiveTab = (next: PortalTab) => {
@@ -128,6 +129,45 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [isAiPreviewLoading, setIsAiPreviewLoading] = useState<boolean>(false);
   const [isCreatingAssignment, setIsCreatingAssignment] = useState(false);
   const [assignmentActionMsg, setAssignmentActionMsg] = useState('');
+
+  // E-learning: teacher authoring, assignment and progress in one workspace.
+  const [eSelected, setESelected] = useState<any | null>(null);
+  const [eTitle, setETitle] = useState('');
+  const [ePrompt, setEPrompt] = useState('');
+  const [eDirections, setEDirections] = useState('');
+  const [eGuides, setEGuides] = useState<string[]>(Array(7).fill(''));
+  const [eProgress, setEProgress] = useState<any[]>([]);
+  const [eMessage, setEMessage] = useState('');
+  const [eBusy, setEBusy] = useState(false);
+  const eAssignments = assignments.filter(a => a.isELearning);
+  const openELesson = async (lesson: any) => {
+    setESelected(lesson);
+    setETitle(lesson.title || ''); setEPrompt(lesson.prompt || '');
+    setEDirections((lesson.eLearningDirections || []).join('\n'));
+    setEGuides(Array.from({length:7},(_,i)=>lesson.eLearningStages?.[i] || ''));
+    setEProgress([]); setEMessage('');
+    try {
+      const token = await firebaseAuth?.currentUser?.getIdToken();
+      if (!token) throw Error('Không kết nối được dữ liệu giáo viên.');
+      const r = await fetch(`/api/teacher/elearning/${encodeURIComponent(lesson.id)}/progress`,{headers:{Authorization:`Bearer ${token}`}});
+      const d = await r.json(); if(!r.ok)throw Error(d.message || 'Không tải được tiến độ.');
+      setEProgress(d.items || []);
+    } catch(e) {setEMessage(e instanceof Error?e.message:'Không tải được tiến độ.');}
+  };
+  const saveELesson = async () => {
+    if(!eSelected || !eTitle.trim() || !ePrompt.trim())return;
+    setEBusy(true);setEMessage('');
+    try {
+      const token=await firebaseAuth?.currentUser?.getIdToken();
+      if(!token)throw Error('Không kết nối được dữ liệu giáo viên.');
+      const r=await fetch(`/api/teacher/elearning/${encodeURIComponent(eSelected.id)}`,{
+        method:'PATCH',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
+        body:JSON.stringify({title:eTitle.trim(),prompt:ePrompt.trim(),eLearningDirections:eDirections.split('\n').map(x=>x.trim()).filter(Boolean),eLearningStages:eGuides})
+      });const d=await r.json();if(!r.ok)throw Error(d.message || 'Không lưu được bài học.');
+      setESelected(d.assignment);setEMessage('Đã lưu bài E-learning lên Firebase.');await fetchAssignments();
+    }catch(e){setEMessage(e instanceof Error?e.message:'Lưu bài thất bại.');}
+    finally{setEBusy(false);}
+  };
 
   // Teacher Profile & Password Change State
   const [teacherProfilePhone, setTeacherProfilePhone] = useState(currentUser?.teacherProfile?.phone || '');
@@ -1167,6 +1207,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
               <FileText className="w-3.5 h-3.5" />
               <span>Giao Bài Tập ({assignments.length})</span>
             </button>
+
+            <button onClick={() => {setActiveTab('elearning');fetchAssignments();}} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold ${activeTab === 'elearning' ? 'bg-emerald-600 text-white' : 'text-stone-700 hover:bg-stone-100'}`}><BookOpen className="w-3.5 h-3.5"/> Bài học E-learning ({eAssignments.length})</button>
 
             <button onClick={() => setActiveTab('bank')} className={`flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-extrabold ${activeTab === 'bank' ? 'bg-emerald-600 text-white' : 'text-stone-700 hover:bg-stone-100'}`}><BookOpen className="w-3.5 h-3.5"/> Ngân hàng đề</button>
 
@@ -2392,6 +2434,25 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           </div>
         </div>
       )}
+
+      {activeTab === 'elearning' && <section className="space-y-4 bg-white border border-emerald-200 rounded-3xl p-4 sm:p-6">
+        <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-xl font-black text-emerald-900">Quản lý bài học E-learning</h2><p className="text-sm text-stone-600">Tạo và giao bài trong mục Giao Bài Tập (đánh dấu E-learning). Tại đây chỉnh sửa học liệu và xem tiến độ.</p></div><button onClick={()=>{setActiveTab('assignments');setNewAssignIsELearning(true);setIsCreateAssignmentOpen(true)}} className="bg-emerald-700 text-white rounded-xl px-4 py-3 font-bold">+ Tạo và giao bài</button></div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <div className="space-y-2">{eAssignments.length===0?<p className="p-4 bg-amber-50 rounded-xl">Chưa có bài E-learning. Chọn Tạo và giao bài để bắt đầu.</p>:eAssignments.map(a=><button key={a.id} onClick={()=>void openELesson(a)} className={`w-full text-left p-3 rounded-xl border ${eSelected?.id===a.id?'border-emerald-600 bg-emerald-50':'border-stone-200'}`}><strong className="block">{a.title}</strong><span className="text-sm text-stone-600">Lớp {a.classId} · {a.status==='active'?'Đã giao':'Chưa giao'} · {a.id}</span></button>)}</div>
+          <div>{eSelected?<div className="space-y-3 rounded-2xl border border-emerald-200 p-4">
+            <h3 className="font-bold text-emerald-900">Chỉnh sửa bài học</h3>
+            <label className="block text-sm font-semibold">Tên bài<input className="w-full border rounded-lg p-2 mt-1" value={eTitle} onChange={e=>setETitle(e.target.value)}/></label>
+            <label className="block text-sm font-semibold">Đề bài<textarea rows={3} className="w-full border rounded-lg p-2 mt-1" value={ePrompt} onChange={e=>setEPrompt(e.target.value)}/></label>
+            <label className="block text-sm font-semibold">Các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="w-full border rounded-lg p-2 mt-1" value={eDirections} onChange={e=>setEDirections(e.target.value)} placeholder="Ngôi trường của em&#10;Một góc sân trường"/></label>
+            <p className="font-bold text-sm">Lời hướng dẫn 7 chặng (để trống dùng hướng dẫn mặc định)</p>
+            {['Khởi động','Khám phá đề','Tìm ý','Lập dàn ý','Luyện tập','Tự viết','Tự đánh giá'].map((name,i)=><label key={name} className="block text-sm">{i+1}. {name}<textarea rows={2} className="w-full border rounded-lg p-2 mt-1" value={eGuides[i]} onChange={e=>setEGuides(old=>old.map((x,j)=>i===j?e.target.value:x))}/></label>)}
+            <button disabled={eBusy} onClick={()=>void saveELesson()} className="bg-emerald-700 text-white rounded-xl px-4 py-3 font-bold disabled:opacity-50">{eBusy?'Đang lưu...':'Lưu bài học'}</button>
+            <h3 className="font-bold mt-3">Tiến độ học sinh ({eProgress.length})</h3>
+            {eProgress.length===0?<p className="text-sm text-stone-500">Chưa có tiến độ được lưu.</p>:eProgress.map((x,i)=><div key={i} className="border rounded-xl p-3 text-sm"><strong>{x.studentName || x.studentId}</strong><p>Chặng {Math.min(7,Number(x.progress?.step||0)+1)}/7 · {x.progress?.completed?'Đã hoàn thành':'Đang học'}</p><p className="whitespace-pre-wrap break-words">{x.progress?.writing||'Chưa viết bài'}</p></div>)}
+          </div>:<p className="text-sm text-stone-600 p-4">Chọn một bài bên trái để chỉnh sửa và xem kết quả.</p>}</div>
+        </div>
+        {eMessage&&<p role="status" className="text-sm text-emerald-900 bg-emerald-50 p-3 rounded-xl">{eMessage}</p>}
+      </section>}
 
       {/* ================= TAB 4: LỚP HỌC CỦA TÔI ================= */}
       {activeTab === 'classes' && (
