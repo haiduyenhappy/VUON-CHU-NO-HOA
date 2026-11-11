@@ -1269,7 +1269,8 @@ app.post('/api/auth', async (req, res) => {
       const safeStudent = { ...student };
       delete safeStudent.temporaryPassword;
       delete safeStudent.pin;
-      return res.json({ success: true, role: 'student', student: safeStudent });
+      const firebaseCustomToken = await getFirebaseAdminAuth().createCustomToken(`student_${student.id}`, {role:'student', studentId: student.id});
+      return res.json({ success: true, role: 'student', student: safeStudent, firebaseCustomToken });
     }
     return res.status(401).json({ success: false, message: 'Thông tin đăng nhập chưa chính xác. Vui lòng kiểm tra lại.' });
     } catch (error) {
@@ -2166,7 +2167,7 @@ app.post('/api/teacher/assignments/create', async (req, res) => {
     return res.status(401).json({ success: false, message: 'Yêu cầu đăng nhập tài khoản giáo viên.' });
   }
 
-  const { classId, title, prompt, grade, genre, gardenType, dueDate, isExam, instructions, difficultyLevel, topicCode, customOutline } = req.body;
+  const { classId, title, prompt, grade, genre, gardenType, dueDate, isExam, instructions, difficultyLevel, topicCode, customOutline, isELearning } = req.body;
 
   if (!classId || !title || !prompt) {
     return res.status(400).json({ success: false, message: 'Vui lòng nhập đầy đủ thông tin bài tập.' });
@@ -2190,6 +2191,7 @@ app.post('/api/teacher/assignments/create', async (req, res) => {
     gardenType: gardenType || 'sac_mau',
     assignedDate: new Date().toISOString().split('T')[0],
     dueDate: dueDate || undefined,
+    isELearning: Boolean(isELearning),
     isExam: Boolean(isExam), // false: Luyện viết thường xuyên, true: Kiểm tra định kỳ
     maxScore: isExam ? 10 : undefined,
     status: 'active',
@@ -5446,6 +5448,50 @@ app.post('/api/ai/hint', async (req, res) => {
   res.json({ hint: defaultHints[Math.floor(Math.random() * defaultHints.length)] });
 });
 
+// E-learning: Firebase ID token, not a studentId supplied by the browser, is the authority.
+async function getELearningStudent(req: express.Request) {
+  const token = String(req.headers.authorization || '').replace(/^Bearer\\s+/i, '').trim();
+  if (!token) return null;
+  const decoded = await getFirebaseAdminAuth().verifyIdToken(token);
+  if (decoded.role !== 'student' || typeof decoded.studentId !== 'string') return null;
+  const db = await loadDatabase();
+  const student = db.students.find(st => st.id === decoded.studentId && st.accountStatus !== 'deleted' && st.accountStatus !== 'locked');
+  return student ? {student, db} : null;
+}
+app.get('/api/elearning/assignments', async (req,res) => {
+ try {
+  const auth = await getELearningStudent(req);
+  if (!auth) return res.status(401).json({success:false,message:'Vui lòng đăng nhập học sinh.'});
+  const grade = Number(auth.student.grade || String(auth.student.className || '').match(/[1-5]/)?.[0] || 0);
+  const assignments = auth.db.assignments.filter(a => a.isELearning === true && a.status === 'active' && a.classId === auth.student.classId && Number(a.grade) === grade && (!a.assignedStudentIds?.length || a.assignedStudentIds.includes(auth.student.id)));
+  res.json({success:true,assignments});
+ } catch(e) {console.error('EL_ASSIGNMENTS',e);res.status(500).json({success:false,message:'Không tải được bài học.'});}
+});
+app.get('/api/elearning/progress/:assignmentId', async (req,res) => {
+ try {
+  const auth=await getELearningStudent(req);
+  if(!auth)return res.status(401).json({success:false});
+  const assignment=auth.db.assignments.find(a=>a.id===req.params.assignmentId && a.isELearning===true && a.status==='active' && a.classId===auth.student.classId);
+  if(!assignment)return res.status(403).json({success:false});
+  const id=`${auth.student.id}__${assignment.id}`;
+  const doc=await getFirebaseAdminFirestore().collection('vcnh_elearning_progress_v1').doc(id).get();
+  res.json({success:true,progress:doc.exists?doc.data()?.progress:null});
+ }catch(e){console.error('EL_PROGRESS_READ',e);res.status(500).json({success:false});}
+});
+app.put('/api/elearning/progress/:assignmentId', async (req,res) => {
+ try {
+  const auth=await getELearningStudent(req);
+  if(!auth)return res.status(401).json({success:false});
+  const assignment=auth.db.assignments.find(a=>a.id===req.params.assignmentId && a.isELearning===true && a.status==='active' && a.classId===auth.student.classId);
+  if(!assignment)return res.status(403).json({success:false});
+  const data=req.body?.progress;
+  if(!data || !Number.isInteger(data.step) || data.step<0 || data.step>6 || !Array.isArray(data.ideas) || !Array.isArray(data.outline) || !Array.isArray(data.answers) || typeof data.writing!=='string') return res.status(400).json({success:false});
+  if(Buffer.byteLength(JSON.stringify(data),'utf8')>60000)return res.status(413).json({success:false});
+  const id=`${auth.student.id}__${assignment.id}`;
+  await getFirebaseAdminFirestore().collection('vcnh_elearning_progress_v1').doc(id).set({studentId:auth.student.id,assignmentId:assignment.id,classId:assignment.classId,progress:data,updatedAt:new Date().toISOString()});
+  res.json({success:true});
+ }catch(e){console.error('EL_PROGRESS_WRITE',e);res.status(500).json({success:false});}
+});
 app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   console.error('VCNH API error:', err?.message || err);
   if (res.headersSent) return;
