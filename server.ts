@@ -5448,6 +5448,44 @@ app.post('/api/ai/hint', async (req, res) => {
   res.json({ hint: defaultHints[Math.floor(Math.random() * defaultHints.length)] });
 });
 
+// E-learning teacher endpoints: Firebase verified teacher identity and class authorization.
+async function getELearningTeacher(req: express.Request) {
+  const token=String(req.headers.authorization||'').replace(/^Bearer\s+/i,'').trim();
+  if(!token)return null;
+  const decoded=await getFirebaseAdminAuth().verifyIdToken(token);
+  if(decoded.role!=='teacher'||typeof decoded.teacherId!=='string')return null;
+  const db=await loadDatabase();
+  const teacher=db.teachers.find(t=>t.id===decoded.teacherId&&t.status==='active');
+  return teacher?{teacher,db}:null;
+}
+app.patch('/api/teacher/elearning/:assignmentId',async(req,res)=>{
+  try{
+    const auth=await getELearningTeacher(req);
+    if(!auth)return res.status(401).json({success:false,message:'Vui lòng đăng nhập giáo viên.'});
+    const assignment=auth.db.assignments.find(a=>a.id===req.params.assignmentId&&a.isELearning===true);
+    if(!assignment)return res.status(404).json({success:false,message:'Không tìm thấy bài E-learning.'});
+    if(auth.teacher.role!=='SUPER_ADMIN'&&!auth.teacher.assignedClassIds?.includes(assignment.classId))return res.status(403).json({success:false});
+    const {title,prompt,eLearningDirections,eLearningStages}=req.body||{};
+    if(typeof title!=='string'||!title.trim()||title.length>200||typeof prompt!=='string'||!prompt.trim()||prompt.length>4000||!Array.isArray(eLearningDirections)||eLearningDirections.length>8||!eLearningDirections.every((x:any)=>typeof x==='string'&&x.length<=180)||!Array.isArray(eLearningStages)||eLearningStages.length!==7||!eLearningStages.every((x:any)=>typeof x==='string'&&x.length<=1500))return res.status(400).json({success:false,message:'Nội dung bài học không hợp lệ.'});
+    assignment.title=title.trim();assignment.prompt=prompt.trim();
+    (assignment as any).eLearningDirections=eLearningDirections.map((x:string)=>x.trim()).filter(Boolean);
+    (assignment as any).eLearningStages=eLearningStages;
+    await saveDatabase(auth.db);
+    res.json({success:true,assignment});
+  }catch(e:any){console.error('EL_TEACHER_SAVE',e);res.status(e?.status===409?409:500).json({success:false,message:'Không thể lưu bài E-learning. Vui lòng thử lại.'});}
+});
+app.get('/api/teacher/elearning/:assignmentId/progress',async(req,res)=>{
+  try{
+    const auth=await getELearningTeacher(req);
+    if(!auth)return res.status(401).json({success:false,message:'Vui lòng đăng nhập giáo viên.'});
+    const assignment=auth.db.assignments.find(a=>a.id===req.params.assignmentId&&a.isELearning===true);
+    if(!assignment)return res.status(404).json({success:false});
+    if(auth.teacher.role!=='SUPER_ADMIN'&&!auth.teacher.assignedClassIds?.includes(assignment.classId))return res.status(403).json({success:false});
+    const snap=await getFirebaseAdminFirestore().collection('vcnh_elearning_progress_v1').where('assignmentId','==',assignment.id).get();
+    const items=snap.docs.map(d=>{const v=d.data();const st=auth.db.students.find(s=>s.id===v.studentId&&s.classId===assignment.classId);return st?{studentId:st.id,studentName:(st as any).fullName||(st as any).name||st.id,progress:v.progress,updatedAt:v.updatedAt}:null}).filter(Boolean);
+    res.json({success:true,items});
+  }catch(e){console.error('EL_TEACHER_PROGRESS',e);res.status(500).json({success:false,message:'Không tải được tiến độ học sinh.'});}
+});
 // E-learning: Firebase ID token, not a studentId supplied by the browser, is the authority.
 async function getELearningStudent(req: express.Request) {
   const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
