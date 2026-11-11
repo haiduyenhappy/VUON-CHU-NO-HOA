@@ -1260,6 +1260,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       </div>
 
+      {!isCreateAssignmentOpen && (<>
       {/* Hoa Nhỏ là khu vực độc lập, nằm ngoài header quản lý */}
       <section className="w-full flex justify-center py-3 sm:py-5" aria-label="Lời chào Hoa Nhỏ">
         <HoaNhoMascot
@@ -2747,10 +2748,11 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         </div>
       )}
 
-      {/* ================= MODAL: GIAO BÀI TẬP MỚI ================= */}
+      </>)}
+      {/* ================= TRANG RIÊNG: GIAO BÀI TẬP MỚI ================= */}
       {isCreateAssignmentOpen && (
-        <div className="fixed inset-0 z-50 bg-stone-900/60 backdrop-blur-xs flex items-center justify-center p-3 sm:p-5">
-          <div className="bg-white rounded-3xl border-3 border-emerald-400 max-w-lg w-full p-6 shadow-2xl space-y-4 animate-fade-in relative max-h-[90vh] overflow-y-auto">
+        <div className="w-full animate-fade-in">
+          <div className="bg-white rounded-3xl border-2 border-emerald-300 w-full max-w-4xl mx-auto p-4 sm:p-7 shadow-sm space-y-5 relative">
             <button
               onClick={() => setIsCreateAssignmentOpen(false)}
               className="absolute top-4 right-4 p-2 text-stone-400 hover:text-stone-700 hover:bg-stone-100 rounded-full"
@@ -2760,7 +2762,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
 
             <h3 className="text-lg font-black text-emerald-950 font-display flex items-center gap-2">
               <span>📝</span>
-              <span>Giao Bài Tập Tiếng Việt Mới</span>
+              <span>Tạo và giao bài học</span>
             </h3>
 
             <form onSubmit={handleCreateAssignment} className="space-y-4">
