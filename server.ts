@@ -5462,7 +5462,7 @@ app.get('/api/elearning/assignments', async (req,res) => {
  try {
   const auth = await getELearningStudent(req);
   if (!auth) return res.status(401).json({success:false,message:'Vui lòng đăng nhập học sinh.'});
-  const grade = Number(auth.student.grade || String(auth.student.className || auth.student.classId || '').match(/[1-5]/)?.[0] || 0);
+  const grade = Number(auth.student.grade || String(auth.student.className || '').match(/[1-5]/)?.[0] || 0);
   // Bài E-learning tuần 11 để nghiệm thu: tạo đúng một lần cho lớp đang đăng nhập.
   // Bài này là học liệu kiểm thử theo chủ đề gần gũi, chưa xác nhận phân phối chương trình SGK của từng trường.
   const testId = `EL-W11-2026-${auth.student.classId}`;
@@ -5481,7 +5481,7 @@ app.get('/api/elearning/assignments', async (req,res) => {
         id:testId, classId:auth.student.classId, grade, title:lesson.title, prompt:lesson.prompt,
         genre:lesson.genre, gardenType:'sac_mau', teacherId:teacher?.id || 'SYSTEM',
         teacherName:teacher?.name || 'Bài học tuần 11', assignedDate:'2026-11-09',
-        dueDate:'2026-11-15', status:'active', isExam:false, isELearning:true,
+        status:'active', isExam:false, isELearning:true,
         instructions:'Bài học kiểm tra chức năng E-learning tuần 11. Em chọn một hướng và tự hoàn thành 7 chặng.'
       } as ClassAssignment);
       try { await saveDatabase(auth.db); }
