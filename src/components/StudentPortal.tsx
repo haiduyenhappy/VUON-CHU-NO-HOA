@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { firebaseAuth } from '../lib/firebase';
+import { onIdTokenChanged } from 'firebase/auth';
 import { 
   Student, 
   WritingTask, 
@@ -66,17 +67,36 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 }) => {
   const [eLessons,setELessons]=useState<any[]>([]);
   const [eError,setEError]=useState('');
+  const [eLoading,setELoading]=useState(true);
+  const [eRetry,setERetry]=useState(0);
   useEffect(()=>{
     let alive=true;
-    const load=async()=>{try{
-      const token=await firebaseAuth?.currentUser?.getIdToken();
-      if(!token)throw Error('Chưa có phiên đăng nhập Firebase');
-      const r=await fetch('/api/elearning/assignments',{headers:{Authorization:`Bearer ${token}`}});
-      if(!r.ok){const info=await r.json().catch(()=>({}));throw Error(info.message || `Không tải được bài học (HTTP ${r.status})`);}
-      const d=await r.json();if(alive){setELessons(d.assignments||[]);setEError('');}
-    }catch(e){if(alive)setEError(e instanceof Error ? e.message : 'Không thể tải bài học.');}};
-    load();return()=>{alive=false};
-  },[student.id]);
+    let request=0;
+    const load=async()=>{
+      const current=++request;
+      if(alive){setELoading(true);setEError('');}
+      try {
+        // Firebase restores its persisted session asynchronously on page refresh.
+        // Reading currentUser immediately can incorrectly report a missing session.
+        if (!firebaseAuth) throw Error('Firebase chưa được cấu hình trên ứng dụng.');
+        await firebaseAuth.authStateReady();
+        const user=firebaseAuth.currentUser;
+        if(!user) throw Error('Phiên học sinh đã hết hạn. Em vui lòng đăng xuất và đăng nhập lại một lần.');
+        const token=await user.getIdToken();
+        const r=await fetch('/api/elearning/assignments',{headers:{Authorization:`Bearer ${token}`}});
+        const d=await r.json().catch(()=>({}));
+        if(!r.ok)throw Error(d.message || `Không tải được bài học (HTTP ${r.status})`);
+        if(alive && current===request){setELessons(Array.isArray(d.assignments)?d.assignments:[]);setEError('');}
+      }catch(e){if(alive && current===request){setELessons([]);setEError(e instanceof Error?e.message:'Không thể tải bài học.');}}
+      finally{if(alive && current===request)setELoading(false);}
+    };
+    // Listen for Firebase session restoration, token refresh and account changes.
+    const unsubscribe=firebaseAuth ? onIdTokenChanged(firebaseAuth,()=>{void load();}) : ()=>{};
+    void load();
+    const onFocus=()=>{void load();};
+    window.addEventListener('focus',onFocus);
+    return()=>{alive=false;request++;unsubscribe();window.removeEventListener('focus',onFocus);};
+  },[student.id,eRetry]);
   // Navigation & Workflow state
   const [currentStep, setCurrentStep] = useState<StudentStep>('choose_task');
   const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics' | 'my_submissions' | 'teacher_assignments'>('teacher_assignments');
@@ -849,8 +869,9 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             <div className="space-y-6">
           <section className="rounded-2xl border-2 border-emerald-200 bg-white p-4 mb-5">
             <h3 className="font-extrabold text-emerald-900">📚 Bài học của em</h3>
-            {eError && <p role="alert" className="text-rose-700 text-sm">{eError}</p>}
-            {eLessons.length===0 && !eError && <p className="text-sm text-stone-600 mt-2">Chưa có bài E-learning cho lớp của em.</p>}
+            {eLoading && <p className="text-sm text-stone-600">Đang tải bài học...</p>}
+            {eError && <div role="alert" className="text-rose-700 text-sm">{eError} <button type="button" onClick={()=>setERetry(v=>v+1)} className="underline font-semibold ml-2">Thử lại</button></div>}
+            {!eLoading && eLessons.length===0 && !eError && <p className="text-sm text-stone-600 mt-2">Chưa có bài E-learning cho lớp của em.</p>}
             <div className="grid sm:grid-cols-2 gap-3 mt-3">{eLessons.map(a=><button key={a.id} onClick={()=>onOpenELearning?.(a)} className="text-left rounded-xl border border-emerald-200 p-3 hover:bg-emerald-50"><strong>{a.title}</strong><p className="text-sm text-stone-600">{a.prompt}</p><span className="text-emerald-700 font-bold text-sm">Bắt đầu / Học tiếp →</span></button>)}</div>
           </section>
               {/* TRƯỜNG HỢP 1 – CÓ BÀI TẬP GIÁO VIÊN GIAO TRONG TUẦN HIỆN TẠI */}
