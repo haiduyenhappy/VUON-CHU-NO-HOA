@@ -220,6 +220,8 @@ export interface ClassAssignment {
   weekTitle?: string; // Tên tuần học hiển thị (vd: "Tuần 8 (20/10/2026 – 28/10/2026)")
   allowPreview?: boolean; // Giáo viên cho phép xem trước bài khi chưa đến tuần học
   isELearning?: boolean; // Bài học E-learning theo 7 chặng
+  eLearningDirections?: string[];
+  eLearningStages?: string[];
   isExam: boolean; // false: Luyện viết thường xuyên (nhận xét bằng lời); true: Kiểm tra định kỳ (chấm điểm thang 10)
   maxScore?: number; // 10
   status: 'active' | 'draft' | 'paused' | 'completed' | 'closed'; // Trạng thái: Bản nháp (draft), Đã giao (active), Tạm dừng (paused), Hoàn thành (completed)
