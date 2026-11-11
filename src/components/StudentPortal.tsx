@@ -844,15 +844,15 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
           )}
 
+          {/* TASKS GRID: Teacher Assignments, Curriculum Tasks, Other Creative Topics, or My Submissions */}
+          {activeMainTab === 'teacher_assignments' ? (
+            <div className="space-y-6">
           <section className="rounded-2xl border-2 border-emerald-200 bg-white p-4 mb-5">
-            <h3 className="font-extrabold text-emerald-900">📚 Bài học E-learning của em</h3>
+            <h3 className="font-extrabold text-emerald-900">📚 Bài học của em</h3>
             {eError && <p role="alert" className="text-rose-700 text-sm">{eError}</p>}
             {eLessons.length===0 && <p className="text-sm text-stone-600 mt-2">Chưa có bài E-learning được giáo viên giao.</p>}
             <div className="grid sm:grid-cols-2 gap-3 mt-3">{eLessons.map(a=><button key={a.id} onClick={()=>onOpenELearning?.(a)} className="text-left rounded-xl border border-emerald-200 p-3 hover:bg-emerald-50"><strong>{a.title}</strong><p className="text-sm text-stone-600">{a.prompt}</p><span className="text-emerald-700 font-bold text-sm">Bắt đầu / Học tiếp →</span></button>)}</div>
           </section>
-          {/* TASKS GRID: Teacher Assignments, Curriculum Tasks, Other Creative Topics, or My Submissions */}
-          {activeMainTab === 'teacher_assignments' ? (
-            <div className="space-y-6">
               {/* TRƯỜNG HỢP 1 – CÓ BÀI TẬP GIÁO VIÊN GIAO TRONG TUẦN HIỆN TẠI */}
               {currentWeekTasks.length > 0 ? (
                 <div className="space-y-4">
