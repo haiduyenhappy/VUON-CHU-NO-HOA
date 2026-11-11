@@ -5450,7 +5450,7 @@ app.post('/api/ai/hint', async (req, res) => {
 
 // E-learning: Firebase ID token, not a studentId supplied by the browser, is the authority.
 async function getELearningStudent(req: express.Request) {
-  const token = String(req.headers.authorization || '').replace(/^Bearer\\s+/i, '').trim();
+  const token = String(req.headers.authorization || '').replace(/^Bearer\s+/i, '').trim();
   if (!token) return null;
   const decoded = await getFirebaseAdminAuth().verifyIdToken(token);
   if (decoded.role !== 'student' || typeof decoded.studentId !== 'string') return null;
@@ -5462,7 +5462,7 @@ app.get('/api/elearning/assignments', async (req,res) => {
  try {
   const auth = await getELearningStudent(req);
   if (!auth) return res.status(401).json({success:false,message:'Vui lòng đăng nhập học sinh.'});
-  const grade = Number(auth.student.grade || String(auth.student.className || '').match(/[1-5]/)?.[0] || 0);
+  const grade = Number(auth.student.grade || String(auth.student.className || auth.student.classId || '').match(/[1-5]/)?.[0] || 0);
   // Bài E-learning tuần 11 để nghiệm thu: tạo đúng một lần cho lớp đang đăng nhập.
   // Bài này là học liệu kiểm thử theo chủ đề gần gũi, chưa xác nhận phân phối chương trình SGK của từng trường.
   const testId = `EL-W11-2026-${auth.student.classId}`;
