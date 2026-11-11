@@ -23,8 +23,8 @@ import { TEACHER_CONFIG } from '../constants/teacherConfig';
 
 export type AppView = 
   | 'home' 
+  | 'elearning'
   | 'student' 
-  | 'elearning_lesson'
   | 'teacher' 
   | 'family' 
   | 'reading_garden' 

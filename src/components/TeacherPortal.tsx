@@ -120,6 +120,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [newAssignGenre, setNewAssignGenre] = useState<string>('Tả đồ vật');
   const [newAssignPrompt, setNewAssignPrompt] = useState('');
   const [newAssignIsExam, setNewAssignIsExam] = useState(false);
+  const [newAssignIsELearning, setNewAssignIsELearning] = useState(false);
   const [newAssignDueDate, setNewAssignDueDate] = useState('');
   const [newAssignTopicCode, setNewAssignTopicCode] = useState<string>('CD06');
   const [newAssignDifficulty, setNewAssignDifficulty] = useState<DifficultyLevel>('co_ban');
@@ -367,6 +368,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
           genre: newAssignGenre,
           prompt: newAssignPrompt.trim(),
           isExam: newAssignIsExam,
+          isELearning: newAssignIsELearning,
           dueDate: newAssignDueDate || undefined,
           classId: selectedClassId !== 'all' ? selectedClassId : (assignedClasses[0]?.id || (teacherId === 'GV002' ? 'L4B' : 'L3A')),
           teacherId: teacherId,
@@ -383,6 +385,7 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
         setNewAssignTitle('');
         setNewAssignPrompt('');
         setNewAssignDueDate('');
+        setNewAssignIsELearning(false);
         setAiPreviewData(null);
         setIsCreateAssignmentOpen(false);
         fetchAssignments();
@@ -2878,6 +2881,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 />
               </div>
 
+              <label className="flex gap-2 items-center rounded-xl bg-emerald-50 border border-emerald-200 p-3 text-sm font-semibold">
+                <input type="checkbox" checked={newAssignIsELearning} onChange={e=>setNewAssignIsELearning(e.target.checked)} />
+                Giao dưới dạng bài học E-learning (7 chặng tự học)
+              </label>
               {/* Mode Selection */}
               <div className="p-3 bg-stone-50 rounded-2xl border border-stone-200 space-y-2">
                 <label className="flex items-center gap-2 cursor-pointer">

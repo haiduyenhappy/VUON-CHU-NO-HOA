@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
+import { firebaseAuth } from '../lib/firebase';
 import { 
   Student, 
   WritingTask, 
@@ -45,10 +46,10 @@ interface StudentPortalProps {
   settings: AppSettings;
   onUpdateStudent: (updatedStudent: Student) => void;
   onBackToGarden: () => void;
-  onOpenELearning: () => void;
   onOpenProgressGarden: () => void;
   onOpenReadingGarden: () => void;
   onGoToIdeaMap?: (prompt: string, grade: number, genre: EssayGenre) => void;
+  onOpenELearning?: (assignment: any) => void;
 }
 
 type StudentStep = 'choose_task' | 'brainstorm' | 'outline' | 'write' | 'feedback' | 'success';
@@ -58,11 +59,24 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
   settings,
   onUpdateStudent,
   onBackToGarden,
-  onOpenELearning,
   onOpenProgressGarden,
   onOpenReadingGarden,
-  onGoToIdeaMap
+  onGoToIdeaMap,
+  onOpenELearning
 }) => {
+  const [eLessons,setELessons]=useState<any[]>([]);
+  const [eError,setEError]=useState('');
+  useEffect(()=>{
+    let alive=true;
+    const load=async()=>{try{
+      const token=await firebaseAuth?.currentUser?.getIdToken();
+      if(!token)return;
+      const r=await fetch('/api/elearning/assignments',{headers:{Authorization:`Bearer ${token}`}});
+      if(!r.ok)throw Error('Không tải được bài học E-learning');
+      const d=await r.json();if(alive)setELessons(d.assignments||[]);
+    }catch(e){if(alive)setEError('Không thể tải bài học. Em hãy thử đăng nhập lại.');}};
+    load();return()=>{alive=false};
+  },[student.id]);
   // Navigation & Workflow state
   const [currentStep, setCurrentStep] = useState<StudentStep>('choose_task');
   const [activeMainTab, setActiveMainTab] = useState<'volume1' | 'volume2' | 'other_topics' | 'my_submissions' | 'teacher_assignments'>('teacher_assignments');
@@ -581,10 +595,6 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
 
   return (
     <div className="max-w-6xl mx-auto px-3 sm:px-6 py-4 sm:py-6">
-      <div className="mb-4 rounded-2xl border-2 border-emerald-300 bg-white p-4 flex flex-wrap items-center justify-between gap-3">
-        <div><h3 className="font-extrabold text-emerald-900 text-lg">Bài học E-learning · Lớp 3</h3><p className="text-sm text-stone-600">Ngôi trường hoặc một góc sân trường em yêu thích · 7 chặng tương tác</p></div>
-        <button onClick={onOpenELearning} className="rounded-xl bg-emerald-700 text-white font-bold px-5 py-3 hover:bg-emerald-800">Bắt đầu học</button>
-      </div>
       {/* Student Welcome & Garden Status Banner */}
       <div className="bg-gradient-to-r from-amber-100 via-rose-50 to-emerald-100 rounded-3xl p-4 sm:p-5 border-2 border-amber-300 shadow-sm mb-6 flex flex-wrap items-center justify-between gap-4">
         <div className="flex items-center gap-3">
@@ -834,6 +844,12 @@ export const StudentPortal: React.FC<StudentPortalProps> = ({
             </div>
           )}
 
+          <section className="rounded-2xl border-2 border-emerald-200 bg-white p-4 mb-5">
+            <h3 className="font-extrabold text-emerald-900">📚 Bài học E-learning của em</h3>
+            {eError && <p role="alert" className="text-rose-700 text-sm">{eError}</p>}
+            {eLessons.length===0 && <p className="text-sm text-stone-600 mt-2">Chưa có bài E-learning được giáo viên giao.</p>}
+            <div className="grid sm:grid-cols-2 gap-3 mt-3">{eLessons.map(a=><button key={a.id} onClick={()=>onOpenELearning?.(a)} className="text-left rounded-xl border border-emerald-200 p-3 hover:bg-emerald-50"><strong>{a.title}</strong><p className="text-sm text-stone-600">{a.prompt}</p><span className="text-emerald-700 font-bold text-sm">Bắt đầu / Học tiếp →</span></button>)}</div>
+          </section>
           {/* TASKS GRID: Teacher Assignments, Curriculum Tasks, Other Creative Topics, or My Submissions */}
           {activeMainTab === 'teacher_assignments' ? (
             <div className="space-y-6">

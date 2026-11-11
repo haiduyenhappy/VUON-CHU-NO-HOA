@@ -191,7 +191,7 @@ export const LoginView: React.FC<LoginViewProps> = ({
 
       // Authenticate Firestore in the background with the same teacher credentials.
       // Never claim a successful teacher login while cloud synchronization is unavailable.
-      if (role === 'teacher') {
+      if (role === 'teacher' || role === 'student') {
         if (!firebaseAuth || !data.firebaseCustomToken) {
           setErrorMsg('Chưa kết nối được hệ thống lưu bài. Vui lòng thử lại.');
           setIsLoading(false);
