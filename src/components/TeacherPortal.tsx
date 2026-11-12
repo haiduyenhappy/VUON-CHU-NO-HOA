@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { firebaseAuth } from '../lib/firebase';
-import { buildDirections, type LearningDirection } from '../utils/eLearningContent';
+import { buildDirections, generateStageGuides, type LearningDirection } from '../utils/eLearningContent';
 import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { QuestionBankManager } from './QuestionBankManager';
@@ -147,8 +147,10 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setESelected(lesson);
     setETitle(lesson.title || ''); setEPrompt(lesson.prompt || '');
     setEDirections((lesson.eLearningDirections || []).join('\n'));
-    setEGuides(Array.from({length:7},(_,i)=>lesson.eLearningStages?.[i] || ''));
-    setEActivities(buildDirections(lesson.prompt||'',lesson.eLearningDirections||[],lesson.eLearningActivities));
+    const initialDirections = buildDirections(lesson.prompt||'',lesson.eLearningDirections||[],lesson.eLearningActivities);
+    const generatedGuides = generateStageGuides(lesson.prompt||'',Number(lesson.grade)||3,initialDirections);
+    setEGuides(Array.from({length:7},(_,i)=>lesson.eLearningStages?.[i]?.trim() || generatedGuides[i]));
+    setEActivities(initialDirections);
     setEActiveDirection(0);
     setEProgress([]); setEMessage('');
     try {
@@ -2460,7 +2462,18 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
                 {([['branches','Sơ đồ 5 nhánh'],['questions','3 câu hỏi gợi mở'],['words','4 từ gợi ý']] as const).map(([field,label])=><label key={field} className="block text-sm font-semibold">{label} (mỗi dòng một ý)<textarea rows={field==='branches'?5:4} className="w-full rounded-lg border p-2 mt-1 font-normal" value={eActivities[eActiveDirection][field].join('\n')} onChange={ev=>{const values=ev.target.value.split('\n');setEActivities(old=>old.map((d,i)=>i===eActiveDirection?{...d,[field]:values}:d));}}/></label>)}
               </div>}
             </div>
-            <p className="font-bold text-sm">Lời hướng dẫn 7 chặng (để trống dùng hướng dẫn mặc định)</p>
+            <div className="rounded-xl bg-sky-50 border border-sky-200 p-3 space-y-2">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <strong className="text-sm text-sky-900">Lời hướng dẫn 7 chặng dành cho học sinh</strong>
+                <button type="button" disabled={eBusy} onClick={()=>{
+                  const generated=generateStageGuides(ePrompt,Number(eSelected?.grade)||3,eActivities);
+                  if(eGuides.some(x=>x.trim()) && !window.confirm('Tạo lại sẽ thay thế cả 7 lời hướng dẫn đang hiển thị. Thầy cô có muốn tiếp tục?'))return;
+                  setEGuides(generated);setEMessage('Đã tạo 7 lời hướng dẫn. Thầy cô kiểm tra và bấm Lưu bài học để cập nhật.');
+                }} className="bg-sky-700 text-white rounded-lg px-3 py-2 text-sm font-bold disabled:opacity-50">Tạo lại hướng dẫn 7 chặng</button>
+              </div>
+              <p className="text-xs text-sky-900">Ứng dụng tự điền hướng dẫn khi mở bài; giáo viên có thể sửa từng chặng. Khi đổi đề hoặc hướng viết, bấm Tạo lại để cập nhật. Chỉ lưu lên Firebase khi bấm Lưu bài học.</p>
+              <details className="rounded-lg bg-white border border-sky-100 p-3 text-sm"><summary className="cursor-pointer font-semibold">Xem trước lời hướng dẫn học sinh sẽ đọc</summary><ol className="list-decimal pl-5 mt-2 space-y-2">{eGuides.map((guide,i)=><li key={i} className="whitespace-pre-wrap">{guide || 'Chưa có lời hướng dẫn'}</li>)}</ol></details>
+            </div>
             {['Khởi động','Khám phá đề','Tìm ý','Lập dàn ý','Luyện tập','Tự viết','Tự đánh giá'].map((name,i)=><label key={name} className="block text-sm">{i+1}. {name}<textarea rows={2} className="w-full border rounded-lg p-2 mt-1" value={eGuides[i]} onChange={e=>setEGuides(old=>old.map((x,j)=>i===j?e.target.value:x))}/></label>)}
             <button disabled={eBusy} onClick={()=>void saveELesson()} className="bg-emerald-700 text-white rounded-xl px-4 py-3 font-bold disabled:opacity-50">{eBusy?'Đang lưu...':'Lưu bài học'}</button>
             <h3 className="font-bold mt-3">Tiến độ học sinh ({eProgress.length})</h3>
