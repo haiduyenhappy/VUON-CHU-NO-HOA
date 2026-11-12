@@ -5465,11 +5465,13 @@ app.patch('/api/teacher/elearning/:assignmentId',async(req,res)=>{
     const assignment=auth.db.assignments.find(a=>a.id===req.params.assignmentId&&a.isELearning===true);
     if(!assignment)return res.status(404).json({success:false,message:'Không tìm thấy bài E-learning.'});
     if(auth.teacher.role!=='SUPER_ADMIN'&&!auth.teacher.assignedClassIds?.includes(assignment.classId))return res.status(403).json({success:false});
-    const {title,prompt,eLearningDirections,eLearningStages}=req.body||{};
+    const {title,prompt,eLearningDirections,eLearningStages,eLearningActivities}=req.body||{};
     if(typeof title!=='string'||!title.trim()||title.length>200||typeof prompt!=='string'||!prompt.trim()||prompt.length>4000||!Array.isArray(eLearningDirections)||eLearningDirections.length>8||!eLearningDirections.every((x:any)=>typeof x==='string'&&x.length<=180)||!Array.isArray(eLearningStages)||eLearningStages.length!==7||!eLearningStages.every((x:any)=>typeof x==='string'&&x.length<=1500))return res.status(400).json({success:false,message:'Nội dung bài học không hợp lệ.'});
+    if(eLearningActivities !== undefined && (!Array.isArray(eLearningActivities) || eLearningActivities.length>8 || !eLearningActivities.every((d:any)=>d && typeof d.name==='string' && d.name.length<=180 && Array.isArray(d.branches) && d.branches.length===5 && Array.isArray(d.questions) && d.questions.length===3 && Array.isArray(d.words) && d.words.length===4 && [...d.branches,...d.questions,...d.words].every((x:any)=>typeof x==='string'&&x.length<=350)))) return res.status(400).json({success:false,message:'Học liệu từng hướng không hợp lệ.'});
     assignment.title=title.trim();assignment.prompt=prompt.trim();
     (assignment as any).eLearningDirections=eLearningDirections.map((x:string)=>x.trim()).filter(Boolean);
     (assignment as any).eLearningStages=eLearningStages;
+    if(eLearningActivities !== undefined) (assignment as any).eLearningActivities=eLearningActivities;
     await saveDatabase(auth.db);
     res.json({success:true,assignment});
   }catch(e:any){console.error('EL_TEACHER_SAVE',e);res.status(e?.status===409?409:500).json({success:false,message:'Không thể lưu bài E-learning. Vui lòng thử lại.'});}
