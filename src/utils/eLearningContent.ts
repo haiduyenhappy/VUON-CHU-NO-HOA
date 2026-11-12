@@ -52,3 +52,23 @@ export function buildDirections(prompt: string, names: string[] = [], stored: un
     return {...base,branches:pick(found.branches,5,base.branches),questions:pick(found.questions,3,base.questions),words:pick(found.words,4,base.words)};
   });
 }
+
+/** Tạo lời dẫn sư phạm theo đề, lớp và các hướng viết; không gọi dịch vụ AI. */
+export function generateStageGuides(prompt: string, grade: number, directions: LearningDirection[]): string[] {
+  const task = normalize(prompt) || 'Viết đoạn văn theo chủ đề em chọn';
+  const level = Math.min(5, Math.max(1, Number(grade) || 3));
+  const names = directions.map(d => d.name.trim()).filter(Boolean);
+  const choices = names.length > 1 ? ` Em chọn một hướng: ${names.join(' hoặc ')}.` : names.length ? ` Em sẽ viết về ${names[0]}.` : '';
+  const questions = directions.flatMap(d => d.questions.slice(0, 1)).filter(Boolean);
+  const sampleQuestion = questions.length ? ` Câu hỏi gợi ý: ${questions.slice(0, 2).join(' / ')}` : '';
+  const sentence = level <= 2 ? 'câu văn ngắn, rõ ý' : 'đoạn văn có các ý liên kết';
+  return [
+    `Em hãy nghĩ về chủ đề của bài: “${task}”. Nhớ lại một hình ảnh hoặc trải nghiệm thật của em. Em có thể chia sẻ điều mình nhớ với bạn hoặc người thân.`,
+    `Đọc kĩ đề bài: “${task}”.${choices} Hãy xác định em viết về ai hoặc điều gì, cần viết mấy câu và những yêu cầu quan trọng của đề.`,
+    `Em hãy chọn hướng viết của mình, sau đó lần lượt điền ý vào từng nhánh của sơ đồ tư duy. Chỉ ghi những điều em quan sát hoặc trải nghiệm thật.${sampleQuestion}`,
+    `Từ những ý đã tìm được, em chọn các ý phù hợp nhất và sắp xếp theo thứ tự: giới thiệu đối tượng, nêu đặc điểm hoặc sự việc, rồi nói cảm nghĩ. Không cần đưa tất cả ý vào bài.`,
+    `Em luyện chọn từ ngữ đúng với hướng viết, đọc lại các ý và thử diễn đạt thành ${sentence}. Nếu câu chưa rõ, em sửa bằng lời của mình.`,
+    `Dựa vào dàn ý của em, hãy tự viết ${sentence} đúng yêu cầu đề bài. Em có thể xem lại sơ đồ tìm ý khi cần, nhưng không chép nguyên lời gợi ý.`,
+    `Em đọc lại bài vừa viết và tự kiểm tra: đã đúng đề và hướng viết chưa, các ý có rõ không, chữ đầu câu đã viết hoa và cuối câu đã có dấu chưa? Sau đó lưu hoặc nộp bài theo hướng dẫn của giáo viên.`
+  ];
+}
