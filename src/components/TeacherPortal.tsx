@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { firebaseAuth } from '../lib/firebase';
+import { buildDirections, type LearningDirection } from '../utils/eLearningContent';
 import { Student, Submission, AppSettings, LinkedCaregiver, AuthUser, Classroom, ClassAssignment, DifficultyLevel, PromptAnalysisData, WritingSkillId } from '../types';
 import { TOPIC_GROUPS } from '../utils/promptAnalyzerEngine';
 import { QuestionBankManager } from './QuestionBankManager';
@@ -136,6 +137,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   const [ePrompt, setEPrompt] = useState('');
   const [eDirections, setEDirections] = useState('');
   const [eGuides, setEGuides] = useState<string[]>(Array(7).fill(''));
+  const [eActivities, setEActivities] = useState<LearningDirection[]>([]);
+  const [eActiveDirection, setEActiveDirection] = useState(0);
   const [eProgress, setEProgress] = useState<any[]>([]);
   const [eMessage, setEMessage] = useState('');
   const [eBusy, setEBusy] = useState(false);
@@ -145,6 +148,8 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
     setETitle(lesson.title || ''); setEPrompt(lesson.prompt || '');
     setEDirections((lesson.eLearningDirections || []).join('\n'));
     setEGuides(Array.from({length:7},(_,i)=>lesson.eLearningStages?.[i] || ''));
+    setEActivities(buildDirections(lesson.prompt||'',lesson.eLearningDirections||[],lesson.eLearningActivities));
+    setEActiveDirection(0);
     setEProgress([]); setEMessage('');
     try {
       const token = await firebaseAuth?.currentUser?.getIdToken();
@@ -156,13 +161,14 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
   };
   const saveELesson = async () => {
     if(!eSelected || !eTitle.trim() || !ePrompt.trim())return;
+    if(!eActivities.length || eActivities.some(d=>d.branches.length!==5||d.questions.length!==3||d.words.length!==4||[...d.branches,...d.questions,...d.words].some(x=>!x.trim()))){setEMessage('Mỗi hướng cần đủ 5 nhánh, 3 câu hỏi và 4 từ gợi ý.');return;}
     setEBusy(true);setEMessage('');
     try {
       const token=await firebaseAuth?.currentUser?.getIdToken();
       if(!token)throw Error('Không kết nối được dữ liệu giáo viên.');
       const r=await fetch(`/api/teacher/elearning/${encodeURIComponent(eSelected.id)}`,{
         method:'PATCH',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},
-        body:JSON.stringify({title:eTitle.trim(),prompt:ePrompt.trim(),eLearningDirections:eDirections.split('\n').map(x=>x.trim()).filter(Boolean),eLearningStages:eGuides})
+        body:JSON.stringify({title:eTitle.trim(),prompt:ePrompt.trim(),eLearningDirections:eActivities.map(x=>x.name),eLearningStages:eGuides,eLearningActivities:eActivities})
       });const d=await r.json();if(!r.ok)throw Error(d.message || 'Không lưu được bài học.');
       setESelected(d.assignment);setEMessage('Đã lưu bài E-learning lên Firebase.');await fetchAssignments();
     }catch(e){setEMessage(e instanceof Error?e.message:'Lưu bài thất bại.');}
@@ -2445,6 +2451,15 @@ export const TeacherPortal: React.FC<TeacherPortalProps> = ({
             <label className="block text-sm font-semibold">Tên bài<input className="w-full border rounded-lg p-2 mt-1" value={eTitle} onChange={e=>setETitle(e.target.value)}/></label>
             <label className="block text-sm font-semibold">Đề bài<textarea rows={3} className="w-full border rounded-lg p-2 mt-1" value={ePrompt} onChange={e=>setEPrompt(e.target.value)}/></label>
             <label className="block text-sm font-semibold">Các hướng viết (mỗi dòng một hướng)<textarea rows={3} className="w-full border rounded-lg p-2 mt-1" value={eDirections} onChange={e=>setEDirections(e.target.value)} placeholder="Ngôi trường của em&#10;Một góc sân trường"/></label>
+            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-3 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2"><strong>Học liệu riêng theo từng hướng viết</strong><button type="button" className="rounded-lg bg-white border border-emerald-300 px-3 py-2 text-sm font-semibold" onClick={()=>{setEActivities(buildDirections(ePrompt,eDirections.split('\n').map(x=>x.trim()).filter(Boolean),eActivities));setEActiveDirection(0);}}>Tạo / cập nhật các hướng từ đề</button></div>
+              <p className="text-xs text-stone-600">Mỗi hướng có 5 nhánh tìm ý, 3 câu hỏi gợi mở và 4 từ gợi ý. Giáo viên rà soát trước khi lưu.</p>
+              <div className="flex flex-wrap gap-2">{eActivities.map((d,i)=><button type="button" key={d.id} onClick={()=>setEActiveDirection(i)} className={`rounded-lg px-3 py-2 text-sm border ${i===eActiveDirection?'bg-emerald-700 text-white':'bg-white'}`}>{d.name}</button>)}</div>
+              {eActivities[eActiveDirection] && <div className="space-y-3">
+                <strong className="text-sm">Đang sửa: {eActivities[eActiveDirection].name}</strong>
+                {([['branches','Sơ đồ 5 nhánh'],['questions','3 câu hỏi gợi mở'],['words','4 từ gợi ý']] as const).map(([field,label])=><label key={field} className="block text-sm font-semibold">{label} (mỗi dòng một ý)<textarea rows={field==='branches'?5:4} className="w-full rounded-lg border p-2 mt-1 font-normal" value={eActivities[eActiveDirection][field].join('\n')} onChange={ev=>{const values=ev.target.value.split('\n');setEActivities(old=>old.map((d,i)=>i===eActiveDirection?{...d,[field]:values}:d));}}/></label>)}
+              </div>}
+            </div>
             <p className="font-bold text-sm">Lời hướng dẫn 7 chặng (để trống dùng hướng dẫn mặc định)</p>
             {['Khởi động','Khám phá đề','Tìm ý','Lập dàn ý','Luyện tập','Tự viết','Tự đánh giá'].map((name,i)=><label key={name} className="block text-sm">{i+1}. {name}<textarea rows={2} className="w-full border rounded-lg p-2 mt-1" value={eGuides[i]} onChange={e=>setEGuides(old=>old.map((x,j)=>i===j?e.target.value:x))}/></label>)}
             <button disabled={eBusy} onClick={()=>void saveELesson()} className="bg-emerald-700 text-white rounded-xl px-4 py-3 font-bold disabled:opacity-50">{eBusy?'Đang lưu...':'Lưu bài học'}</button>

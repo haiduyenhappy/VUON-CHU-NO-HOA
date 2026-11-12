@@ -1,15 +1,11 @@
 import React, { useEffect, useMemo, useState, useRef } from 'react';
 import { firebaseAuth } from '../lib/firebase';
+import { buildDirections } from '../utils/eLearningContent';
 import { ArrowLeft, ArrowRight, BookOpen, CheckCircle2, RotateCcw, Volume2 } from 'lucide-react';
 
 
-type Direction = 'school' | 'yard';
-type Progress = { step: number; direction: Direction | ''; answers: string[]; ideas: string[]; outline: string[]; writing: string; checklist: boolean[]; completed: boolean };
+type Progress = { step: number; direction: string; answers: string[]; ideas: string[]; outline: string[]; writing: string; checklist: boolean[]; completed: boolean };
 const blank = (): Progress => ({ step: 0, direction: '', answers: ['', '', ''], ideas: ['', '', '', '', ''], outline: ['', '', ''], writing: '', checklist: [false, false, false], completed: false });
-const directions = {
-  school: { name: 'Ngôi trường của em', questions: ['Ngôi trường của em có những khu vực nào?', 'Em thích điều gì nhất ở trường?', 'Em có cảm xúc gì khi đến trường?'], ideas: ['Cổng trường', 'Lớp học', 'Sân trường', 'Hoạt động', 'Cảm xúc'], words: ['rộng rãi', 'sạch đẹp', 'thân quen', 'rộn ràng'] },
-  yard: { name: 'Một góc sân trường', questions: ['Em chọn góc nào của sân trường?', 'Góc sân ấy có những gì?', 'Em thường làm gì và cảm thấy thế nào ở đó?'], ideas: ['Vị trí', 'Cây cối', 'Đồ vật', 'Hoạt động', 'Cảm xúc'], words: ['rợp bóng', 'xanh mát', 'vui nhộn', 'yên bình'] }
-};
 const stages = ['Khởi động', 'Khám phá đề', 'Tìm ý', 'Lập dàn ý', 'Luyện tập', 'Tự viết', 'Tự đánh giá'];
 
 export const ELearningLessonPage: React.FC<{ studentId: string; assignment: any; onBack: () => void }> = ({ studentId, assignment, onBack }) => {
@@ -33,19 +29,14 @@ export const ELearningLessonPage: React.FC<{ studentId: string; assignment: any;
   return()=>clearTimeout(timer)},[data,loaded,assignment.id]);
 
   const update = (patch: Partial<Progress>) => { setData(old => ({ ...old, ...patch, completed: false })); setFeedback(''); };
-  const schoolTask = /ngôi trường|sân trường/i.test(assignment.prompt || '');
-  const choices = schoolTask ? directions : {
-    school: {name: (assignment.prompt || 'Đề bài').split(/\s+hoặc\s+/i)[0].slice(0,90), questions: ['Em muốn giới thiệu điều gì?', 'Em quan sát hoặc nhớ được những chi tiết nào?', 'Em có cảm xúc hoặc suy nghĩ gì?'], ideas:['Đối tượng','Đặc điểm','Chi tiết','Trải nghiệm','Cảm xúc'], words:['rõ ràng','gần gũi','đáng nhớ']},
-    yard: {name: ((assignment.prompt || '').split(/\s+hoặc\s+/i)[1] || 'Hướng viết khác').slice(0,90), questions: ['Em chọn đối tượng nào?', 'Em nhớ những chi tiết cụ thể nào?', 'Em có cảm xúc gì?'], ideas:['Đối tượng','Đặc điểm','Chi tiết','Trải nghiệm','Cảm xúc'], words:['sinh động','thân thuộc','đáng yêu']}
-  };
-  const configuredDirections: string[] = Array.isArray(assignment.eLearningDirections) ? assignment.eLearningDirections.filter((x:any)=>typeof x==='string'&&x.trim()) : [];
-  if(configuredDirections.length){ choices.school.name=configuredDirections[0]; if(configuredDirections[1])choices.yard.name=configuredDirections[1]; }
-  const current = choices[(data.direction || 'school') as Direction];
+  const availableDirections = useMemo(()=>buildDirections(assignment.prompt || '',assignment.eLearningDirections || [],assignment.eLearningActivities),[assignment.prompt,assignment.eLearningDirections,assignment.eLearningActivities]);
+  const current = availableDirections.find(d=>d.id===data.direction) || availableDirections[0];
+  const [showHints,setShowHints] = useState(false);
   const filled = (items: string[]) => items.every(v => v.trim().length >= 3);
   const canAdvance = useMemo(() => {
     switch (data.step) {
       case 0: return true;
-      case 1: return !!data.direction;
+      case 1: return availableDirections.some(d=>d.id===data.direction);
       case 2: return filled(data.ideas);
       case 3: return filled(data.outline);
       case 4: return filled(data.answers);
@@ -53,10 +44,10 @@ export const ELearningLessonPage: React.FC<{ studentId: string; assignment: any;
       case 6: return data.checklist.every(Boolean);
       default: return false;
     }
-  }, [data]);
+  }, [data, availableDirections]);
   const speak = (message: string) => { if (typeof window !== 'undefined' && 'speechSynthesis' in window) { window.speechSynthesis.cancel(); const u = new SpeechSynthesisUtterance(message); u.lang = 'vi-VN'; u.rate = 0.88; window.speechSynthesis.speak(u); } };
   const inputClass = 'w-full rounded-xl border-2 border-emerald-200 bg-white p-3 text-base text-stone-800 focus:outline-none focus:border-emerald-500';
-  const renderFields = (values: string[], labels: string[], field: 'ideas' | 'outline' | 'answers') => labels.map((label, index) => <label key={label} className="block mb-3"><span className="block mb-1 font-semibold text-stone-700">{label}</span><textarea rows={2} className={inputClass} value={values[index] || ''} onChange={e => update({ [field]: values.map((v, i) => i === index ? e.target.value : v) } as Partial<Progress>)} placeholder="Em tự ghi ý của mình vào đây..." /></label>);
+  const renderFields = (values: string[], labels: string[], field: 'ideas' | 'outline' | 'answers') => labels.map((label, index) => <label key={`${field}-${index}`} className="block mb-3"><span className="block mb-1 font-semibold text-stone-700">{label}</span>{field==='ideas'&&showHints&&<span className="block text-sm text-emerald-800 mb-1">Gợi ý: Em quan sát hoặc nhớ lại một chi tiết thật về {label.toLowerCase()}.</span>}<textarea rows={2} className={inputClass} value={values[index] || ''} onChange={e => update({ [field]: values.map((v, i) => i === index ? e.target.value : v) } as Partial<Progress>)} placeholder="Em tự ghi ý của mình vào đây..." /></label>);
   const finish = () => { if (canAdvance) { setData(old => ({ ...old, completed: true })); setFeedback('Đã hoàn thành các hoạt động. Hệ thống đang lưu lên Firebase.'); } };
   return <section className="mx-auto max-w-4xl px-4 py-6 sm:py-8">
     <div className="rounded-3xl bg-white border border-emerald-200 shadow-sm p-4 sm:p-7">
@@ -69,8 +60,8 @@ export const ELearningLessonPage: React.FC<{ studentId: string; assignment: any;
       {assignment.eLearningStages?.[data.step] && <p className="mb-3 rounded-xl bg-blue-50 p-3 text-blue-900 font-medium">{assignment.eLearningStages[data.step]}</p>}
       <div className="bg-emerald-50 rounded-2xl p-4 sm:p-5 mb-5">
         {data.step === 0 && <><h2 className="font-bold text-lg mb-2">Cùng khám phá đề bài nhé!</h2><p>Em đọc tên bài và nghĩ về những điều mình đã nhìn thấy hoặc trải nghiệm. Khi sẵn sàng, em bấm Tiếp theo.</p></>}
-        {data.step === 1 && <><h2 className="font-bold text-lg mb-2">Đọc đề và chọn một hướng</h2><p className="mb-3">Đề bài: {assignment.prompt}</p><div className="grid sm:grid-cols-2 gap-3">{(configuredDirections.length>1 || schoolTask || /\s+hoặc\s+/i.test(assignment.prompt || '') ? (Object.keys(choices) as Direction[]) : ['school' as Direction]).map(k => <button key={k} onClick={() => update({ direction: k, ideas: ['', '', '', '', ''], outline: ['', '', ''], answers: ['', '', ''] })} className={`rounded-xl border-2 p-4 text-left font-bold ${data.direction === k ? 'border-emerald-600 bg-white' : 'border-emerald-200 bg-white/70'}`}>{data.direction === k ? '✓ ' : ''}{choices[k].name}</button>)}</div></>}
-        {data.step === 2 && <><h2 className="font-bold text-lg mb-2">Sơ đồ 5 nhánh: {current.name}</h2><p className="mb-3">Mỗi nhánh ghi ít nhất một ý quan sát hoặc trải nghiệm thật của em.</p>{renderFields(data.ideas, current.ideas, 'ideas')}</>}
+        {data.step === 1 && <><h2 className="font-bold text-lg mb-2">Đọc đề và chọn một hướng</h2><p className="mb-3">Đề bài: {assignment.prompt}</p><div className="grid sm:grid-cols-2 gap-3">{availableDirections.map(d => <button key={d.id} onClick={() => update({ direction: d.id, ideas: ['', '', '', '', ''], outline: ['', '', ''], answers: ['', '', ''] })} className={`rounded-xl border-2 p-4 text-left font-bold ${data.direction === d.id ? 'border-emerald-600 bg-white' : 'border-emerald-200 bg-white/70'}`}>{data.direction === d.id ? '✓ ' : ''}{d.name}</button>)}</div></>}
+        {data.step === 2 && <><h2 className="font-bold text-lg mb-2">Sơ đồ 5 nhánh: {current.name}</h2><p className="mb-3">Mỗi nhánh ghi ít nhất một ý quan sát hoặc trải nghiệm thật của em.</p><button type="button" className="mb-3 rounded-lg bg-white border border-emerald-300 px-3 py-2 text-sm font-semibold" onClick={()=>setShowHints(x=>!x)}>{showHints?'Ẩn gợi ý':'Em cần gợi ý'}</button>{renderFields(data.ideas, current.branches, 'ideas')}</>}
         {data.step === 3 && <><h2 className="font-bold text-lg mb-2">Lập dàn ý của em</h2><p className="mb-3">Dựa vào các ý đã ghi, em tự sắp xếp theo trình tự.</p>{renderFields(data.outline, ['Mở đoạn – Giới thiệu đối tượng', 'Thân đoạn – Những đặc điểm nổi bật', 'Kết đoạn – Tình cảm của em'], 'outline')}</>}
         {data.step === 4 && <><h2 className="font-bold text-lg mb-2">Luyện tập trước khi viết</h2><p className="mb-2">Một số từ gợi ý: {current.words.join(', ')}. Em chỉ chọn từ phù hợp với quan sát của mình.</p>{renderFields(data.answers, current.questions, 'answers')}</>}
         {data.step === 5 && <><h2 className="font-bold text-lg mb-2">Em tự viết đoạn văn</h2><p className="mb-3">Viết theo dàn ý của em. Hãy sử dụng câu văn của chính mình, không chép nguyên gợi ý.</p><textarea rows={9} className={inputClass} value={data.writing} onChange={e => update({ writing: e.target.value })} placeholder="Em viết đoạn văn của mình tại đây..."/><p className="text-sm text-stone-600 mt-2">{data.writing.trim().length} ký tự</p></>}
